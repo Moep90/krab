@@ -32,7 +32,9 @@ cargo build --release
 cd path/to/your/kapitan/repo         # the directory holding .kapitan and inventory/
 kapitan inventory -t my.target        # same output as kapitan 0.36
 kapitan inventory -t my.target -p parameters.cluster --format json
-kapitan inventory targets
+kapitan inventory targets             # table: labels, classes, compile inputs, status (--json for data)
+kapitan inventory targets -l type=terraform
+kapitan inventory -l type=terraform -p parameters.gcp_project_id   # one value per selected target
 kapitan inventory classes -t my.target
 kapitan inventory explain -t my.target cluster.name
 kapitan inventory check               # render everything, pretty diagnostics
