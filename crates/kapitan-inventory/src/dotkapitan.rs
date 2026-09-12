@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::Result;
 use crate::source::SourceId;
-use crate::value::{Node, Value};
+use crate::value::{Map, Node, Value};
 use crate::yaml::parse_document;
 
 #[derive(Clone, Debug, Default)]
@@ -14,6 +14,8 @@ pub struct DotKapitan {
     pub inventory_backend: Option<String>,
     pub indent: Option<usize>,
     pub file: Option<PathBuf>,
+    /// The raw `compile:` section, keys as written (`search-paths`, `output-path`, ...).
+    pub compile: Map,
 }
 
 impl DotKapitan {
@@ -50,5 +52,32 @@ impl DotKapitan {
             cfg.indent = Some(i.max(1) as usize);
         }
         Ok(cfg)
+    }
+
+    /// A string list from the compile section (`search-paths`).
+    pub fn compile_strings(&self, key: &str) -> Option<Vec<String>> {
+        match &self.compile.get(key)?.value {
+            Value::List(l) => Some(
+                l.iter()
+                    .filter_map(|n| n.as_str().map(str::to_string))
+                    .collect(),
+            ),
+            Value::Str(s) => Some(vec![s.clone()]),
+            _ => None,
+        }
+    }
+
+    pub fn compile_str(&self, key: &str) -> Option<String> {
+        self.compile
+            .get(key)
+            .and_then(|n| n.as_str())
+            .map(str::to_string)
+    }
+
+    pub fn compile_bool(&self, key: &str) -> Option<bool> {
+        match self.compile.get(key)?.value {
+            Value::Bool(b) => Some(b),
+            _ => None,
+        }
     }
 }

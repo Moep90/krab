@@ -144,6 +144,7 @@ impl Server {
                         path: s.path.clone(),
                         file: s.file.clone(),
                         digest: inner.targets.get(&s.name).map(|t| t.digest.clone()),
+                        doc_digest: inner.targets.get(&s.name).map(|t| t.doc_digest.clone()),
                         ok: inner.targets.contains_key(&s.name),
                         error: inner.errors.get(&s.name).cloned(),
                     })
@@ -193,6 +194,23 @@ impl Server {
                     errors: inner.errors.values().cloned().collect(),
                 })
                 .unwrap())
+            }
+            "inventory.class_usage" => {
+                let inner = self.state.read();
+                let report = kapitan_inventory::RenderReport {
+                    targets: inner
+                        .targets
+                        .iter()
+                        .map(|(k, v)| (k.clone(), (**v).clone()))
+                        .collect(),
+                    errors: vec![],
+                };
+                let usage = self
+                    .state
+                    .inv
+                    .class_usage(&report)
+                    .map_err(|e| inventory_error(e.into_diagnostic()))?;
+                Ok(serde_json::to_value(usage).unwrap())
             }
             "inventory.classes" => {
                 let p: TargetParams = params(req)?;

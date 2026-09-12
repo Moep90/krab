@@ -147,6 +147,39 @@ One daemon per inventory directory, started on demand by the CLI (or with
 * **Secrets** are never revealed server-side; the inventory holds references
   only.
 
+## Compile (`kapitan-compile`)
+
+Principle: *exact invalidation or nothing*. A target is recompiled when, and
+only when, one of these changed since its last compile:
+
+1. its rendered document (`doc_digest`, computed by the inventory);
+2. any path the previous compile read. The Python worker records file reads
+   (`open`), directory listings (`os.scandir`/`listdir`), modules loaded via
+   the import machinery (including kadet components and `kgenlib`, with
+   `.pyc` mapped back to source), and the search-path probes that decide
+   which input files are used;
+3. the documents of other targets it read through `inventory_global()`
+   (recorded per target name, or `*` when it iterated everything);
+4. compile settings and the compiler identity (kapitan version, worker script
+   digest, Python-side kapitan version);
+5. the compiled output itself (a tree digest, so manual edits or a `git
+   checkout` are noticed).
+
+Everything is stored in `compiled/.kapitan-manifest.json`. `--explain` and
+`--dry-run` print the reason per target.
+
+Execution: stale targets are queued to a pool of Python workers (one process
+per CPU). Each worker loads the full inventory once (the global inventory
+kadet generators can read) and compiles targets into a private temporary
+tree; the result replaces `compiled/<target path>` while leaving nested
+targets' directories alone. Full runs remove output directories that belong
+to no target. Ref embedding, pruning, rapidyaml and every other output detail
+is kapitan's own code, hence byte-identical output.
+
+Known limits: dependency fetching (`kapitan compile --fetch`) is not
+implemented — dependencies must already be present; `--reveal` is passed
+through to kapitan but not otherwise handled.
+
 ## Testing
 
 `tests/fixtures/inventory` is a small inventory exercising class resolution,

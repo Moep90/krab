@@ -12,13 +12,15 @@ rust-version = "1.85"
 [workspace.dependencies]
 kapitan-inventory = { path = "crates/kapitan-inventory" }
 kapitan-server = { path = "crates/kapitan-server" }
+kapitan-compile = { path = "crates/kapitan-compile" }
 saphyr-parser = "0.0.12"
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
 miette = { version = "7", features = ["fancy"] }
-clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+clap = { version = "4", features = ["derive", "env", "wrap_help", "unstable-ext"] }
+clap_complete = { version = "4", features = ["unstable-dynamic"] }
 rayon = "1"
 blake3 = "1"
 sha2 = "0.10"
