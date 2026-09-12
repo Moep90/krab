@@ -168,17 +168,35 @@ only when, one of these changed since its last compile:
 Everything is stored in `compiled/.kapitan-manifest.json`. `--explain` and
 `--dry-run` print the reason per target.
 
-Execution: stale targets are queued to a pool of Python workers (one process
-per CPU). Each worker loads the full inventory once (the global inventory
-kadet generators can read) and compiles targets into a private temporary
-tree; the result replaces `compiled/<target path>` while leaving nested
-targets' directories alone. Full runs remove output directories that belong
-to no target. Ref embedding, pruning, rapidyaml and every other output detail
-is kapitan's own code, hence byte-identical output.
+Execution: stale targets are compiled on a thread pool (one per CPU), each
+into a private temporary tree that then replaces `compiled/<target path>`
+while leaving nested targets' directories alone. Full runs remove output
+directories that belong to no target.
 
-Known limits: dependency fetching (`kapitan compile --fetch`) is not
-implemented — dependencies must already be present; `--reveal` is passed
-through to kapitan but not otherwise handled.
+### Native input types (`kapitan-compile/src/inputs`, `output.rs`, `refs.rs`)
+
+* `jinja2`: minijinja with Jinja2's environment (strict undefined,
+  `trim_blocks`, `lstrip_blocks`, no auto-escaping), Python-style rendering of
+  `True`/`False`/`None`, kapitan's filters, and `inventory_global` as a lazy
+  object that fetches targets on access and records which ones were read.
+* `copy`, `remove`, `external`: straightforward ports.
+* `kadet`: a Python evaluator (`runner/kadet_runner.py`) imports the component
+  and calls `main()`; its output comes back as JSON. It records files read,
+  directories listed, modules imported and targets read from the global
+  inventory. With an inventory server running it fetches targets over the
+  socket on demand; without one it loads a snapshot file. kapitan's helm
+  render cache stays on (chart-heavy generators need it); its kadet output
+  cache is off because a hit would hide what a component reads.
+* Output: `prune_empty`, output-type resolution, ref embedding
+  (`?{type:base64(json(ref)):embedded}`) or hashing, then rapidyaml-compatible
+  YAML (`emit/ryml.rs`, verified byte for byte on ~7000 compiled files),
+  PyYAML fallback for control characters, and Python-compatible JSON.
+  Multiline strings default to double quotes, matching a quirk of the
+  reference where the compile flag is shadowed by the inventory one.
+
+Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
+output, `--reveal`, creating missing refs (`||random:str`), dependency
+fetching. `--backend python` runs kapitan's Python input types instead.
 
 ## Testing
 

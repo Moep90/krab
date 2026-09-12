@@ -7,13 +7,22 @@
 //! Python workers that run kapitan's own input types for the stale ones.
 
 pub mod digest;
+pub mod docs;
 pub mod engine;
+pub mod inputs;
 pub mod manifest;
+pub mod native;
+pub mod output;
 pub mod plan;
 pub mod python;
+pub mod refs;
 pub mod worker;
 
-pub use engine::{CompileOptions, DocSource, Event, Outcome, Report, Selection, Status, compile};
+pub use docs::{DocProvider, MapDocs, SharedDocs};
+pub use engine::{
+    Backend, CompileOptions, DocSource, Event, Outcome, Report, Selection, Status, compile,
+};
 pub use manifest::{Manifest, TargetRecord};
+pub use native::NativeOptions;
 pub use plan::TargetPlan;
 pub use python::PythonCmd;

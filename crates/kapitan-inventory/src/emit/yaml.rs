@@ -15,6 +15,10 @@ pub struct DumpOptions {
     /// default dumper emits them flush with the parent key.
     pub indent_sequences: bool,
     pub allow_unicode: bool,
+    /// Style forced on strings containing newlines (`--yaml-multiline-string-style`).
+    pub multiline: Option<super::ryml::MultilineStyle>,
+    /// Emit `null` as an empty scalar (`--yaml-dump-null-as-empty`).
+    pub null_as_empty: bool,
 }
 
 impl Default for DumpOptions {
@@ -25,6 +29,8 @@ impl Default for DumpOptions {
             sort_keys: true,
             indent_sequences: true,
             allow_unicode: false,
+            multiline: None,
+            null_as_empty: false,
         }
     }
 }
@@ -45,11 +51,24 @@ pub fn dump_yaml(node: &Node, opts: &DumpOptions) -> String {
     e.out
 }
 
+/// PyYAML `yaml.dump_all`: one document per item, each introduced by `---`.
+pub fn dump_yaml_all(items: &[Node], opts: &DumpOptions) -> String {
+    let mut out = String::new();
+    for (i, item) in items.iter().enumerate() {
+        let mut e = Emitter::new(opts.clone());
+        e.document_in_stream(&item.value, i == 0);
+        out.push_str(&e.out);
+    }
+    out
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Style {
     Plain,
     Single,
     Double,
+    Literal,
+    Folded,
 }
 
 struct Analysis {
@@ -58,6 +77,7 @@ struct Analysis {
     allow_flow_plain: bool,
     allow_block_plain: bool,
     allow_single_quoted: bool,
+    allow_block: bool,
 }
 
 struct Emitter {
@@ -82,8 +102,12 @@ struct Scalar {
     implicit: bool,
 }
 
-fn represent(v: &Value) -> Scalar {
+fn represent(v: &Value, null_as_empty: bool) -> Scalar {
     match v {
+        Value::Null if null_as_empty => Scalar {
+            text: String::new(),
+            implicit: true,
+        },
         Value::Null => Scalar {
             text: "null".into(),
             implicit: true,
@@ -136,7 +160,7 @@ fn str_is_implicit(s: &str) -> bool {
     matches!(resolve_plain(s), Value::Str(_))
 }
 
-fn is_timestamp(s: &str) -> bool {
+pub fn is_timestamp(s: &str) -> bool {
     let b = s.as_bytes();
     let d = |i: usize| b.get(i).is_some_and(u8::is_ascii_digit);
     if !(d(0) && d(1) && d(2) && d(3) && b.get(4) == Some(&b'-')) {
@@ -249,6 +273,22 @@ impl Emitter {
         }
     }
 
+    /// A document inside a `dump_all` stream: explicit `---` except for the
+    /// first one when it does not need it (PyYAML writes `---` for every
+    /// document after the first, and for the first only when required).
+    fn document_in_stream(&mut self, v: &Value, first: bool) {
+        if !first {
+            self.write_indicator("---", true, false, false);
+            self.write_indent();
+        }
+        self.node(v, true, false, false, false);
+        self.write_indent();
+        if self.open_ended {
+            self.write_indicator("...", true, false, false);
+            self.write_indent();
+        }
+    }
+
     fn node(&mut self, v: &Value, root: bool, sequence: bool, mapping: bool, simple_key: bool) {
         self.root_context = root;
         let _ = sequence;
@@ -270,9 +310,13 @@ impl Emitter {
                 }
             }
             scalar => {
-                let s = represent(scalar);
+                let s = represent(scalar, self.opts.null_as_empty);
+                let forced = match scalar {
+                    Value::Str(t) if t.contains('\n') => self.opts.multiline,
+                    _ => None,
+                };
                 self.increase_indent(true, false);
-                self.process_scalar(&s);
+                self.process_scalar(&s, forced);
                 self.indent = self.indents.pop().unwrap();
             }
         }
@@ -376,37 +420,118 @@ impl Emitter {
     }
 
     fn check_simple_key(&self, key: &Value) -> bool {
-        let s = represent(key);
+        let s = represent(key, self.opts.null_as_empty);
         let a = self.analyze(&s.text);
         s.text.chars().count() < 128 && !a.empty && !a.multiline
     }
 
     // ---- scalars ----------------------------------------------------------
 
-    fn process_scalar(&mut self, s: &Scalar) {
+    fn process_scalar(&mut self, s: &Scalar, forced: Option<super::ryml::MultilineStyle>) {
         let analysis = self.analyze(&s.text);
-        let style = self.choose_style(s, &analysis);
+        let style = self.choose_style(s, &analysis, forced);
         let split = !self.simple_key_context;
         let chars: Vec<char> = s.text.chars().collect();
         match style {
             Style::Double => self.write_double_quoted(&chars, split),
             Style::Single => self.write_single_quoted(&chars, split),
             Style::Plain => self.write_plain(&chars, split),
+            Style::Literal => self.write_block(&chars, '|'),
+            Style::Folded => self.write_block(&chars, '>'),
         }
     }
 
-    fn choose_style(&self, s: &Scalar, a: &Analysis) -> Style {
-        if s.implicit
+    /// PyYAML `choose_scalar_style`, with `forced` playing the event style.
+    fn choose_style(
+        &self,
+        s: &Scalar,
+        a: &Analysis,
+        forced: Option<super::ryml::MultilineStyle>,
+    ) -> Style {
+        use super::ryml::MultilineStyle as M;
+        if forced == Some(M::DoubleQuotes) {
+            return Style::Double;
+        }
+        if forced.is_none()
+            && s.implicit
             && !(self.simple_key_context && (a.empty || a.multiline))
             && ((self.flow_level > 0 && a.allow_flow_plain)
                 || (self.flow_level == 0 && a.allow_block_plain))
         {
             return Style::Plain;
         }
+        if let Some(block) = forced
+            && self.flow_level == 0
+            && !self.simple_key_context
+            && a.allow_block
+        {
+            return if block == M::Literal {
+                Style::Literal
+            } else {
+                Style::Folded
+            };
+        }
         if a.allow_single_quoted && !(self.simple_key_context && a.multiline) {
             return Style::Single;
         }
         Style::Double
+    }
+
+    /// PyYAML `write_literal` / `write_folded` (folded here keeps every line
+    /// break, which is what PyYAML does for text without long lines).
+    fn write_block(&mut self, text: &[char], indicator: char) {
+        let mut hints = String::new();
+        if let Some(&first) = text.first()
+            && (first == ' ' || is_break(first))
+        {
+            hints.push_str(&self.opts.indent.to_string());
+        }
+        match text.last() {
+            Some(&last) if !is_break(last) => hints.push('-'),
+            Some(_) if text.len() == 1 || text.len() >= 2 && is_break(text[text.len() - 2]) => {
+                hints.push('+')
+            }
+            _ => {}
+        }
+        self.write_indicator(&format!("{indicator}{hints}"), true, false, false);
+        if hints.ends_with('+') {
+            self.open_ended = true;
+        }
+        self.write_line_break();
+        let mut breaks = true;
+        let mut start = 0;
+        let mut end = 0;
+        while end <= text.len() {
+            let ch = text.get(end).copied();
+            if breaks {
+                if !ch.is_some_and(is_break) {
+                    for &br in &text[start..end] {
+                        if br == '\n' {
+                            self.write_line_break();
+                        } else {
+                            self.out.push(br);
+                            self.whitespace = true;
+                            self.indention = true;
+                            self.column = 0;
+                        }
+                    }
+                    if ch.is_some() {
+                        self.write_indent();
+                    }
+                    start = end;
+                }
+            } else if ch.is_none() || ch.is_some_and(is_break) {
+                self.write_chars(&text[start..end]);
+                if ch.is_none() {
+                    self.write_line_break();
+                }
+                start = end;
+            }
+            if let Some(c) = ch {
+                breaks = is_break(c);
+            }
+            end += 1;
+        }
     }
 
     fn analyze(&self, scalar: &str) -> Analysis {
@@ -417,6 +542,7 @@ impl Emitter {
                 allow_flow_plain: false,
                 allow_block_plain: true,
                 allow_single_quoted: true,
+                allow_block: false,
             };
         }
         let chars: Vec<char> = scalar.chars().collect();
@@ -524,9 +650,13 @@ impl Emitter {
         let mut allow_flow_plain = true;
         let mut allow_block_plain = true;
         let mut allow_single_quoted = true;
+        let mut allow_block = true;
         if leading_space || leading_break || trailing_space || trailing_break {
             allow_flow_plain = false;
             allow_block_plain = false;
+        }
+        if trailing_space {
+            allow_block = false;
         }
         if break_space {
             allow_flow_plain = false;
@@ -537,6 +667,7 @@ impl Emitter {
             allow_flow_plain = false;
             allow_block_plain = false;
             allow_single_quoted = false;
+            allow_block = false;
         }
         if line_breaks {
             allow_flow_plain = false;
@@ -554,6 +685,7 @@ impl Emitter {
             allow_flow_plain,
             allow_block_plain,
             allow_single_quoted,
+            allow_block,
         }
     }
 

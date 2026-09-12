@@ -28,6 +28,11 @@ md-5 = "0.10"
 notify = "8"
 notify-debouncer-full = "0.5"
 jmespath = "0.5"
+minijinja = { version = "2", features = ["loader", "builtins", "json", "preserve_order", "loop_controls"] }
+regex = "1"
+base64 = "0.22"
+glob = "0.3"
+hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 parking_lot = "0.12"

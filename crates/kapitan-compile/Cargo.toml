@@ -16,3 +16,9 @@ blake3 = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
 rayon = { workspace = true }
+minijinja = { workspace = true }
+regex = { workspace = true }
+base64 = { workspace = true }
+glob = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
