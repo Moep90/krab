@@ -98,6 +98,7 @@ impl Client {
 }
 
 /// How the CLI reaches a server.
+#[derive(Clone)]
 pub struct Connector {
     pub inventory_root: PathBuf,
     /// The binary to launch as a server (normally `current_exe`).

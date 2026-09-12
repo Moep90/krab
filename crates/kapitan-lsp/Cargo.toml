@@ -1,0 +1,21 @@
+[package]
+name = "kapitan-lsp"
+description = "Language server for Kapitan inventories: diagnostics, hover with provenance, go to definition, completion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kapitan-inventory = { workspace = true }
+kapitan-server = { workspace = true }
+saphyr-parser = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+lsp-server = { workspace = true }
+lsp-types = { workspace = true }
+url = { workspace = true }
+crossbeam-channel = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }

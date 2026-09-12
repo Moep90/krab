@@ -147,6 +147,25 @@ One daemon per inventory directory, started on demand by the CLI (or with
 * **Secrets** are never revealed server-side; the inventory holds references
   only.
 
+## Language server (`kapitan-lsp`)
+
+A thin translator from LSP to the daemon's JSON-RPC, so the editor never
+renders anything itself:
+
+* `yaml_index.rs` maps a cursor position to a key path, a scalar (with the
+  `${...}` expression under the cursor) or a `classes:` item, by walking the
+  saphyr events of the buffer with their spans. Unsaved buffer content wins
+  over disk for this; values always come from the daemon's render of the
+  saved files.
+* A file's audience is `inventory.deps` (the targets rendered from it);
+  hover and definition run `inventory.explain` for each and group targets by
+  value. Class names resolve through the same `resolve_class_file` the engine
+  uses, relative to the file being edited.
+* Diagnostics: a thread long-polls `inventory.wait` and republishes
+  `inventory.diagnostics` after every generation, attaching each to the first
+  label's location (or the target file's first line when there is none) and
+  clearing files that became clean.
+
 ## Compile (`kapitan-compile`)
 
 Principle: *exact invalidation or nothing*. A target is recompiled when, and

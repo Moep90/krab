@@ -1,0 +1,64 @@
+// Starts `kapitan lsp` for every workspace folder that holds a `.kapitan`
+// file and connects it to YAML documents under that folder.
+const path = require("path");
+const fs = require("fs");
+const vscode = require("vscode");
+const { LanguageClient, TransportKind } = require("vscode-languageclient/node");
+
+let clients = new Map();
+
+function kapitanRoot(folder) {
+  const root = folder.uri.fsPath;
+  if (fs.existsSync(path.join(root, ".kapitan"))) return root;
+  // Common layout: the kapitan project is a subdirectory (e.g. grid/).
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory() && fs.existsSync(path.join(root, entry.name, ".kapitan"))) {
+      return path.join(root, entry.name);
+    }
+  }
+  return null;
+}
+
+async function startClient(root) {
+  if (clients.has(root)) return;
+  const config = vscode.workspace.getConfiguration("kapitan");
+  const serverOptions = {
+    command: config.get("path", "kapitan"),
+    args: ["lsp"],
+    options: { cwd: root },
+    transport: TransportKind.stdio,
+  };
+  const clientOptions = {
+    documentSelector: [
+      { scheme: "file", language: "yaml", pattern: `${root}/**/*.{yml,yaml}` },
+    ],
+    outputChannelName: `Kapitan (${path.basename(root)})`,
+    workspaceFolder: vscode.workspace.getWorkspaceFolder(vscode.Uri.file(root)),
+  };
+  const client = new LanguageClient("kapitan", "Kapitan", serverOptions, clientOptions);
+  clients.set(root, client);
+  await client.start();
+}
+
+async function stopAll() {
+  for (const client of clients.values()) await client.stop();
+  clients.clear();
+}
+
+async function startAll() {
+  for (const folder of vscode.workspace.workspaceFolders || []) {
+    const root = kapitanRoot(folder);
+    if (root) await startClient(root);
+  }
+}
+
+exports.activate = async function activate(context) {
+  context.subscriptions.push(vscode.commands.registerCommand("kapitan.restartServer", async () => {
+    await stopAll();
+    await startAll();
+  }));
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(startAll));
+  await startAll();
+};
+
+exports.deactivate = stopAll;

@@ -15,6 +15,7 @@ path = "src/main.rs"
 kapitan-inventory = { workspace = true }
 kapitan-server = { workspace = true }
 kapitan-compile = { workspace = true }
+kapitan-lsp = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 miette = { workspace = true }

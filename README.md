@@ -22,7 +22,9 @@ minute).
 | `crates/kapitan-inventory` | the engine: YAML loading with source positions, class resolution, OmegaConf-compatible merge and `${...}` interpolation, resolver registry, provenance, PyYAML-compatible emitter |
 | `crates/kapitan-server` | in-memory inventory daemon: watches files, re-renders exactly what changed, JSON-RPC over a unix socket; and the client with auto-spawn |
 | `crates/kapitan-compile` | incremental compile: native input types (`jinja2` via minijinja, `copy`, `remove`, `external`, `kadet` via a Python evaluator), ref embedding, rapidyaml/PyYAML/JSON writers, staleness from a manifest |
+| `crates/kapitan-lsp` | language server over the daemon: live diagnostics, hover with resolved values and provenance, go to definition, completion |
 | `crates/kapitan` | the `kapitan` binary |
+| `editors/vscode` | VS Code extension that launches `kapitan lsp` |
 | `vendor/saphyr-parser` | the YAML parser, with two PyYAML-compatibility patches (see `vendor/README.md`) |
 
 ## Try it
@@ -49,12 +51,33 @@ kapitan compile                       # compiles only what changed; --explain sa
 kapitan compile -t my.target --force  # recompile regardless
 kapitan compile --dry-run             # what would compile, and why
 source <(kapitan completions bash)    # completion of commands, flags and target names
+kapitan lsp                           # language server (stdio) for editors, see editors/vscode
 ```
 
 The first `kapitan inventory …` starts a server for that inventory in the
 background (it renders everything once, then keeps only the affected targets
 fresh as files change). Pass `--no-daemon` (or set `KAPITAN_NO_DAEMON=1`) to
 render locally; results are identical.
+
+## Editing
+
+`kapitan lsp` speaks the Language Server Protocol over stdio and answers from
+the daemon, so everything it shows is the current render:
+
+* **Diagnostics** appear on the class or target line that caused them, a few
+  hundred milliseconds after a save, once per affected target.
+* **Hover** on a parameter key shows the resolved value in every target that
+  includes the file, grouped by value, with where it was written, what it was
+  resolved from and how many earlier values it overrode. Hover on a `${...}`
+  reference explains the referenced path; hover on a class name shows its
+  file and how many targets include it.
+* **Go to definition** on a class name opens its file; on a key or reference
+  it lists every location that wrote the value across the affected targets.
+* **Completion** offers class names in `classes:` lists and parameter paths
+  inside `${`.
+
+`editors/vscode` holds a small extension that starts the server for any
+workspace folder containing `.kapitan` (see its README to build it).
 
 ## Compiling
 
