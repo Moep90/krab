@@ -14,7 +14,7 @@ fn fixtures() -> PathBuf {
 fn renders_like_the_reference() {
     let inv = Inventory::open(fixtures().join("inventory"));
     let report = inv.render_all().expect("discover targets");
-    for e in &report.errors {
+    if let Some(e) = report.errors.first() {
         panic!("{e}");
     }
     let mut checked = 0;

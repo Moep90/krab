@@ -703,7 +703,7 @@ impl Emitter {
         whitespace: bool,
         indention: bool,
     ) {
-        if !(self.whitespace || !need_whitespace) {
+        if !self.whitespace && need_whitespace {
             self.out.push(' ');
             self.column += 1;
         }
@@ -840,11 +840,11 @@ impl Emitter {
                     self.write_indent();
                     start = end;
                 }
-            } else if ch.is_none() || ch.is_some_and(|c| c == ' ' || is_break(c) || c == '\'') {
-                if start < end {
-                    self.write_chars(&text[start..end]);
-                    start = end;
-                }
+            } else if (ch.is_none() || ch.is_some_and(|c| c == ' ' || is_break(c) || c == '\''))
+                && start < end
+            {
+                self.write_chars(&text[start..end]);
+                start = end;
             }
             if ch == Some('\'') {
                 self.write("''");

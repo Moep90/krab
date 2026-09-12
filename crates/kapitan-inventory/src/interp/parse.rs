@@ -446,8 +446,7 @@ impl Parser {
             Interp(Interp),
         }
         let mut toks: Vec<Tok> = Vec::new();
-        loop {
-            let Some(c) = self.peek() else { break };
+        while let Some(c) = self.peek() {
             // Delimiters (with the whitespace that belongs to them).
             if c == ' ' || c == '\t' {
                 let save = self.pos;

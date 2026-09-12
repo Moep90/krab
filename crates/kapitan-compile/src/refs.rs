@@ -77,10 +77,8 @@ impl RefController {
     /// Replace tags in every string of a value tree.
     pub fn compile_value(&self, v: &mut Value, reads: &mut Reads) -> Result<(), RefError> {
         match v {
-            Value::Str(s) => {
-                if s.contains("?{") {
-                    *s = self.compile_str(s, reads)?;
-                }
+            Value::Str(s) if s.contains("?{") => {
+                *s = self.compile_str(s, reads)?;
             }
             Value::List(l) => {
                 for n in l {
