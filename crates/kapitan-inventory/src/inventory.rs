@@ -640,7 +640,7 @@ impl Inventory {
                 self.cfg.track_provenance,
             );
             ev.resolve_all(self.cfg.passes)?;
-            warnings.extend(ev.warnings.drain(..));
+            warnings.append(&mut ev.warnings);
             std::mem::take(&mut ev.events)
         };
         process_literals(&mut params);
