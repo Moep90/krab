@@ -97,6 +97,23 @@ pub struct TargetSummary {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Diagnostic>,
+    /// `parameters.kapitan.labels`.
+    #[serde(default)]
+    pub labels: std::collections::BTreeMap<String, String>,
+    /// Number of classes the target includes.
+    #[serde(default)]
+    pub classes: usize,
+    /// Compile input types with their counts, e.g. `kadet×2`.
+    #[serde(default)]
+    pub inputs: Vec<String>,
+}
+
+/// Optional filter for `inventory.targets` and `inventory.all`: only targets
+/// whose `parameters.kapitan.labels` contain every given pair.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TargetsParams {
+    #[serde(default)]
+    pub labels: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

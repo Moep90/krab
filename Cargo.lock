@@ -542,6 +542,7 @@ dependencies = [
  "kapitan-compile",
  "kapitan-inventory",
  "kapitan-server",
+ "libc",
  "miette",
  "parking_lot",
  "serde",

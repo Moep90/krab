@@ -74,6 +74,15 @@ impl App {
         let inventory_path = inventory_path
             .or(dot.inventory_path.clone())
             .unwrap_or_else(|| PathBuf::from("./inventory"));
+        if !inventory_path.join("targets").is_dir() {
+            return Err(Failure::Diagnostics(
+                vec![
+                    Diagnostic::error("inventory::no_targets_dir", format!("no inventory at {}", inventory_path.display()))
+                        .with_help("run from the directory containing `.kapitan`/`inventory/`, or pass --inventory-path"),
+                ],
+                json,
+            ));
+        }
         let inventory_path = inventory_path.canonicalize().unwrap_or(inventory_path);
         let mut cfg = InventoryConfig::new(inventory_path.clone());
         cfg.compose_target_name = dot.compose_target_name.unwrap_or(true);
@@ -164,13 +173,19 @@ impl App {
         }
     }
 
-    /// Every target's document, from the server when possible.
-    pub fn all_documents(&self) -> Result<Map, Failure> {
+    /// Every target's document (optionally only those carrying `labels`),
+    /// from the server when possible.
+    pub fn all_documents(&self, labels: &[(String, String)]) -> Result<Map, Failure> {
         let mut m = Map::new();
         match self.client() {
             Some(mut c) => {
                 let all: AllResult = c
-                    .call("inventory.all", serde_json::Value::Null)
+                    .call(
+                        "inventory.all",
+                        kapitan_server::protocol::TargetsParams {
+                            labels: labels.to_vec(),
+                        },
+                    )
                     .map_err(|e| self.rpc_fail(e))?;
                 if !all.errors.is_empty() {
                     return Err(Failure::Diagnostics(all.errors, self.json));
@@ -185,6 +200,9 @@ impl App {
                     return Err(self.fail(report.errors));
                 }
                 for (name, t) in &report.targets {
+                    if !labels.is_empty() && !kapitan_server::rpc::has_labels(t, labels) {
+                        continue;
+                    }
                     self.warn_all(&t.warnings);
                     m.insert(name.clone(), t.to_document());
                 }
