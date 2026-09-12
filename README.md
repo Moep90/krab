@@ -104,6 +104,10 @@ kgenlib inside kadet work), `kustomize`, `cuelang`, `toml` output, `--reveal`,
 and Python-defined jinja2 filters other than the common ones (`to_json`,
 `basename`, `dirname`).
 
+## Roadmap
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for what is left and ideas.
+
 ## Design
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the data model, the exact merge and
