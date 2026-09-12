@@ -53,7 +53,11 @@ enum Command {
         command: cmd_server::ServerCommand,
     },
     /// Run the language server (LSP over stdio) for editors
-    Lsp,
+    Lsp {
+        /// Accepted for editor clients that pass it; stdio is the only transport.
+        #[arg(long, hide = true)]
+        stdio: bool,
+    },
     /// Print the shell completion script: `source <(kapitan completions bash)`
     Completions {
         #[arg(value_enum)]
@@ -109,7 +113,7 @@ fn run(cli: Cli) -> Result<(), Failure> {
         Command::Inventory(args) => cmd_inventory::run(&app, args),
         Command::Compile(args) => cmd_compile::run(&app, args),
         Command::Server { command } => cmd_server::run(&app, command),
-        Command::Lsp => {
+        Command::Lsp { .. } => {
             let connector = app.connector.clone().ok_or_else(|| {
                 Failure::Message(
                     "the language server needs the inventory daemon; drop --no-daemon / --raw"
