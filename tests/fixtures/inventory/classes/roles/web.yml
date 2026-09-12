@@ -1,0 +1,17 @@
+classes:
+  - common
+  - components.app
+  - components.app.flags
+
+parameters:
+  role: web
+  defaults:
+    replicas: 3
+  list: [b, c]
+  database:
+    hosts: [db2, db3]
+    settings:
+      pool: 10
+      timeout: 30
+  # placeholder replaced by a mapping: merge-time dereference
+  cache_copy: ${cache}

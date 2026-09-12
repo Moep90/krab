@@ -27,3 +27,4 @@ pub mod model;
 pub use inventory::{Inventory, InventoryConfig, RenderReport, RenderedTarget, TargetSpec};
 pub use resolvers::Registry;
 pub mod dotkapitan;
+pub mod explain;

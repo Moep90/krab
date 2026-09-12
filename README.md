@@ -3,7 +3,7 @@
 A from-scratch implementation of [Kapitan](https://kapitan.dev)'s inventory in
 Rust: a fast CLI, a library, and (soon) an always-on inventory server.
 
-Status: **inventory only**. The compile stage (kadet, jinja2, helm, …) is not
+Status: **inventory only** (CLI, library and server). The compile stage (kadet, jinja2, helm, …) is not
 implemented yet. Rendering is byte-compatible with kapitan 0.36 using the
 `omegaconf` inventory backend: `kapitan inventory -t <target>` produces the
 same YAML as the Python implementation, ~60× faster for a full inventory and
@@ -14,7 +14,7 @@ same YAML as the Python implementation, ~60× faster for a full inventory and
 | crate | what |
 |---|---|
 | `crates/kapitan-inventory` | the engine: YAML loading with source positions, class resolution, OmegaConf-compatible merge and `${...}` interpolation, resolver registry, provenance, PyYAML-compatible emitter |
-| `crates/kapitan-server` | in-memory inventory daemon: watches files, re-renders what changed, JSON-RPC over a unix socket |
+| `crates/kapitan-server` | in-memory inventory daemon: watches files, re-renders exactly what changed, JSON-RPC over a unix socket; and the client with auto-spawn |
 | `crates/kapitan` | the `kapitan` binary |
 | `vendor/saphyr-parser` | the YAML parser, with two PyYAML-compatibility patches (see `vendor/README.md`) |
 
@@ -32,7 +32,14 @@ kapitan inventory check               # render everything, pretty diagnostics
 kapitan inventory check --json        # diagnostics as JSON lines (IDE / LLM friendly)
 kapitan inventory export --out /tmp/inv --format json
 kapitan inventory deps inventory/classes/common.yml
+kapitan inventory watch               # live: which targets re-render as you edit, and why they fail
+kapitan server status | stop | logs   # the daemon the commands above talk to
 ```
+
+The first `kapitan inventory …` starts a server for that inventory in the
+background (it renders everything once, then keeps only the affected targets
+fresh as files change). Pass `--no-daemon` (or set `KAPITAN_NO_DAEMON=1`) to
+render locally; results are identical.
 
 ## Design
 

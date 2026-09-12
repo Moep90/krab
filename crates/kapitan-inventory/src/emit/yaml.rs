@@ -729,7 +729,7 @@ impl Emitter {
             if 0 < end
                 && end + 1 < text.len()
                 && (ch == Some(' ') || start >= end)
-                && self.column + (end - start) > self.opts.width
+                && (self.column as i64 + (end as i64 - start as i64)) > self.opts.width as i64
                 && split
             {
                 let mut data: String = if start < end { text[start..end].iter().collect() } else { String::new() };

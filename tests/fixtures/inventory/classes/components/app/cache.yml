@@ -1,0 +1,4 @@
+parameters:
+  cache:
+    engine: redis
+    size: ${defaults.replicas}

@@ -332,6 +332,12 @@ impl Serialize for Node {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for Value {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(serde_json::Value::deserialize(deserializer)?.into())
+    }
+}
+
 impl From<serde_json::Value> for Value {
     fn from(v: serde_json::Value) -> Self {
         match v {

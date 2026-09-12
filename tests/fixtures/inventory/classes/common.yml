@@ -1,0 +1,28 @@
+parameters:
+  target: ${_reclass_.name.full}
+  org: acme
+  region: europe-west1
+  # YAML 1.1 scalars, as PyYAML reads them
+  legacy:
+    octal: 0755
+    yes_is_bool: yes
+    off_is_bool: off
+    not_a_float: 1e5
+    a_float: 1.5e+3
+    sexagesimal: 1:30
+    empty:
+    tilde: ~
+  list: [a, b]
+  defaults:
+    replicas: 1
+    labels:
+      team: platform
+      tier: ${..replicas}
+  kapitan:
+    vars:
+      target: ${target}
+    dependencies:
+      - type: git
+        source: https://example.invalid/generators.git
+        output_path: system/lib
+        ref: main

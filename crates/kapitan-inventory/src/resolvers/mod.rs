@@ -89,6 +89,19 @@ impl Registry {
     }
 }
 
+/// How a resolver argument was written in the expression. OmegaConf hands
+/// node references to resolvers as config objects and literals as plain
+/// Python values, and a few resolvers behave differently for each.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArgKind {
+    /// `[..]`, `{..}` or a bare/quoted scalar written in the expression.
+    Literal,
+    /// `${path}`: a reference to a node of the tree.
+    Node,
+    /// The result of a nested resolver or a string concatenation.
+    Computed,
+}
+
 /// What a resolver can see and do while it runs.
 pub struct Ctx<'c, 'a> {
     pub(crate) ev: &'c mut Evaluator<'a>,
@@ -96,9 +109,15 @@ pub struct Ctx<'c, 'a> {
     pub at: KeyPath,
     pub origin: Origin,
     pub resolver: &'c str,
+    /// One entry per argument.
+    pub arg_kinds: Vec<ArgKind>,
 }
 
 impl Ctx<'_, '_> {
+    pub fn arg_kind(&self, i: usize) -> ArgKind {
+        self.arg_kinds.get(i).copied().unwrap_or(ArgKind::Computed)
+    }
+
     /// Key of the node being resolved (`${key:}`), `None` at the root.
     pub fn key(&self) -> Option<Key> {
         self.at.last().cloned()

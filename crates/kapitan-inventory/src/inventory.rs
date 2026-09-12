@@ -65,6 +65,14 @@ pub struct TargetSpec {
     pub file: PathBuf,
 }
 
+/// Outcome of resolving a class name: the file found (if any) and every
+/// candidate path that was checked on the way.
+#[derive(Clone, Debug)]
+pub struct ClassResolution {
+    pub found: Option<PathBuf>,
+    pub tried: Vec<PathBuf>,
+}
+
 /// A parsed file, cached by path with its content digest.
 pub struct LoadedFile {
     pub path: PathBuf,
@@ -82,6 +90,9 @@ pub struct ClassClosure {
     pub exports: Node,
     /// Every file this closure was built from (itself first).
     pub files: Vec<PathBuf>,
+    /// Every path that was checked while resolving class names (hits and
+    /// misses). Creating a file at one of these can change the render.
+    pub probes: Vec<PathBuf>,
     pub log: Arc<Vec<MergeEvent>>,
 }
 
@@ -120,6 +131,8 @@ pub struct RenderedTarget {
     pub exports: Node,
     /// Files whose content determined this render (target file first).
     pub files: Vec<PathBuf>,
+    /// Paths probed while resolving class names; see `ClassClosure::probes`.
+    pub probes: Vec<PathBuf>,
     /// Content digest over `files`: identical digest means identical render.
     pub digest: String,
     #[serde(skip)]
@@ -165,11 +178,34 @@ impl Inventory {
     pub fn invalidate(&self, path: &Path) -> Vec<PathBuf> {
         self.files.lock().remove(path);
         let mut closures = self.closures.lock();
-        let dropped: Vec<PathBuf> = closures.iter().filter(|(_, c)| c.files.iter().any(|f| f == path)).map(|(k, _)| k.clone()).collect();
+        let dropped: Vec<PathBuf> = closures
+            .iter()
+            .filter(|(_, c)| c.files.iter().chain(c.probes.iter()).any(|f| f == path))
+            .map(|(k, _)| k.clone())
+            .collect();
         for k in &dropped {
             closures.remove(k);
         }
         dropped
+    }
+
+    /// Drop every cached closure that (transitively) depends on `paths`, by
+    /// content or by class resolution. `files`/`probes` already list the
+    /// transitive inputs, so one pass over the cache is enough.
+    pub fn invalidate_dependents(&self, paths: &[PathBuf]) {
+        let mut closures = self.closures.lock();
+        closures.retain(|_, c| !c.files.iter().chain(c.probes.iter()).any(|f| paths.contains(f)));
+        let mut files = self.files.lock();
+        for p in paths {
+            files.remove(p);
+        }
+    }
+
+    /// Drop every cached closure that depends on anything under `dir`.
+    pub fn invalidate_under(&self, dir: &Path) {
+        let mut closures = self.closures.lock();
+        closures.retain(|_, c| !c.files.iter().chain(c.probes.iter()).any(|f| f.starts_with(dir)));
+        self.files.lock().retain(|p, _| !p.starts_with(dir));
     }
 
     pub fn invalidate_all(&self) {
@@ -254,7 +290,7 @@ impl Inventory {
     /// `classes/a/b/init.yml` or `classes/a/b.yml`; `.a` is relative to the
     /// including class' directory; two reclass compatibility fallbacks drop
     /// the first two name components.
-    pub fn resolve_class_file(&self, class_name: &str, from_file: &Path) -> std::result::Result<PathBuf, Vec<PathBuf>> {
+    pub fn resolve_class_file(&self, class_name: &str, from_file: &Path) -> ClassResolution {
         let classes = self.cfg.classes_dir();
         let parent_dir: PathBuf = match from_file.parent().and_then(|p| p.strip_prefix(&classes).ok()) {
             Some(rel) => rel.to_path_buf(),
@@ -282,13 +318,14 @@ impl Inventory {
                 compat.join(format!("init.{ext}")),
             ];
             for case in cases {
-                if case.is_file() {
-                    return Ok(case);
+                let hit = case.is_file();
+                tried.push(case.clone());
+                if hit {
+                    return ClassResolution { found: Some(case), tried };
                 }
-                tried.push(case);
             }
         }
-        Err(tried)
+        ClassResolution { found: None, tried }
     }
 
     fn class_closure(&self, file: &Path, stack: &mut Vec<PathBuf>) -> Result<Arc<ClassClosure>> {
@@ -316,14 +353,22 @@ impl Inventory {
         let mut applications = Vec::new();
         let mut exports = Node::map(Origin::SYNTHETIC);
         let mut files = vec![file.to_path_buf()];
+        let mut probes: Vec<PathBuf> = Vec::new();
         let mut own_log: Vec<MergeEvent> = Vec::new();
         let mut log = if self.cfg.track_provenance { Some(&mut own_log) } else { None };
         let mut nested_logs: Vec<Arc<Vec<MergeEvent>>> = Vec::new();
         let deref = EvalDeref { inv: self };
         for class_ref in &doc.classes {
-            let class_file = match self.resolve_class_file(&class_ref.name, file) {
-                Ok(p) => p,
-                Err(tried) => {
+            let resolution = self.resolve_class_file(&class_ref.name, file);
+            for p in &resolution.tried {
+                if !probes.contains(p) {
+                    probes.push(p.clone());
+                }
+            }
+            let class_file = match resolution.found {
+                Some(p) => p,
+                None => {
+                    let tried = resolution.tried;
                     if self.cfg.ignore_class_not_found {
                         continue;
                     }
@@ -356,6 +401,11 @@ impl Inventory {
                     files.push(f.clone());
                 }
             }
+            for p in &closure.probes {
+                if !probes.contains(p) {
+                    probes.push(p.clone());
+                }
+            }
             nested_logs.push(closure.log.clone());
         }
         if !doc.parameters.as_map().is_some_and(|m| m.is_empty()) {
@@ -369,7 +419,7 @@ impl Inventory {
             combined.extend(l.iter().cloned());
         }
         combined.extend(own_log);
-        Ok(ClassClosure { params, classes, applications, exports, files, log: Arc::new(combined) })
+        Ok(ClassClosure { params, classes, applications, exports, files, probes, log: Arc::new(combined) })
     }
 
     // ---- rendering --------------------------------------------------------
@@ -378,7 +428,7 @@ impl Inventory {
         let path_no_ext = spec.path.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or(spec.path.clone());
         let initial = model::initial_parameters(&spec.name, &path_no_ext);
         let closure = self.build_closure(&spec.file, Some(initial), &mut Vec::new()).map_err(|e| e.with_target(&spec.name))?;
-        let ClassClosure { mut params, classes, applications, exports, files, log } = closure;
+        let ClassClosure { mut params, classes, applications, exports, files, probes, log } = closure;
 
         let mut warnings = Vec::new();
         let resolutions = {
@@ -407,6 +457,7 @@ impl Inventory {
             applications,
             exports,
             files,
+            probes,
             digest,
             provenance: Provenance { merges: vec![log], resolutions },
             warnings,

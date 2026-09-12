@@ -1,0 +1,57 @@
+applications: []
+classes:
+  - common
+  - empty
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: bare
+      parts:
+        - bare
+      path: bare
+      short: bare
+  _reclass_:
+    name:
+      full: bare
+      parts:
+        - bare
+      path: bare
+      short: bare
+  defaults:
+    labels:
+      team: platform
+      tier: 1
+    replicas: 1
+  kapitan:
+    compile: []
+    dependencies:
+      - force_fetch: false
+        output_path: system/lib
+        ref: main
+        source: https://example.invalid/generators.git
+        subdir: null
+        submodules: false
+        type: git
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: bare
+  legacy:
+    a_float: 1500.0
+    empty: null
+    not_a_float: 1e5
+    octal: 493
+    off_is_bool: false
+    sexagesimal: 90
+    tilde: null
+    yes_is_bool: true
+  list:
+    - a
+    - b
+  org: acme
+  region: europe-west1
+  target: bare
+resolved: false

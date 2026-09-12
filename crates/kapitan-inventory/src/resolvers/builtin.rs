@@ -144,11 +144,13 @@ fn merge(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     Ok(acc.value)
 }
 
-/// `${dict:list}`: a list of single-entry dicts into one dict.
-fn to_dict(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
+/// `${dict:[..]}`: a literal list of dicts into one dict. The reference only
+/// converts Python lists, so a list referenced from the tree (`${dict:${x}}`)
+/// is returned unchanged.
+fn to_dict(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("dict", args, 1, 1)?;
     let Value::List(items) = &args[0] else { return Ok(args[0].clone()) };
-    if !items.iter().all(|i| i.value.is_container()) {
+    if ctx.arg_kind(0) != super::ArgKind::Literal || !items.iter().all(|i| i.value.is_container()) {
         return Ok(args[0].clone());
     }
     let mut out = Map::new();
