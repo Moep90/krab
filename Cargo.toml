@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "2.0.0-alpha.1"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/kapicorp/kapitan"
+rust-version = "1.85"
+
+[workspace.dependencies]
+kapitan-inventory = { path = "crates/kapitan-inventory" }
+kapitan-server = { path = "crates/kapitan-server" }
+saphyr-parser = "0.0.12"
+indexmap = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+miette = { version = "7", features = ["fancy"] }
+clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+rayon = "1"
+blake3 = "1"
+sha2 = "0.10"
+md-5 = "0.10"
+notify = "8"
+notify-debouncer-full = "0.5"
+jmespath = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+parking_lot = "0.12"
+libc = "0.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Vendored with a one-line patch: PyYAML compatibility for flow collections
+# whose closing bracket is not indented past the parent key (see vendor/README.md).
+[patch.crates-io]
+saphyr-parser = { path = "vendor/saphyr-parser" }
