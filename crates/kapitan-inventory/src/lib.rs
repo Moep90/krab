@@ -16,13 +16,13 @@ pub use path::{Key, KeyPath};
 pub use source::{Location, Origin, SourceId, Sources};
 pub use value::{Map, Node, Value};
 pub mod classfile;
-pub mod interp;
-pub mod merge;
 pub mod emit;
+pub mod interp;
+pub mod inventory;
+pub mod merge;
+pub mod model;
 pub mod pyfmt;
 pub mod resolvers;
-pub mod inventory;
-pub mod model;
 
 pub use inventory::{Inventory, InventoryConfig, RenderReport, RenderedTarget, TargetSpec};
 pub use resolvers::Registry;

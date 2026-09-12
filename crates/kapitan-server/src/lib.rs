@@ -33,10 +33,16 @@ pub fn run(inv: Inventory, idle_timeout: Duration, version: String) -> std::io::
         ms = summary.duration_ms,
         "initial render"
     );
-    let _watcher = watch::start(&root, state.clone()).map_err(|e| std::io::Error::other(e.to_string()))?;
+    let _watcher =
+        watch::start(&root, state.clone()).map_err(|e| std::io::Error::other(e.to_string()))?;
     let server = Arc::new(Server {
         state,
-        cfg: ServerConfig { socket, log: Some(log), idle_timeout, version },
+        cfg: ServerConfig {
+            socket,
+            log: Some(log),
+            idle_timeout,
+            version,
+        },
         shutdown: AtomicBool::new(false),
     });
     server.serve()

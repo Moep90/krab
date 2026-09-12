@@ -18,46 +18,50 @@ pub type Handle = Arc<Mutex<Debouncer<notify::RecommendedWatcher, RecommendedCac
 /// helper thread adds watches for symlink targets as they are discovered.
 pub fn start(root: &Path, state: Arc<State>) -> notify::Result<Handle> {
     let cb_state = state.clone();
-    let mut debouncer = new_debouncer(Duration::from_millis(150), None, move |result: DebounceEventResult| {
-        let events = match result {
-            Ok(events) => events,
-            Err(errors) => {
-                for e in errors {
-                    tracing::warn!("watch error: {e}");
+    let mut debouncer = new_debouncer(
+        Duration::from_millis(150),
+        None,
+        move |result: DebounceEventResult| {
+            let events = match result {
+                Ok(events) => events,
+                Err(errors) => {
+                    for e in errors {
+                        tracing::warn!("watch error: {e}");
+                    }
+                    return;
                 }
-                return;
-            }
-        };
-        let mut changed: Vec<PathBuf> = Vec::new();
-        for event in events {
-            tracing::debug!(kind = ?event.kind, paths = ?event.paths, "fs event");
-            if matches!(event.kind, EventKind::Access(_)) {
-                continue;
-            }
-            for path in &event.paths {
-                // Existing non-inventory files (editor swap files, READMEs) are
-                // noise; directories and vanished paths may hide relevant files.
-                if path.is_file() && !State::is_inventory_file(path) {
+            };
+            let mut changed: Vec<PathBuf> = Vec::new();
+            for event in events {
+                tracing::debug!(kind = ?event.kind, paths = ?event.paths, "fs event");
+                if matches!(event.kind, EventKind::Access(_)) {
                     continue;
                 }
-                if !changed.contains(path) {
-                    changed.push(path.clone());
+                for path in &event.paths {
+                    // Existing non-inventory files (editor swap files, READMEs) are
+                    // noise; directories and vanished paths may hide relevant files.
+                    if path.is_file() && !State::is_inventory_file(path) {
+                        continue;
+                    }
+                    if !changed.contains(path) {
+                        changed.push(path.clone());
+                    }
                 }
             }
-        }
-        if changed.is_empty() {
-            return;
-        }
-        let summary = cb_state.apply_changes(changed);
-        tracing::info!(
-            generation = summary.generation,
-            files = summary.changed_files.len(),
-            rerendered = summary.rerendered.len(),
-            errors = summary.errors.len(),
-            ms = summary.duration_ms,
-            "re-rendered"
-        );
-    })?;
+            if changed.is_empty() {
+                return;
+            }
+            let summary = cb_state.apply_changes(changed);
+            tracing::info!(
+                generation = summary.generation,
+                files = summary.changed_files.len(),
+                rerendered = summary.rerendered.len(),
+                errors = summary.errors.len(),
+                ms = summary.duration_ms,
+                "re-rendered"
+            );
+        },
+    )?;
     debouncer.watch(root, RecursiveMode::Recursive)?;
     let handle = Arc::new(Mutex::new(debouncer));
 

@@ -26,7 +26,10 @@ pub fn load_file(sources: &Sources, path: &Path) -> Result<Node> {
 
 /// Parse the first document of `text`. An empty document yields `Null`.
 pub fn parse_document(text: &str, file: SourceId) -> Result<Node> {
-    let mut loader = Loader { file, anchors: HashMap::new() };
+    let mut loader = Loader {
+        file,
+        anchors: HashMap::new(),
+    };
     let mut parser = Parser::new_from_str(text);
     let mut root: Option<Node> = None;
     loop {
@@ -37,8 +40,11 @@ pub fn parse_document(text: &str, file: SourceId) -> Result<Node> {
             Event::StreamEnd => break,
             other => {
                 if root.is_some() {
-                    return Err(Error::new("yaml::multiple_documents", "expected a single document in the stream")
-                        .with_label(loader.origin(&span), "second document starts here"));
+                    return Err(Error::new(
+                        "yaml::multiple_documents",
+                        "expected a single document in the stream",
+                    )
+                    .with_label(loader.origin(&span), "second document starts here"));
                 }
                 root = Some(loader.build(other, span, &mut parser)?);
             }
@@ -57,11 +63,17 @@ impl Loader {
         marker_origin(self.file, &span.start)
     }
 
-    fn next<'a>(&self, parser: &mut Parser<'a, saphyr_parser::StrInput<'a>>) -> Result<(Event<'a>, Span)> {
+    fn next<'a>(
+        &self,
+        parser: &mut Parser<'a, saphyr_parser::StrInput<'a>>,
+    ) -> Result<(Event<'a>, Span)> {
         match parser.next() {
             Some(Ok(ev)) => Ok(ev),
-            Some(Err(e)) => Err(Error::new("yaml::syntax", format!("YAML syntax error: {}", e.info()))
-                .with_label(marker_origin(self.file, e.marker()), "here")),
+            Some(Err(e)) => Err(Error::new(
+                "yaml::syntax",
+                format!("YAML syntax error: {}", e.info()),
+            )
+            .with_label(marker_origin(self.file, e.marker()), "here")),
             None => Ok((Event::StreamEnd, Span::default())),
         }
     }
@@ -83,7 +95,8 @@ impl Loader {
                 Ok(node)
             }
             Event::Alias(id) => self.anchors.get(&id).cloned().ok_or_else(|| {
-                Error::new("yaml::unknown_alias", "alias refers to an undefined anchor").with_label(origin, "here")
+                Error::new("yaml::unknown_alias", "alias refers to an undefined anchor")
+                    .with_label(origin, "here")
             }),
             Event::SequenceStart(anchor, _tag) => {
                 let mut items = Vec::new();
@@ -112,18 +125,28 @@ impl Loader {
                     let key = match kev {
                         Event::Scalar(text, style, _, tag) => {
                             let v = scalar_value(&text, style, tag.as_deref(), key_origin)?;
-                            (v.py_str(), matches!(&v, Value::Str(s) if s == "<<") && style == ScalarStyle::Plain)
+                            (
+                                v.py_str(),
+                                matches!(&v, Value::Str(s) if s == "<<")
+                                    && style == ScalarStyle::Plain,
+                            )
                         }
                         Event::Alias(id) => {
                             let v = self.anchors.get(&id).cloned().ok_or_else(|| {
-                                Error::new("yaml::unknown_alias", "alias refers to an undefined anchor")
-                                    .with_label(key_origin, "here")
+                                Error::new(
+                                    "yaml::unknown_alias",
+                                    "alias refers to an undefined anchor",
+                                )
+                                .with_label(key_origin, "here")
                             })?;
                             (v.value.py_str(), false)
                         }
                         _ => {
-                            return Err(Error::new("yaml::complex_key", "mapping keys must be scalars")
-                                .with_label(key_origin, "complex key here"));
+                            return Err(Error::new(
+                                "yaml::complex_key",
+                                "mapping keys must be scalars",
+                            )
+                            .with_label(key_origin, "complex key here"));
                         }
                     };
                     let (vev, vsp) = self.next(parser)?;
@@ -148,9 +171,14 @@ impl Loader {
                 Ok(node)
             }
             Event::SequenceEnd | Event::MappingEnd => {
-                Err(Error::new("yaml::syntax", "unexpected end of collection").with_label(origin, "here"))
+                Err(Error::new("yaml::syntax", "unexpected end of collection")
+                    .with_label(origin, "here"))
             }
-            Event::DocumentStart(_) | Event::DocumentEnd | Event::StreamStart | Event::StreamEnd | Event::Nothing => {
+            Event::DocumentStart(_)
+            | Event::DocumentEnd
+            | Event::StreamStart
+            | Event::StreamEnd
+            | Event::Nothing => {
                 Err(Error::new("yaml::syntax", "unexpected event").with_label(origin, "here"))
             }
         }
@@ -183,8 +211,11 @@ fn flatten_merge(into: &mut Map, merge: Node) -> Result<()> {
             }
             Ok(())
         }
-        _ => Err(Error::new("yaml::merge", "expected a mapping or list of mappings for merging")
-            .with_label(merge.origin, "here")),
+        _ => Err(Error::new(
+            "yaml::merge",
+            "expected a mapping or list of mappings for merging",
+        )
+        .with_label(merge.origin, "here")),
     }
 }
 
@@ -192,24 +223,41 @@ fn marker_origin(file: SourceId, m: &Marker) -> Origin {
     Origin::new(file, m.line() as u32, m.col() as u32 + 1)
 }
 
-fn scalar_value(text: &str, style: ScalarStyle, tag: Option<&Tag>, origin: Origin) -> Result<Value> {
+fn scalar_value(
+    text: &str,
+    style: ScalarStyle,
+    tag: Option<&Tag>,
+    origin: Origin,
+) -> Result<Value> {
     if let Some(tag) = tag {
         let suffix = tag.suffix.as_str();
         let is_core = tag.handle == "!!" || tag.handle == "tag:yaml.org,2002:";
         if !is_core {
-            return Err(Error::new("yaml::unknown_tag", format!("unsupported tag !{}{}", tag.handle, tag.suffix))
-                .with_label(origin, "here"));
+            return Err(Error::new(
+                "yaml::unknown_tag",
+                format!("unsupported tag !{}{}", tag.handle, tag.suffix),
+            )
+            .with_label(origin, "here"));
         }
         return match suffix {
             "str" => Ok(Value::Str(text.to_string())),
-            "int" => parse_int(text)
-                .ok_or_else(|| Error::new("yaml::bad_int", format!("invalid integer {text:?}")).with_label(origin, "here")),
-            "float" => parse_float(text)
-                .ok_or_else(|| Error::new("yaml::bad_float", format!("invalid float {text:?}")).with_label(origin, "here")),
-            "bool" => parse_bool(text)
-                .ok_or_else(|| Error::new("yaml::bad_bool", format!("invalid boolean {text:?}")).with_label(origin, "here")),
+            "int" => parse_int(text).ok_or_else(|| {
+                Error::new("yaml::bad_int", format!("invalid integer {text:?}"))
+                    .with_label(origin, "here")
+            }),
+            "float" => parse_float(text).ok_or_else(|| {
+                Error::new("yaml::bad_float", format!("invalid float {text:?}"))
+                    .with_label(origin, "here")
+            }),
+            "bool" => parse_bool(text).ok_or_else(|| {
+                Error::new("yaml::bad_bool", format!("invalid boolean {text:?}"))
+                    .with_label(origin, "here")
+            }),
             "null" => Ok(Value::Null),
-            other => Err(Error::new("yaml::unknown_tag", format!("unsupported tag !!{other}")).with_label(origin, "here")),
+            other => Err(
+                Error::new("yaml::unknown_tag", format!("unsupported tag !!{other}"))
+                    .with_label(origin, "here"),
+            ),
         };
     }
     if style != ScalarStyle::Plain {
@@ -241,8 +289,12 @@ pub fn resolve_plain(text: &str) -> Value {
 
 fn parse_bool(text: &str) -> Option<Value> {
     match text {
-        "yes" | "Yes" | "YES" | "true" | "True" | "TRUE" | "on" | "On" | "ON" => Some(Value::Bool(true)),
-        "no" | "No" | "NO" | "false" | "False" | "FALSE" | "off" | "Off" | "OFF" => Some(Value::Bool(false)),
+        "yes" | "Yes" | "YES" | "true" | "True" | "TRUE" | "on" | "On" | "ON" => {
+            Some(Value::Bool(true))
+        }
+        "no" | "No" | "NO" | "false" | "False" | "FALSE" | "off" | "Off" | "OFF" => {
+            Some(Value::Bool(false))
+        }
         _ => None,
     }
 }
@@ -269,7 +321,10 @@ fn parse_int(text: &str) -> Option<Value> {
             return None;
         }
         i128::from_str_radix(&digits(h), 16).ok()?
-    } else if body.len() > 1 && body.starts_with('0') && all(&body[1..], |c| ('0'..='7').contains(&c) || c == '_') {
+    } else if body.len() > 1
+        && body.starts_with('0')
+        && all(&body[1..], |c| ('0'..='7').contains(&c) || c == '_')
+    {
         i128::from_str_radix(&digits(&body[1..]), 8).ok()?
     } else if body == "0" {
         0
@@ -277,7 +332,10 @@ fn parse_int(text: &str) -> Option<Value> {
         // sexagesimal: [1-9][0-9_]*(:[0-5]?[0-9])+
         let mut parts = body.split(':');
         let head = parts.next()?;
-        if !head.as_bytes().first().is_some_and(|c| (b'1'..=b'9').contains(c))
+        if !head
+            .as_bytes()
+            .first()
+            .is_some_and(|c| (b'1'..=b'9').contains(c))
             || !all(head, |c| c.is_ascii_digit() || c == '_')
         {
             return None;
@@ -294,7 +352,10 @@ fn parse_int(text: &str) -> Option<Value> {
         }
         v
     } else {
-        if !body.as_bytes().first().is_some_and(|c| (b'1'..=b'9').contains(c))
+        if !body
+            .as_bytes()
+            .first()
+            .is_some_and(|c| (b'1'..=b'9').contains(c))
             || !all(body, |c| c.is_ascii_digit() || c == '_')
         {
             return None;
@@ -314,7 +375,9 @@ fn parse_float(text: &str) -> Option<Value> {
     let sign = if neg { -1.0 } else { 1.0 };
     match body {
         ".inf" | ".Inf" | ".INF" => return Some(Value::Float(sign * f64::INFINITY)),
-        ".nan" | ".NaN" | ".NAN" if !neg && !text.starts_with('+') => return Some(Value::Float(f64::NAN)),
+        ".nan" | ".NaN" | ".NAN" if !neg && !text.starts_with('+') => {
+            return Some(Value::Float(f64::NAN));
+        }
         _ => {}
     }
     // [0-9][0-9_]*\.[0-9_]*([eE][-+][0-9]+)?  |  \.[0-9][0-9_]*([eE][-+][0-9]+)?
@@ -354,7 +417,11 @@ fn parse_float(text: &str) -> Option<Value> {
             v = v * 60.0 + p.parse::<f64>().ok()?;
         }
         let frac = frac_part.replace('_', "");
-        v + if frac.is_empty() { 0.0 } else { format!("0.{frac}").parse::<f64>().ok()? }
+        v + if frac.is_empty() {
+            0.0
+        } else {
+            format!("0.{frac}").parse::<f64>().ok()?
+        }
     } else {
         if int_part.is_empty() {
             if frac_part.is_empty() || !frac_part.as_bytes()[0].is_ascii_digit() {

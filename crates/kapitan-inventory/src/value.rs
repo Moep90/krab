@@ -35,7 +35,10 @@ impl Node {
     }
 
     pub fn synthetic(value: Value) -> Self {
-        Node { value, origin: Origin::SYNTHETIC }
+        Node {
+            value,
+            origin: Origin::SYNTHETIC,
+        }
     }
 
     pub fn map(origin: Origin) -> Self {
@@ -148,9 +151,13 @@ impl Value {
         match (self, other) {
             (Null, Null) => true,
             (Str(a), Str(b)) => a == b,
-            (List(a), List(b)) => a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.value.py_eq(&y.value)),
+            (List(a), List(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.value.py_eq(&y.value))
+            }
             (Map(a), Map(b)) => {
-                a.len() == b.len() && a.iter().all(|(k, v)| b.get(k).is_some_and(|w| v.value.py_eq(&w.value)))
+                a.len() == b.len()
+                    && a.iter()
+                        .all(|(k, v)| b.get(k).is_some_and(|w| v.value.py_eq(&w.value)))
             }
             (a, b) => match (a.as_number(), b.as_number()) {
                 (Some(x), Some(y)) => x == y,
@@ -222,7 +229,11 @@ impl Value {
 }
 
 fn py_str_repr(s: &str, out: &mut String) {
-    let quote = if s.contains('\'') && !s.contains('"') { '"' } else { '\'' };
+    let quote = if s.contains('\'') && !s.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
     out.push(quote);
     for c in s.chars() {
         match c {
@@ -250,7 +261,11 @@ pub fn py_float_repr(f: f64) -> String {
         return if f > 0.0 { "inf".into() } else { "-inf".into() };
     }
     if f == 0.0 {
-        return if f.is_sign_negative() { "-0.0".into() } else { "0.0".into() };
+        return if f.is_sign_negative() {
+            "-0.0".into()
+        } else {
+            "0.0".into()
+        };
     }
     // `{:e}` gives the shortest round-trip mantissa in Rust.
     let sci = format!("{f:e}");
@@ -351,10 +366,14 @@ impl From<serde_json::Value> for Value {
                 }
             }
             serde_json::Value::String(s) => Value::Str(s),
-            serde_json::Value::Array(a) => Value::List(a.into_iter().map(|v| Node::synthetic(v.into())).collect()),
-            serde_json::Value::Object(o) => {
-                Value::Map(o.into_iter().map(|(k, v)| (k, Node::synthetic(v.into()))).collect())
+            serde_json::Value::Array(a) => {
+                Value::List(a.into_iter().map(|v| Node::synthetic(v.into())).collect())
             }
+            serde_json::Value::Object(o) => Value::Map(
+                o.into_iter()
+                    .map(|(k, v)| (k, Node::synthetic(v.into())))
+                    .collect(),
+            ),
         }
     }
 }

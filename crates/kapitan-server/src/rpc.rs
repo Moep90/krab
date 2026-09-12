@@ -37,7 +37,10 @@ impl Server {
         }
         if self.cfg.socket.exists() {
             if UnixStream::connect(&self.cfg.socket).is_ok() {
-                return Err(std::io::Error::new(std::io::ErrorKind::AddrInUse, "a server is already running"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AddrInUse,
+                    "a server is already running",
+                ));
             }
             std::fs::remove_file(&self.cfg.socket)?;
         }
@@ -88,15 +91,29 @@ impl Server {
                 Ok(req) => {
                     let id = req.id;
                     match self.dispatch(&req) {
-                        Ok(result) => Response { jsonrpc: "2.0".into(), id, result: Some(result), error: None },
-                        Err(e) => Response { jsonrpc: "2.0".into(), id, result: None, error: Some(e) },
+                        Ok(result) => Response {
+                            jsonrpc: "2.0".into(),
+                            id,
+                            result: Some(result),
+                            error: None,
+                        },
+                        Err(e) => Response {
+                            jsonrpc: "2.0".into(),
+                            id,
+                            result: None,
+                            error: Some(e),
+                        },
                     }
                 }
                 Err(e) => Response {
                     jsonrpc: "2.0".into(),
                     id: 0,
                     result: None,
-                    error: Some(RpcError { code: ERR_PARSE, message: format!("invalid request: {e}"), data: None }),
+                    error: Some(RpcError {
+                        code: ERR_PARSE,
+                        message: format!("invalid request: {e}"),
+                        data: None,
+                    }),
                 },
             };
             let mut out = serde_json::to_vec(&response)?;
@@ -131,7 +148,11 @@ impl Server {
                         error: inner.errors.get(&s.name).cloned(),
                     })
                     .collect();
-                Ok(serde_json::to_value(TargetsResult { generation: inner.generation, targets }).unwrap())
+                Ok(serde_json::to_value(TargetsResult {
+                    generation: inner.generation,
+                    targets,
+                })
+                .unwrap())
             }
             "inventory.target" => {
                 let p: TargetParams = params(req)?;
@@ -139,11 +160,12 @@ impl Server {
                 let t = self.target(&inner, &p.name)?;
                 let doc = t.to_document();
                 let doc = match &p.path {
-                    Some(path) => get(&doc, &KeyPath::parse(path))
-                        .cloned()
-                        .ok_or_else(|| inventory_error(
-                            Diagnostic::error("inventory::pattern_not_found", format!("nothing at `{path}` in target `{}`", p.name))
-                        ))?,
+                    Some(path) => get(&doc, &KeyPath::parse(path)).cloned().ok_or_else(|| {
+                        inventory_error(Diagnostic::error(
+                            "inventory::pattern_not_found",
+                            format!("nothing at `{path}` in target `{}`", p.name),
+                        ))
+                    })?,
                     None => doc,
                 };
                 Ok(serde_json::to_value(TargetResult {
@@ -151,7 +173,11 @@ impl Server {
                     digest: t.digest.clone(),
                     generation: inner.generation,
                     document: doc.value.to_json(),
-                    warnings: t.warnings.iter().map(|w| w.clone().resolve(&self.state.inv.sources)).collect(),
+                    warnings: t
+                        .warnings
+                        .iter()
+                        .map(|w| w.clone().resolve(&self.state.inv.sources))
+                        .collect(),
                 })
                 .unwrap())
             }
@@ -177,17 +203,26 @@ impl Server {
                 let p: ExplainParams = params(req)?;
                 let inner = self.state.read();
                 let t = self.target(&inner, &p.target)?;
-                let e = explain(&self.state.inv, t, &p.path).map_err(|e| inventory_error(e.into_diagnostic()))?;
+                let e = explain(&self.state.inv, t, &p.path)
+                    .map_err(|e| inventory_error(e.into_diagnostic()))?;
                 Ok(serde_json::to_value(e).unwrap())
             }
             "inventory.deps" => {
                 let p: DepsParams = params(req)?;
                 let inner = self.state.read();
-                let wanted: Vec<PathBuf> = p.files.iter().map(|f| f.canonicalize().unwrap_or(f.clone())).collect();
+                let wanted: Vec<PathBuf> = p
+                    .files
+                    .iter()
+                    .map(|f| f.canonicalize().unwrap_or(f.clone()))
+                    .collect();
                 let mut names: Vec<&String> = inner
                     .targets
                     .iter()
-                    .filter(|(_, t)| t.files.iter().any(|f| wanted.contains(&f.canonicalize().unwrap_or(f.clone()))))
+                    .filter(|(_, t)| {
+                        t.files
+                            .iter()
+                            .any(|f| wanted.contains(&f.canonicalize().unwrap_or(f.clone())))
+                    })
                     .map(|(n, _)| n)
                     .collect();
                 names.sort();
@@ -198,7 +233,11 @@ impl Server {
                 let warnings = inner
                     .targets
                     .values()
-                    .flat_map(|t| t.warnings.iter().map(|w| w.clone().resolve(&self.state.inv.sources)))
+                    .flat_map(|t| {
+                        t.warnings
+                            .iter()
+                            .map(|w| w.clone().resolve(&self.state.inv.sources))
+                    })
                     .collect();
                 Ok(serde_json::to_value(DiagnosticsResult {
                     generation: inner.generation,
@@ -211,13 +250,26 @@ impl Server {
                 let p: WaitParams = params(req)?;
                 let timeout = Duration::from_millis(p.timeout_ms.unwrap_or(30_000).min(120_000));
                 let (generation, timed_out, changes) = self.state.wait_for(p.generation, timeout);
-                Ok(serde_json::to_value(WaitResult { generation, timed_out, changes }).unwrap())
+                Ok(serde_json::to_value(WaitResult {
+                    generation,
+                    timed_out,
+                    changes,
+                })
+                .unwrap())
             }
-            other => Err(RpcError { code: ERR_METHOD, message: format!("unknown method `{other}`"), data: None }),
+            other => Err(RpcError {
+                code: ERR_METHOD,
+                message: format!("unknown method `{other}`"),
+                data: None,
+            }),
         }
     }
 
-    fn target<'i>(&self, inner: &'i crate::state::Inner, name: &str) -> Result<&'i Arc<kapitan_inventory::RenderedTarget>, RpcError> {
+    fn target<'i>(
+        &self,
+        inner: &'i crate::state::Inner,
+        name: &str,
+    ) -> Result<&'i Arc<kapitan_inventory::RenderedTarget>, RpcError> {
         if let Some(t) = inner.targets.get(name) {
             return Ok(t);
         }
@@ -225,8 +277,11 @@ impl Server {
             return Err(inventory_error(e.clone()));
         }
         Err(inventory_error(
-            Diagnostic::error("inventory::unknown_target", format!("target `{name}` not found"))
-                .with_help("list targets with `kapitan inventory targets`"),
+            Diagnostic::error(
+                "inventory::unknown_target",
+                format!("target `{name}` not found"),
+            )
+            .with_help("list targets with `kapitan inventory targets`"),
         ))
     }
 
@@ -250,12 +305,19 @@ impl Server {
 }
 
 fn params<T: DeserializeOwned>(req: &Request) -> Result<T, RpcError> {
-    serde_json::from_value(req.params.clone())
-        .map_err(|e| RpcError { code: ERR_PARAMS, message: format!("invalid params for {}: {e}", req.method), data: None })
+    serde_json::from_value(req.params.clone()).map_err(|e| RpcError {
+        code: ERR_PARAMS,
+        message: format!("invalid params for {}: {e}", req.method),
+        data: None,
+    })
 }
 
 pub fn inventory_error(d: Diagnostic) -> RpcError {
-    RpcError { code: ERR_INVENTORY, message: d.message.clone(), data: Some(json!([d])) }
+    RpcError {
+        code: ERR_INVENTORY,
+        message: d.message.clone(),
+        data: Some(json!([d])),
+    }
 }
 
 pub fn socket_alive(path: &Path) -> bool {

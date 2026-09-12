@@ -69,7 +69,11 @@ fn relpath(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     let mut relative = String::new();
     for (idx, (p, n)) in path_parts.iter().zip(node_parts.iter()).enumerate() {
         if *p != n.as_str() {
-            let prefix = if idx != 0 { ".".repeat(depth - idx) } else { String::new() };
+            let prefix = if idx != 0 {
+                ".".repeat(depth - idx)
+            } else {
+                String::new()
+            };
             relative = format!("{prefix}{}", path_parts[idx..].join("."));
             break;
         }
@@ -94,7 +98,10 @@ fn access(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 /// `${escape:content}` emits a literal `${content}` in the final output.
 fn escape(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("escape", args, 1, 1)?;
-    Ok(Value::Str(format!("{LITERAL_PREFIX}{}{LITERAL_SUFFIX}", as_py_str(args, 0))))
+    Ok(Value::Str(format!(
+        "{LITERAL_PREFIX}{}{LITERAL_SUFFIX}",
+        as_py_str(args, 0)
+    )))
 }
 
 /// Replace `__KAPITAN_LITERAL__x__KAPITAN_LITERAL_END__` markers with `${x}`.
@@ -139,7 +146,13 @@ fn merge(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
         if !a.is_container() {
             return Err("merge(): arguments must be containers".into());
         }
-        merge_with_mode(&mut acc, Node::new(a.clone(), ctx.origin), ListMode::Extend, &NoDeref, &mut log);
+        merge_with_mode(
+            &mut acc,
+            Node::new(a.clone(), ctx.origin),
+            ListMode::Extend,
+            &NoDeref,
+            &mut log,
+        );
     }
     Ok(acc.value)
 }
@@ -149,7 +162,9 @@ fn merge(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 /// is returned unchanged.
 fn to_dict(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("dict", args, 1, 1)?;
-    let Value::List(items) = &args[0] else { return Ok(args[0].clone()) };
+    let Value::List(items) = &args[0] else {
+        return Ok(args[0].clone());
+    };
     if ctx.arg_kind(0) != super::ArgKind::Literal || !items.iter().all(|i| i.value.is_container()) {
         return Ok(args[0].clone());
     }
@@ -171,11 +186,20 @@ fn to_list(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     match &args[0] {
         Value::Map(m) => Ok(Value::List(
             m.iter()
-                .map(|(k, v)| Node::new(Value::Map(Map::from_iter([(k.clone(), v.clone())])), ctx.origin))
+                .map(|(k, v)| {
+                    Node::new(
+                        Value::Map(Map::from_iter([(k.clone(), v.clone())])),
+                        ctx.origin,
+                    )
+                })
                 .collect(),
         )),
         Value::List(_) => Ok(args[0].clone()),
-        Value::Str(s) => Ok(Value::List(s.chars().map(|c| Node::new(Value::Str(c.to_string()), ctx.origin)).collect())),
+        Value::Str(s) => Ok(Value::List(
+            s.chars()
+                .map(|c| Node::new(Value::Str(c.to_string()), ctx.origin))
+                .collect(),
+        )),
         other => Err(format!("'{}' object is not iterable", other.type_name()).into()),
     }
 }
@@ -185,14 +209,20 @@ fn to_yaml(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("yaml", args, 1, 1)?;
     let key = as_str("yaml", args, 0)?.to_string();
     let v = ctx.select(&key)?.unwrap_or(Value::Null);
-    Ok(Value::Str(dump_yaml(&Node::new(v, ctx.origin), &DumpOptions::pyyaml_default())))
+    Ok(Value::Str(dump_yaml(
+        &Node::new(v, ctx.origin),
+        &DumpOptions::pyyaml_default(),
+    )))
 }
 
 /// Python `x + y`.
 fn add(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("add", args, 2, 2)?;
     match (&args[0], &args[1]) {
-        (Value::Int(a), Value::Int(b)) => Ok(a.checked_add(*b).map(Value::Int).unwrap_or(Value::Float(*a as f64 + *b as f64))),
+        (Value::Int(a), Value::Int(b)) => Ok(a
+            .checked_add(*b)
+            .map(Value::Int)
+            .unwrap_or(Value::Float(*a as f64 + *b as f64))),
         (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + b)),
         (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a + *b as f64)),
         (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
@@ -200,7 +230,12 @@ fn add(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
         (Value::Int(a), Value::Bool(b)) => Ok(Value::Int(a + *b as i64)),
         (Value::Str(a), Value::Str(b)) => Ok(Value::Str(format!("{a}{b}"))),
         (Value::List(a), Value::List(b)) => Ok(Value::List(a.iter().chain(b).cloned().collect())),
-        (a, b) => Err(format!("unsupported operand type(s) for +: '{}' and '{}'", a.type_name(), b.type_name()).into()),
+        (a, b) => Err(format!(
+            "unsupported operand type(s) for +: '{}' and '{}'",
+            a.type_name(),
+            b.type_name()
+        )
+        .into()),
     }
 }
 
@@ -237,12 +272,20 @@ fn from_file(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 
 fn cond_if(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("if", args, 2, 2)?;
-    Ok(if args[0].truthy() { args[1].clone() } else { Value::Map(Map::new()) })
+    Ok(if args[0].truthy() {
+        args[1].clone()
+    } else {
+        Value::Map(Map::new())
+    })
 }
 
 fn cond_ifelse(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("ifelse", args, 3, 3)?;
-    Ok(if args[0].truthy() { args[1].clone() } else { args[2].clone() })
+    Ok(if args[0].truthy() {
+        args[1].clone()
+    } else {
+        args[2].clone()
+    })
 }
 
 fn cond_not(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
@@ -259,5 +302,8 @@ fn cond_or(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 }
 
 fn cond_equal(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
-    Ok(Value::Bool(args.first().is_none_or(|first| args.iter().all(|a| a.py_eq(first)))))
+    Ok(Value::Bool(
+        args.first()
+            .is_none_or(|first| args.iter().all(|a| a.py_eq(first))),
+    ))
 }

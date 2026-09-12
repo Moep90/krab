@@ -84,13 +84,22 @@ mod tests {
     fn dumps_like_python() {
         let v = Value::Map(
             [
-                ("a".to_string(), Node::synthetic(Value::List(vec![Node::synthetic(Value::Int(1)), Node::synthetic(Value::Null)]))),
+                (
+                    "a".to_string(),
+                    Node::synthetic(Value::List(vec![
+                        Node::synthetic(Value::Int(1)),
+                        Node::synthetic(Value::Null),
+                    ])),
+                ),
                 ("b".to_string(), Node::synthetic(Value::Str("é\n".into()))),
                 ("c".to_string(), Node::synthetic(Value::Float(1.0))),
             ]
             .into_iter()
             .collect(),
         );
-        assert_eq!(json_dumps(&v), r#"{"a": [1, null], "b": "\u00e9\n", "c": 1.0}"#);
+        assert_eq!(
+            json_dumps(&v),
+            r#"{"a": [1, null], "b": "\u00e9\n", "c": 1.0}"#
+        );
     }
 }

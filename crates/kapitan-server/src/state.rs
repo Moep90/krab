@@ -36,7 +36,10 @@ pub struct Inner {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl State {
@@ -65,7 +68,12 @@ impl State {
 
     /// Directories outside the inventory that hold real files behind symlinks.
     pub fn alias_dirs(&self) -> BTreeSet<PathBuf> {
-        self.inner.read().aliases.keys().filter_map(|p| p.parent().map(Path::to_path_buf)).collect()
+        self.inner
+            .read()
+            .aliases
+            .keys()
+            .filter_map(|p| p.parent().map(Path::to_path_buf))
+            .collect()
     }
 
     /// Render every target from scratch.
@@ -107,7 +115,12 @@ impl State {
             affected.extend(inner.errors.keys().cloned());
             // New target files.
             let known: BTreeSet<&String> = inner.specs.iter().map(|s| &s.name).collect();
-            affected.extend(specs.iter().filter(|s| !known.contains(&s.name)).map(|s| s.name.clone()));
+            affected.extend(
+                specs
+                    .iter()
+                    .filter(|s| !known.contains(&s.name))
+                    .map(|s| s.name.clone()),
+            );
         }
         self.rerender(changed, specs, affected)
     }
@@ -126,15 +139,29 @@ impl State {
         out
     }
 
-    fn rerender(&self, changed: Vec<PathBuf>, specs: Vec<TargetSpec>, affected: BTreeSet<String>) -> ChangeSummary {
+    fn rerender(
+        &self,
+        changed: Vec<PathBuf>,
+        specs: Vec<TargetSpec>,
+        affected: BTreeSet<String>,
+    ) -> ChangeSummary {
         let start = Instant::now();
-        let to_render: Vec<TargetSpec> = specs.iter().filter(|s| affected.contains(&s.name)).cloned().collect();
+        let to_render: Vec<TargetSpec> = specs
+            .iter()
+            .filter(|s| affected.contains(&s.name))
+            .cloned()
+            .collect();
         let report = self.inv.render_many(&to_render).unwrap_or_default();
         let current: BTreeSet<&String> = specs.iter().map(|s| &s.name).collect();
 
         let mut inner = self.inner.write();
         // Targets that disappeared or are being re-rendered leave the index.
-        let gone: Vec<String> = inner.targets.keys().filter(|n| !current.contains(n) || affected.contains(*n)).cloned().collect();
+        let gone: Vec<String> = inner
+            .targets
+            .keys()
+            .filter(|n| !current.contains(n) || affected.contains(*n))
+            .cloned()
+            .collect();
         for name in gone {
             if let Some(old) = inner.targets.remove(&name) {
                 for f in old.files.iter().chain(old.probes.iter()) {
@@ -144,13 +171,19 @@ impl State {
                 }
             }
         }
-        inner.errors.retain(|n, _| current.contains(n) && !affected.contains(n));
+        inner
+            .errors
+            .retain(|n, _| current.contains(n) && !affected.contains(n));
         inner.specs = specs;
 
         let rerendered: Vec<String> = to_render.iter().map(|s| s.name.clone()).collect();
         for (name, t) in report.targets {
             for f in t.files.iter().chain(t.probes.iter()) {
-                inner.index.entry(f.clone()).or_default().insert(name.clone());
+                inner
+                    .index
+                    .entry(f.clone())
+                    .or_default()
+                    .insert(name.clone());
             }
             for f in &t.files {
                 if let Ok(real) = f.canonicalize()
@@ -161,7 +194,11 @@ impl State {
             }
             inner.targets.insert(name, Arc::new(t));
         }
-        let errors: Vec<Diagnostic> = report.errors.into_iter().map(|e| e.into_diagnostic()).collect();
+        let errors: Vec<Diagnostic> = report
+            .errors
+            .into_iter()
+            .map(|e| e.into_diagnostic())
+            .collect();
         for e in &errors {
             if let Some(t) = &e.target {
                 inner.errors.insert(t.clone(), e.clone());
@@ -195,7 +232,12 @@ impl State {
             {
                 let inner = self.inner.read();
                 if inner.generation > since {
-                    let changes = inner.history.iter().filter(|c| c.generation > since).cloned().collect();
+                    let changes = inner
+                        .history
+                        .iter()
+                        .filter(|c| c.generation > since)
+                        .cloned()
+                        .collect();
                     return (inner.generation, false, changes);
                 }
             }
@@ -209,6 +251,9 @@ impl State {
     }
 
     pub fn is_inventory_file(path: &Path) -> bool {
-        matches!(path.extension().and_then(|e| e.to_str()), Some("yml" | "yaml"))
+        matches!(
+            path.extension().and_then(|e| e.to_str()),
+            Some("yml" | "yaml")
+        )
     }
 }

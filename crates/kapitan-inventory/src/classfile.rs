@@ -32,7 +32,10 @@ impl ClassDoc {
             other => {
                 return Err(Error::new(
                     "inventory::bad_document",
-                    format!("expected a mapping at the top of the file, found {}", other.type_name()),
+                    format!(
+                        "expected a mapping at the top of the file, found {}",
+                        other.type_name()
+                    ),
                 )
                 .with_label(origin, "not a mapping"));
             }
@@ -48,11 +51,17 @@ impl ClassDoc {
                     Value::List(items) => {
                         for item in items {
                             match item.value {
-                                Value::Str(name) => classes.push(ClassRef { name, origin: item.origin }),
+                                Value::Str(name) => classes.push(ClassRef {
+                                    name,
+                                    origin: item.origin,
+                                }),
                                 other => {
                                     return Err(Error::new(
                                         "inventory::bad_class_ref",
-                                        format!("class names must be strings, found {}", other.type_name()),
+                                        format!(
+                                            "class names must be strings, found {}",
+                                            other.type_name()
+                                        ),
                                     )
                                     .with_label(item.origin, "not a string"));
                                 }
@@ -73,7 +82,10 @@ impl ClassDoc {
                     other => {
                         return Err(Error::new(
                             "inventory::bad_parameters",
-                            format!("`parameters` must be a mapping, found {}", other.type_name()),
+                            format!(
+                                "`parameters` must be a mapping, found {}",
+                                other.type_name()
+                            ),
                         )
                         .with_label(node.origin, "not a mapping"));
                     }
@@ -103,6 +115,11 @@ impl ClassDoc {
                 _ => {}
             }
         }
-        Ok(ClassDoc { classes, parameters, applications, exports })
+        Ok(ClassDoc {
+            classes,
+            parameters,
+            applications,
+            exports,
+        })
     }
 }

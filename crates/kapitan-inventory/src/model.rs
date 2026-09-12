@@ -15,7 +15,13 @@ pub fn initial_parameters(name: &str, path_without_ext: &str) -> Node {
     let s = |v: &str| n(Value::Str(v.to_string()));
     let kapitan = Map::from_iter([
         ("compile".into(), n(Value::List(vec![]))),
-        ("vars".into(), n(Value::Map(Map::from_iter([("target".into(), n(Value::Null))])))),
+        (
+            "vars".into(),
+            n(Value::Map(Map::from_iter([(
+                "target".into(),
+                n(Value::Null),
+            )]))),
+        ),
         ("labels".into(), n(Value::Map(Map::new()))),
         ("dependencies".into(), n(Value::List(vec![]))),
         ("target_full_path".into(), s("")),
@@ -29,7 +35,10 @@ pub fn initial_parameters(name: &str, path_without_ext: &str) -> Node {
                 ("short".into(), s(name.rsplit('.').next().unwrap_or(name))),
                 ("full".into(), s(name)),
                 ("path".into(), s(path_without_ext)),
-                ("parts".into(), n(Value::List(name.split('.').map(s).collect()))),
+                (
+                    "parts".into(),
+                    n(Value::List(name.split('.').map(s).collect())),
+                ),
             ]))),
         )])))
     };
@@ -47,11 +56,17 @@ struct Field {
 }
 
 const fn req(name: &'static str) -> Field {
-    Field { name, default: None }
+    Field {
+        name,
+        default: None,
+    }
 }
 
 const fn opt(name: &'static str, default: fn() -> Value) -> Field {
-    Field { name, default: Some(default) }
+    Field {
+        name,
+        default: Some(default),
+    }
 }
 
 fn null() -> Value {
@@ -86,7 +101,13 @@ const COMPILE_BASE: &[Field] = &[
 ];
 
 fn compile_fields(input_type: &str) -> Option<Vec<Field>> {
-    let mut fields: Vec<Field> = COMPILE_BASE.iter().map(|x| Field { name: x.name, default: x.default }).collect();
+    let mut fields: Vec<Field> = COMPILE_BASE
+        .iter()
+        .map(|x| Field {
+            name: x.name,
+            default: x.default,
+        })
+        .collect();
     let mut set = |name: &'static str, default: fn() -> Value| {
         if let Some(existing) = fields.iter_mut().find(|x| x.name == name) {
             existing.default = Some(default);
@@ -144,12 +165,26 @@ fn compile_fields(input_type: &str) -> Option<Vec<Field>> {
 }
 
 fn dependency_fields(dep_type: &str) -> Option<Vec<Field>> {
-    let mut fields = vec![req("type"), req("source"), req("output_path"), opt("force_fetch", f)];
+    let mut fields = vec![
+        req("type"),
+        req("source"),
+        req("output_path"),
+        opt("force_fetch", f),
+    ];
     match dep_type {
-        "helm" => fields.extend([req("chart_name"), opt("version", null), opt("helm_path", null)]),
+        "helm" => fields.extend([
+            req("chart_name"),
+            opt("version", null),
+            opt("helm_path", null),
+        ]),
         "git" => fields.extend([opt("ref", null), opt("subdir", null), opt("submodules", f)]),
         "http" | "https" => fields.push(opt("unpack", f)),
-        "oci" => fields.extend([opt("subpath", null), opt("media_type", null), opt("insecure", f), opt("tls_verify", t)]),
+        "oci" => fields.extend([
+            opt("subpath", null),
+            opt("media_type", null),
+            opt("insecure", f),
+            opt("tls_verify", t),
+        ]),
         _ => return None,
     }
     Some(fields)
@@ -178,9 +213,19 @@ impl Ctx<'_> {
     }
 
     /// Reorder `node` into pydantic field order, fill defaults, reject unknown keys.
-    fn model(&self, node: &mut Node, fields: &[Field], path: &str, allow_extra: bool) -> Result<()> {
+    fn model(
+        &self,
+        node: &mut Node,
+        fields: &[Field],
+        path: &str,
+        allow_extra: bool,
+    ) -> Result<()> {
         let Value::Map(map) = &mut node.value else {
-            return Err(self.err(node, path, format!("expected a mapping, found {}", node.value.type_name())));
+            return Err(self.err(
+                node,
+                path,
+                format!("expected a mapping, found {}", node.value.type_name()),
+            ));
         };
         let old = std::mem::take(map);
         let mut new = Map::with_capacity(old.len());
@@ -192,9 +237,18 @@ impl Ctx<'_> {
                 }
                 None => match field.default {
                     Some(default) => {
-                        new.insert(field.name.to_string(), Node::new(default(), Origin::SYNTHETIC));
+                        new.insert(
+                            field.name.to_string(),
+                            Node::new(default(), Origin::SYNTHETIC),
+                        );
                     }
-                    None => return Err(self.err(node, path, format!("missing required field `{}`", field.name))),
+                    None => {
+                        return Err(self.err(
+                            node,
+                            path,
+                            format!("missing required field `{}`", field.name),
+                        ));
+                    }
                 },
             }
         }
@@ -203,7 +257,13 @@ impl Ctx<'_> {
             let first = rest.values().next().unwrap().origin;
             return Err(Error::new(
                 "inventory::invalid_kapitan_config",
-                format!("unknown field(s) {} in {path}", keys.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ")),
+                format!(
+                    "unknown field(s) {} in {path}",
+                    keys.iter()
+                        .map(|k| format!("`{k}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
             )
             .with_target(self.target)
             .with_path(path)
@@ -218,8 +278,12 @@ impl Ctx<'_> {
 /// Apply the pydantic normalisation to a fully resolved parameters tree.
 pub fn normalize(params: &mut Node, target: &str) -> Result<()> {
     let ctx = Ctx { target };
-    let Value::Map(top) = &mut params.value else { return Ok(()) };
-    let Some(kapitan) = top.get_mut("kapitan") else { return Ok(()) };
+    let Value::Map(top) = &mut params.value else {
+        return Ok(());
+    };
+    let Some(kapitan) = top.get_mut("kapitan") else {
+        return Ok(());
+    };
     if kapitan.value.is_null() {
         return Ok(());
     }
@@ -242,7 +306,13 @@ pub fn normalize(params: &mut Node, target: &str) -> Result<()> {
                 let path = format!("kapitan.compile[{i}]");
                 let input_type = match item.get("input_type").map(|n| &n.value) {
                     Some(Value::Str(s)) => s.clone(),
-                    _ => return Err(ctx.err(item, &path, "compile entry is missing a valid `input_type`".into())),
+                    _ => {
+                        return Err(ctx.err(
+                            item,
+                            &path,
+                            "compile entry is missing a valid `input_type`".into(),
+                        ));
+                    }
                 };
                 let Some(fields) = compile_fields(&input_type) else {
                     return Err(ctx.err(
@@ -254,11 +324,18 @@ pub fn normalize(params: &mut Node, target: &str) -> Result<()> {
                 ctx.model(item, &fields, &path, false)?;
                 if input_type == "helm" {
                     let m = item.as_map_mut().unwrap();
-                    m.insert("output_type".into(), Node::new(Value::Str("auto".into()), Origin::SYNTHETIC));
+                    m.insert(
+                        "output_type".into(),
+                        Node::new(Value::Str("auto".into()), Origin::SYNTHETIC),
+                    );
                 }
             }
         } else if !compile.value.is_null() {
-            return Err(ctx.err(compile, "kapitan.compile", "`compile` must be a list".into()));
+            return Err(ctx.err(
+                compile,
+                "kapitan.compile",
+                "`compile` must be a list".into(),
+            ));
         }
     }
     // vars: KapitanEssentialVars (extra allowed, target first)
@@ -281,7 +358,9 @@ pub fn normalize(params: &mut Node, target: &str) -> Result<()> {
             let path = format!("kapitan.dependencies[{i}]");
             let dep_type = match item.get("type").map(|n| &n.value) {
                 Some(Value::Str(s)) => s.clone(),
-                _ => return Err(ctx.err(item, &path, "dependency is missing a valid `type`".into())),
+                _ => {
+                    return Err(ctx.err(item, &path, "dependency is missing a valid `type`".into()));
+                }
             };
             let Some(fields) = dependency_fields(&dep_type) else {
                 return Err(ctx.err(item, &path, format!("unknown dependency type `{dep_type}`")));
@@ -315,7 +394,13 @@ pub fn normalize(params: &mut Node, target: &str) -> Result<()> {
         for k in ["awskms", "gkms", "azkms"] {
             sub(m, k, &[req("key")])?;
         }
-        let mut vaultkv: Vec<Field> = VAULT_ENV.iter().map(|x| Field { name: x.name, default: x.default }).collect();
+        let mut vaultkv: Vec<Field> = VAULT_ENV
+            .iter()
+            .map(|x| Field {
+                name: x.name,
+                default: x.default,
+            })
+            .collect();
         vaultkv.extend([
             opt("engine", || Value::Str("kv-v2".into())),
             opt("auth", null),
@@ -325,7 +410,13 @@ pub fn normalize(params: &mut Node, target: &str) -> Result<()> {
             opt("key", null),
         ]);
         sub(m, "vaultkv", &vaultkv)?;
-        let mut transit: Vec<Field> = VAULT_ENV.iter().map(|x| Field { name: x.name, default: x.default }).collect();
+        let mut transit: Vec<Field> = VAULT_ENV
+            .iter()
+            .map(|x| Field {
+                name: x.name,
+                default: x.default,
+            })
+            .collect();
         transit.extend([
             opt("engine", || Value::Str("transit".into())),
             opt("auth", null),

@@ -22,7 +22,10 @@ pub type PResult<T> = Result<T, ParseError>;
 
 /// Parse a complete string value (grammar rule `configValue`).
 pub fn parse_text(input: &str) -> PResult<Text> {
-    let mut p = Parser { chars: input.chars().collect(), pos: 0 };
+    let mut p = Parser {
+        chars: input.chars().collect(),
+        pos: 0,
+    };
     let text = p.text(None)?;
     if p.pos != p.chars.len() {
         return Err(p.err("unexpected trailing input"));
@@ -32,7 +35,10 @@ pub fn parse_text(input: &str) -> PResult<Text> {
 
 /// Parse a single element (grammar rule `singleElement`), used by `oc.decode`.
 pub fn parse_element(input: &str) -> PResult<Element> {
-    let mut p = Parser { chars: input.chars().collect(), pos: 0 };
+    let mut p = Parser {
+        chars: input.chars().collect(),
+        pos: 0,
+    };
     p.skip_ws();
     let e = p.element()?;
     p.skip_ws();
@@ -51,7 +57,10 @@ const ESCAPABLE: &str = "\\()[]{}:=, \t";
 
 impl Parser {
     fn err(&self, msg: &str) -> ParseError {
-        ParseError { message: msg.to_string(), offset: self.pos }
+        ParseError {
+            message: msg.to_string(),
+            offset: self.pos,
+        }
     }
 
     fn peek(&self) -> Option<char> {
@@ -63,7 +72,9 @@ impl Parser {
     }
 
     fn at(&self, s: &str) -> bool {
-        s.chars().enumerate().all(|(i, c)| self.peek_at(i) == Some(c))
+        s.chars()
+            .enumerate()
+            .all(|(i, c)| self.peek_at(i) == Some(c))
     }
 
     fn bump(&mut self) -> Option<char> {
@@ -265,7 +276,10 @@ impl Parser {
                     (Tok::Dot, false) => expect = true,
                     (Tok::Key(KeySeg::Lit(s)), true) => {
                         if !is_id(&s) {
-                            return Err(ParseError { message: format!("invalid resolver name `{s}`"), offset: at });
+                            return Err(ParseError {
+                                message: format!("invalid resolver name `{s}`"),
+                                offset: at,
+                            });
                         }
                         name.push(NamePart::Lit(s));
                         expect = false;
@@ -274,11 +288,19 @@ impl Parser {
                         name.push(NamePart::Interp(i));
                         expect = false;
                     }
-                    _ => return Err(ParseError { message: "invalid resolver name".into(), offset: at }),
+                    _ => {
+                        return Err(ParseError {
+                            message: "invalid resolver name".into(),
+                            offset: at,
+                        });
+                    }
                 }
             }
             if name.is_empty() || expect {
-                return Err(ParseError { message: "empty resolver name".into(), offset: at });
+                return Err(ParseError {
+                    message: "empty resolver name".into(),
+                    offset: at,
+                });
             }
             Ok(name)
         }
@@ -293,7 +315,11 @@ impl Parser {
             return Err(self.err("resolver names cannot start with `.`"));
         }
         // VALUE_MODE: `sequence? BRACE_CLOSE`
-        let args = if self.peek() == Some('}') { Vec::new() } else { self.sequence('}')? };
+        let args = if self.peek() == Some('}') {
+            Vec::new()
+        } else {
+            self.sequence('}')?
+        };
         if self.bump() != Some('}') {
             return Err(self.err("expected `}` to close resolver interpolation"));
         }
@@ -367,7 +393,11 @@ impl Parser {
             Some('[') => {
                 self.pos += 1;
                 self.skip_ws();
-                let items = if self.peek() == Some(']') { Vec::new() } else { self.sequence(']')? };
+                let items = if self.peek() == Some(']') {
+                    Vec::new()
+                } else {
+                    self.sequence(']')?
+                };
                 self.skip_ws();
                 if self.bump() != Some(']') {
                     return Err(self.err("expected `]`"));
@@ -538,7 +568,13 @@ impl Parser {
         }
         flush(&mut parts, &mut lit);
         if parts.iter().all(|p| matches!(p, TextPart::Lit(_))) {
-            let s = parts.into_iter().map(|p| match p { TextPart::Lit(s) => s, _ => unreachable!() }).collect();
+            let s = parts
+                .into_iter()
+                .map(|p| match p {
+                    TextPart::Lit(s) => s,
+                    _ => unreachable!(),
+                })
+                .collect();
             return Ok(Prim::Str(s));
         }
         Ok(Prim::Concat(parts))
@@ -669,24 +705,44 @@ mod tests {
     }
 
     fn node(keys: &[&str]) -> Interp {
-        Interp::Node { dots: 0, keys: keys.iter().map(|k| KeySeg::Lit(k.to_string())).collect() }
+        Interp::Node {
+            dots: 0,
+            keys: keys.iter().map(|k| KeySeg::Lit(k.to_string())).collect(),
+        }
     }
 
     #[test]
     fn plain_and_node() {
         assert_eq!(parse_text("hello").unwrap(), Text(vec![lit("hello")]));
-        assert_eq!(parse_text("${a.b}").unwrap(), Text(vec![TextPart::Interp(node(&["a", "b"]))]));
+        assert_eq!(
+            parse_text("${a.b}").unwrap(),
+            Text(vec![TextPart::Interp(node(&["a", "b"]))])
+        );
         assert_eq!(
             parse_text("x-${a}-y").unwrap(),
             Text(vec![lit("x-"), TextPart::Interp(node(&["a"])), lit("-y")])
         );
         assert_eq!(
-            parse_text("${_kapitan_.name.parts[1]}").unwrap().single_interp(),
+            parse_text("${_kapitan_.name.parts[1]}")
+                .unwrap()
+                .single_interp(),
             Some(&node(&["_kapitan_", "name", "parts", "1"]))
         );
-        assert_eq!(parse_text("${.x}").unwrap().single_interp(), Some(&Interp::Node { dots: 1, keys: vec![KeySeg::Lit("x".into())] }));
-        assert_eq!(parse_text("${ a }").unwrap().single_interp(), Some(&node(&["a"])));
-        assert_eq!(parse_text("${foo-bar.baz}").unwrap().single_interp(), Some(&node(&["foo-bar", "baz"])));
+        assert_eq!(
+            parse_text("${.x}").unwrap().single_interp(),
+            Some(&Interp::Node {
+                dots: 1,
+                keys: vec![KeySeg::Lit("x".into())]
+            })
+        );
+        assert_eq!(
+            parse_text("${ a }").unwrap().single_interp(),
+            Some(&node(&["a"]))
+        );
+        assert_eq!(
+            parse_text("${foo-bar.baz}").unwrap().single_interp(),
+            Some(&node(&["foo-bar", "baz"]))
+        );
     }
 
     #[test]
@@ -704,7 +760,14 @@ mod tests {
     fn resolver(input: &str) -> (String, Vec<Element>) {
         match parse_text(input).unwrap().single_interp().unwrap() {
             Interp::Resolver { name, args } => {
-                let n = name.iter().map(|p| match p { NamePart::Lit(s) => s.clone(), _ => "?".into() }).collect::<Vec<_>>().join(".");
+                let n = name
+                    .iter()
+                    .map(|p| match p {
+                        NamePart::Lit(s) => s.clone(),
+                        _ => "?".into(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(".");
                 (n, args.clone())
             }
             other => panic!("not a resolver: {other:?}"),
@@ -715,7 +778,13 @@ mod tests {
     fn resolver_args() {
         let (n, a) = resolver("${oc.select:a.b, 3}");
         assert_eq!(n, "oc.select");
-        assert_eq!(a, vec![Element::Prim(Prim::Str("a.b".into())), Element::Prim(Prim::Int(3))]);
+        assert_eq!(
+            a,
+            vec![
+                Element::Prim(Prim::Str("a.b".into())),
+                Element::Prim(Prim::Int(3))
+            ]
+        );
 
         let (n, a) = resolver("${parentkey:}");
         assert_eq!(n, "parentkey");
@@ -737,11 +806,14 @@ mod tests {
         assert_eq!(a[1], Element::Prim(Prim::Null));
 
         let (_, a) = resolver("${f:[1, 2.5, true, x], {k: v, q: ${z}}, a b}");
-        assert!(matches!(&a[0], Element::List(l) if l.len() == 4 && l[1] == Element::Prim(Prim::Float(2.5))));
+        assert!(
+            matches!(&a[0], Element::List(l) if l.len() == 4 && l[1] == Element::Prim(Prim::Float(2.5)))
+        );
         assert!(matches!(&a[1], Element::Dict(d) if d.len() == 2));
         assert_eq!(a[2], Element::Prim(Prim::Str("a b".into())));
 
-        let (_, a) = resolver("${escape:'cidrsubnet(\"172.16.0.0/22\", 6, ${cluster.params.num_id})'}");
+        let (_, a) =
+            resolver("${escape:'cidrsubnet(\"172.16.0.0/22\", 6, ${cluster.params.num_id})'}");
         assert!(matches!(&a[0], Element::Quoted(Text(parts)) if parts.len() == 3));
 
         let (_, a) = resolver("${f:a\\,b, 1-2, 01, 1_000, -1, inf, info, .5, 1.}");
@@ -762,9 +834,15 @@ mod tests {
     #[test]
     fn escapes() {
         assert_eq!(parse_text(r"\${a}").unwrap(), Text(vec![lit("${a}")]));
-        assert_eq!(parse_text(r"\\${a}").unwrap(), Text(vec![lit("\\"), TextPart::Interp(node(&["a"]))]));
+        assert_eq!(
+            parse_text(r"\\${a}").unwrap(),
+            Text(vec![lit("\\"), TextPart::Interp(node(&["a"]))])
+        );
         assert_eq!(parse_text(r"a\\b").unwrap(), Text(vec![lit("a\\\\b")]));
-        assert_eq!(parse_text("$5 and $ {x}").unwrap(), Text(vec![lit("$5 and $ {x}")]));
+        assert_eq!(
+            parse_text("$5 and $ {x}").unwrap(),
+            Text(vec![lit("$5 and $ {x}")])
+        );
         let (_, a) = resolver(r"${f:'it\'s'}");
         assert_eq!(a[0], Element::Quoted(Text(vec![lit("it's")])));
     }

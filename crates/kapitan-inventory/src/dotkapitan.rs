@@ -25,10 +25,15 @@ impl DotKapitan {
         }
         let text = std::fs::read_to_string(&file)?;
         let node = parse_document(&text, SourceId::SYNTHETIC)?;
-        let mut cfg = DotKapitan { file: Some(file), ..Default::default() };
+        let mut cfg = DotKapitan {
+            file: Some(file),
+            ..Default::default()
+        };
         let section = |name: &str| node.get(name).and_then(Node::as_map);
         let get = |sections: &[&str], key: &str| -> Option<Value> {
-            sections.iter().find_map(|s| section(s).and_then(|m| m.get(key)).map(|n| n.value.clone()))
+            sections
+                .iter()
+                .find_map(|s| section(s).and_then(|m| m.get(key)).map(|n| n.value.clone()))
         };
         if let Some(Value::Str(s)) = get(&["compile", "inventory", "global"], "inventory-path") {
             cfg.inventory_path = Some(PathBuf::from(s));

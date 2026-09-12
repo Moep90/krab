@@ -24,16 +24,27 @@ pub fn register(r: &mut Registry) {
     r.register("join", join);
     r.register("join_quoted", join_quoted);
     // Cloud specific helpers.
-    r.register("gcp_artifact_registry_multi_region_location", gcp_artifact_registry_multi_region_location);
-    r.register("gcp_cloud_storage_multi_region_location", gcp_cloud_storage_multi_region_location);
+    r.register(
+        "gcp_artifact_registry_multi_region_location",
+        gcp_artifact_registry_multi_region_location,
+    );
+    r.register(
+        "gcp_cloud_storage_multi_region_location",
+        gcp_cloud_storage_multi_region_location,
+    );
     r.register("worker_cluster_gpu_configs", worker_cluster_gpu_configs);
-    r.register("filter_tenants_by_execution_location", filter_tenants_by_execution_location);
+    r.register(
+        "filter_tenants_by_execution_location",
+        filter_tenants_by_execution_location,
+    );
 }
 
 fn replace(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("replace", args, 3, 3)?;
     let value = as_str("replace", args, 0)?;
-    Ok(Value::Str(value.replace(&as_py_str(args, 1), &as_py_str(args, 2))))
+    Ok(Value::Str(
+        value.replace(&as_py_str(args, 1), &as_py_str(args, 2)),
+    ))
 }
 
 fn to_json(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
@@ -48,15 +59,26 @@ fn to_yaml(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("to_yaml", args, 1, 1)?;
     let key = as_str("to_yaml", args, 0)?.to_string();
     let v = ctx.select(&key)?.unwrap_or(Value::Null);
-    let opts = DumpOptions { sort_keys: false, ..DumpOptions::pyyaml_default() };
-    Ok(Value::Str(dump_yaml(&Node::new(v, ctx.origin), &opts).trim_end().to_string()))
+    let opts = DumpOptions {
+        sort_keys: false,
+        ..DumpOptions::pyyaml_default()
+    };
+    Ok(Value::Str(
+        dump_yaml(&Node::new(v, ctx.origin), &opts)
+            .trim_end()
+            .to_string(),
+    ))
 }
 
 /// `${sha256:value[,length=16]}`: hex digest truncated to `length`.
 fn sha256(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("sha256", args, 1, 2)?;
     let value = as_str("sha256", args, 0)?;
-    let length = if args.len() > 1 { as_int("sha256", args, 1)? } else { 16 };
+    let length = if args.len() > 1 {
+        as_int("sha256", args, 1)?
+    } else {
+        16
+    };
     let digest = format!("{:x}", Sha256::digest(value.as_bytes()));
     if length <= 0 || length as usize > digest.len() {
         return Ok(Value::Str(digest));
@@ -75,21 +97,29 @@ fn truncate(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     }
     let hash = format!("{:x}", Md5::digest(value.as_bytes()));
     let keep = (length - 5).max(0) as usize;
-    Ok(Value::Str(format!("{}-{}", chars[..keep.min(chars.len())].iter().collect::<String>(), &hash[..4])))
+    Ok(Value::Str(format!(
+        "{}-{}",
+        chars[..keep.min(chars.len())].iter().collect::<String>(),
+        &hash[..4]
+    )))
 }
 
 fn select_list(ctx: &mut Ctx, name: &str, key: &str) -> Result<Vec<Node>, ResolverError> {
     match ctx.select(key)? {
         None | Some(Value::Null) => Ok(Vec::new()),
         Some(Value::List(l)) => Ok(l),
-        Some(other) => Err(format!("{name} resolver expects a list, got {}", other.type_name()).into()),
+        Some(other) => {
+            Err(format!("{name} resolver expects a list, got {}", other.type_name()).into())
+        }
     }
 }
 
 fn select_dict(ctx: &mut Ctx, name: &str, key: &str) -> Result<Map, ResolverError> {
     match ctx.select(key)? {
         Some(Value::Map(m)) => Ok(m),
-        Some(other) => Err(format!("{name} resolver expects a dict, got {}", other.type_name()).into()),
+        Some(other) => {
+            Err(format!("{name} resolver expects a dict, got {}", other.type_name()).into())
+        }
         None => Err(format!("{name} resolver expects a dict, got NoneType").into()),
     }
 }
@@ -102,21 +132,43 @@ fn to_csv(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
         return Ok(Value::Str(String::new()));
     }
     let Value::Map(first) = &items[0].value else {
-        return Err(format!("to_csv resolver expects list of dicts, got list of {}", items[0].value.type_name()).into());
+        return Err(format!(
+            "to_csv resolver expects list of dicts, got list of {}",
+            items[0].value.type_name()
+        )
+        .into());
     };
     let mut headers: Vec<&String> = first.keys().collect();
     headers.sort();
-    let mut lines = vec![headers.iter().map(|h| h.as_str()).collect::<Vec<_>>().join(",")];
+    let mut lines = vec![
+        headers
+            .iter()
+            .map(|h| h.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    ];
     for (idx, item) in items.iter().enumerate() {
         let Value::Map(m) = &item.value else {
-            return Err(format!("to_csv resolver: item at index {idx} is {}, expected dict", item.value.type_name()).into());
+            return Err(format!(
+                "to_csv resolver: item at index {idx} is {}, expected dict",
+                item.value.type_name()
+            )
+            .into());
         };
         let mut keys: Vec<&String> = m.keys().collect();
         keys.sort();
         if keys != headers {
-            return Err(format!("to_csv resolver: item at index {idx} has inconsistent keys").into());
+            return Err(
+                format!("to_csv resolver: item at index {idx} has inconsistent keys").into(),
+            );
         }
-        lines.push(headers.iter().map(|h| m[h.as_str()].value.py_str()).collect::<Vec<_>>().join(","));
+        lines.push(
+            headers
+                .iter()
+                .map(|h| m[h.as_str()].value.py_str())
+                .collect::<Vec<_>>()
+                .join(","),
+        );
     }
     Ok(Value::Str(lines.join("\n")))
 }
@@ -129,11 +181,20 @@ fn pluck(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     let mut out = Vec::with_capacity(items.len());
     for (idx, item) in items.into_iter().enumerate() {
         let Value::Map(mut m) = item.value else {
-            return Err(format!("pluck resolver: item at index {idx} is {}, expected dict", item.value.type_name()).into());
+            return Err(format!(
+                "pluck resolver: item at index {idx} is {}, expected dict",
+                item.value.type_name()
+            )
+            .into());
         };
         match m.shift_remove(&field) {
             Some(v) => out.push(v),
-            None => return Err(format!("pluck resolver: item at index {idx} does not have field '{field}'").into()),
+            None => {
+                return Err(format!(
+                    "pluck resolver: item at index {idx} does not have field '{field}'"
+                )
+                .into());
+            }
         }
     }
     Ok(Value::List(out))
@@ -154,13 +215,22 @@ fn select_fields(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     let mut out = Vec::with_capacity(items.len());
     for (idx, item) in items.into_iter().enumerate() {
         let Value::Map(m) = &item.value else {
-            return Err(format!("select_fields resolver: item at index {idx} is {}, expected dict", item.value.type_name()).into());
+            return Err(format!(
+                "select_fields resolver: item at index {idx} is {}, expected dict",
+                item.value.type_name()
+            )
+            .into());
         };
         let mut picked = Map::new();
         for f in &fields {
             match m.get(f) {
                 Some(v) => picked.insert(f.clone(), v.clone()),
-                None => return Err(format!("select_fields resolver: item at index {idx} does not have field '{f}'").into()),
+                None => {
+                    return Err(format!(
+                        "select_fields resolver: item at index {idx} does not have field '{f}'"
+                    )
+                    .into());
+                }
             };
         }
         out.push(Node::new(Value::Map(picked), item.origin));
@@ -187,12 +257,20 @@ fn join_with(ctx: &mut Ctx, name: &str, args: &[Value], quote: bool) -> Resolver
     let key = as_str(name, args, 0)?.to_string();
     let items = match ctx.select(&key)? {
         Some(Value::List(l)) => l,
-        Some(other) => return Err(format!("{name} resolver expects a list, got {}", other.type_name()).into()),
+        Some(other) => {
+            return Err(format!("{name} resolver expects a list, got {}", other.type_name()).into());
+        }
         None => return Err(format!("{name} resolver expects a list, got NoneType").into()),
     };
     let parts: Vec<String> = items
         .iter()
-        .map(|n| if quote { format!("'{}'", n.value.py_str()) } else { n.value.py_str() })
+        .map(|n| {
+            if quote {
+                format!("'{}'", n.value.py_str())
+            } else {
+                n.value.py_str()
+            }
+        })
         .collect();
     Ok(Value::Str(parts.join(", ")))
 }
@@ -230,7 +308,9 @@ fn gcp_cloud_storage_multi_region_location(_ctx: &mut Ctx, args: &[Value]) -> Re
     } else if region.starts_with("asia-") {
         "ASIA"
     } else {
-        return Err(format!("cannot derive GCS multi-region location from region: {region}").into());
+        return Err(
+            format!("cannot derive GCS multi-region location from region: {region}").into(),
+        );
     };
     Ok(Value::Str(loc.into()))
 }
@@ -252,20 +332,31 @@ fn worker_cluster_gpu_configs(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     let clusters = select_dict(ctx, "worker_cluster_gpu_configs", &key)?;
     let mut out = Vec::new();
     for cluster in clusters.values() {
-        let Value::Map(c) = &cluster.value else { continue };
+        let Value::Map(c) = &cluster.value else {
+            continue;
+        };
         let gpu_types: Vec<Node> = c
             .get("resource_limits")
             .and_then(|l| l.as_list())
             .unwrap_or(&[])
             .iter()
             .filter_map(|entry| entry.get("resource_type"))
-            .filter(|rt| rt.as_str().is_some_and(|s| GCP_GPU_RESOURCE_TYPES.contains(&s)))
+            .filter(|rt| {
+                rt.as_str()
+                    .is_some_and(|s| GCP_GPU_RESOURCE_TYPES.contains(&s))
+            })
             .cloned()
             .collect();
-        let name = c.get("name").cloned().ok_or_else(|| ResolverError::Message("worker cluster without `name`".into()))?;
+        let name = c
+            .get("name")
+            .cloned()
+            .ok_or_else(|| ResolverError::Message("worker cluster without `name`".into()))?;
         let mut m = Map::new();
         m.insert("name".into(), name);
-        m.insert("gpu_types".into(), Node::new(Value::List(gpu_types), cluster.origin));
+        m.insert(
+            "gpu_types".into(),
+            Node::new(Value::List(gpu_types), cluster.origin),
+        );
         out.push(Node::new(Value::Map(m), cluster.origin));
     }
     Ok(Value::List(out))
@@ -278,8 +369,11 @@ fn filter_tenants_by_execution_location(ctx: &mut Ctx, args: &[Value]) -> Resolv
     let location = as_py_str(args, 2);
     let tenants = select_dict(ctx, "filter_tenants_by_execution_location", &key)?;
     let matches = |loc: &Node| {
-        loc.get("provider").is_some_and(|p| p.value.py_eq(&Value::Str(provider.clone())))
-            && loc.get("location").is_some_and(|l| l.value.py_eq(&Value::Str(location.clone())))
+        loc.get("provider")
+            .is_some_and(|p| p.value.py_eq(&Value::Str(provider.clone())))
+            && loc
+                .get("location")
+                .is_some_and(|l| l.value.py_eq(&Value::Str(location.clone())))
     };
     Ok(Value::List(
         tenants
