@@ -448,7 +448,7 @@ impl DocSource for AppDocs<'_> {
     }
 
     fn all_docs(&self) -> Result<BTreeMap<String, Value>, String> {
-        let docs = self.app.all_documents().map_err(|e| match e {
+        let docs = self.app.all_documents(&[]).map_err(|e| match e {
             Failure::Message(m) => m,
             Failure::Diagnostics(ds, _) => ds
                 .iter()

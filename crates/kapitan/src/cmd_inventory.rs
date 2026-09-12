@@ -32,6 +32,10 @@ pub struct ShowArgs {
     #[arg(short = 'p', long)]
     pattern: Option<String>,
 
+    /// Only targets whose kapitan.labels match, e.g. -l type=kubernetes (repeatable)
+    #[arg(short = 'l', long = "labels", num_args = 1.., conflicts_with = "target")]
+    labels: Vec<String>,
+
     /// Flatten nested keys into dotted keys
     #[arg(short = 'F', long)]
     flat: bool,
@@ -52,6 +56,9 @@ pub enum InventoryCommand {
         /// Print one name per line only
         #[arg(short, long)]
         quiet: bool,
+        /// Only targets whose kapitan.labels match, e.g. -l type=kubernetes (repeatable)
+        #[arg(short = 'l', long = "labels", num_args = 1..)]
+        labels: Vec<String>,
     },
     /// List the classes of a target, or how many targets include each class file
     Classes {
@@ -87,7 +94,9 @@ pub enum InventoryCommand {
 pub fn run(app: &App, args: InventoryArgs) -> Result<(), Failure> {
     match args.command {
         None => show(app, args.show),
-        Some(InventoryCommand::Targets { quiet }) => targets(app, quiet),
+        Some(InventoryCommand::Targets { quiet, labels }) => {
+            targets(app, quiet, &parse_labels(&labels)?)
+        }
         Some(InventoryCommand::Classes {
             target: Some(target),
             ..
@@ -181,7 +190,19 @@ pub fn run(app: &App, args: InventoryArgs) -> Result<(), Failure> {
     }
 }
 
+/// `key=value` pairs.
+pub fn parse_labels(raw: &[String]) -> Result<Vec<(String, String)>, Failure> {
+    raw.iter()
+        .map(|l| {
+            l.split_once('=')
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .ok_or_else(|| Failure::Message(format!("label `{l}` must be key=value")))
+        })
+        .collect()
+}
+
 fn show(app: &App, args: ShowArgs) -> Result<(), Failure> {
+    let labels = parse_labels(&args.labels)?;
     let doc = match &args.target {
         Some(name) => match app.client() {
             Some(mut c) => {
@@ -205,11 +226,30 @@ fn show(app: &App, args: ShowArgs) -> Result<(), Failure> {
                 select_pattern(app, t.to_document(), args.pattern.as_deref())?
             }
         },
-        None => select_pattern(
-            app,
-            Node::synthetic(Value::Map(app.all_documents()?)),
-            args.pattern.as_deref(),
-        )?,
+        None => {
+            // Several targets: the pattern applies inside each target's document.
+            let docs = app.all_documents(&labels)?;
+            match args.pattern.as_deref() {
+                None => Node::synthetic(Value::Map(docs)),
+                Some(pattern) => {
+                    let path = KeyPath::parse(pattern);
+                    let mut out = kapitan_inventory::Map::new();
+                    for (name, doc) in &docs {
+                        if let Some(n) = get(doc, &path) {
+                            out.insert(name.clone(), n.clone());
+                        }
+                    }
+                    if out.is_empty() {
+                        return Err(Failure::Diagnostics(
+                            vec![Diagnostic::error("inventory::pattern_not_found", format!("nothing at `{pattern}` in any of the {} selected targets", docs.len()))
+                                .with_help("paths are relative to the target document, e.g. parameters.kapitan.compile")],
+                            app.json,
+                        ));
+                    }
+                    Node::synthetic(Value::Map(out))
+                }
+            }
+        }
     };
     let doc = if args.flat { flatten(&doc) } else { doc };
     app.print_value(&doc, args.format, args.indent);
@@ -236,42 +276,144 @@ fn select_pattern(app: &App, doc: Node, pattern: Option<&str>) -> Result<Node, F
     })
 }
 
-fn targets(app: &App, quiet: bool) -> Result<(), Failure> {
+fn targets(app: &App, quiet: bool, labels: &[(String, String)]) -> Result<(), Failure> {
     let summaries: Vec<TargetSummary> = match app.client() {
         Some(mut c) => {
-            c.call::<_, TargetsResult>("inventory.targets", serde_json::Value::Null)
-                .map_err(|e| app.rpc_fail(e))?
-                .targets
+            c.call::<_, TargetsResult>(
+                "inventory.targets",
+                TargetsParams {
+                    labels: labels.to_vec(),
+                },
+            )
+            .map_err(|e| app.rpc_fail(e))?
+            .targets
         }
-        None => app
-            .inv
-            .discover_targets()
-            .map_err(|e| app.fail(vec![e]))?
-            .into_iter()
-            .map(|s| TargetSummary {
-                name: s.name,
-                path: s.path,
-                file: s.file,
-                digest: None,
-                doc_digest: None,
-                ok: true,
-                error: None,
-            })
-            .collect(),
+        None => {
+            // Labels, classes and inputs live in the rendered parameters.
+            let report = app.inv.render_all().map_err(|e| app.fail(vec![e]))?;
+            let mut out: Vec<TargetSummary> = report
+                .targets
+                .values()
+                .filter(|t| kapitan_server::rpc::has_labels(t, labels))
+                .map(|t| TargetSummary {
+                    name: t.name.clone(),
+                    path: t.path.clone(),
+                    file: app.inventory_path.join("targets").join(&t.path),
+                    digest: Some(t.digest.clone()),
+                    doc_digest: Some(t.doc_digest.clone()),
+                    ok: true,
+                    error: None,
+                    labels: kapitan_server::rpc::target_labels(t),
+                    classes: t.classes.len(),
+                    inputs: kapitan_server::rpc::target_inputs(t),
+                })
+                .collect();
+            if labels.is_empty() {
+                for e in &report.errors {
+                    let d = e.diagnostic();
+                    if let Some(name) = &d.target {
+                        out.push(TargetSummary {
+                            name: name.clone(),
+                            path: String::new(),
+                            file: PathBuf::new(),
+                            digest: None,
+                            doc_digest: None,
+                            ok: false,
+                            error: Some(d.clone()),
+                            labels: Default::default(),
+                            classes: 0,
+                            inputs: vec![],
+                        });
+                    }
+                }
+            }
+            out.sort_by(|a, b| a.name.cmp(&b.name));
+            out
+        }
     };
     if app.json {
         println!("{}", serde_json::to_string_pretty(&summaries).unwrap());
         return Ok(());
     }
-    for t in summaries {
-        if quiet {
+    if quiet {
+        for t in &summaries {
             println!("{}", t.name);
-        } else {
-            let flag = if t.ok { "" } else { "  (render error)" };
-            println!("{}\t{}{}", t.name, t.path, flag);
+        }
+        return Ok(());
+    }
+    print_targets_table(&summaries);
+    Ok(())
+}
+
+/// An aligned table: target, labels, classes, compile inputs, status.
+fn print_targets_table(summaries: &[TargetSummary]) {
+    let rows: Vec<[String; 5]> = summaries
+        .iter()
+        .map(|t| {
+            let labels = t
+                .labels
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            let status = match (&t.ok, &t.error) {
+                (true, _) => "ok".to_string(),
+                (false, Some(e)) => format!("ERROR {}", e.code),
+                (false, None) => "ERROR".to_string(),
+            };
+            [
+                t.name.clone(),
+                labels,
+                if t.ok {
+                    t.classes.to_string()
+                } else {
+                    "-".into()
+                },
+                t.inputs.join(" "),
+                status,
+            ]
+        })
+        .collect();
+    let headers = ["TARGET", "LABELS", "CLASSES", "INPUTS", "STATUS"];
+    let mut widths: Vec<usize> = headers.iter().map(|h| h.chars().count()).collect();
+    for row in &rows {
+        for (i, cell) in row.iter().enumerate() {
+            widths[i] = widths[i].max(cell.chars().count());
         }
     }
-    Ok(())
+    let line = |cells: &[&str]| {
+        cells
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                if i + 1 == cells.len() {
+                    c.to_string()
+                } else {
+                    format!("{:<w$}", c, w = widths[i])
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("  ")
+    };
+    println!("{}", line(&headers));
+    for row in &rows {
+        println!(
+            "{}",
+            line(&row.iter().map(String::as_str).collect::<Vec<_>>())
+        );
+    }
+    let errors = summaries.iter().filter(|t| !t.ok).count();
+    let mut summary = format!(
+        "{} target{}",
+        summaries.len(),
+        if summaries.len() == 1 { "" } else { "s" }
+    );
+    if errors > 0 {
+        summary.push_str(&format!(
+            ", {errors} with render errors (see `kapitan inventory check`)"
+        ));
+    }
+    eprintln!("{summary}");
 }
 
 fn class_usage(app: &App, unused: bool) -> Result<(), Failure> {
@@ -357,7 +499,7 @@ fn check(app: &App) -> Result<(), Failure> {
 }
 
 fn export(app: &App, out: &Path, format: Format) -> Result<(), Failure> {
-    let docs = app.all_documents()?;
+    let docs = app.all_documents(&[])?;
     std::fs::create_dir_all(out)?;
     for (name, doc) in &docs {
         let ext = match format {

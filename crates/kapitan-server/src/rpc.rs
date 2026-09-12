@@ -135,10 +135,22 @@ impl Server {
                 Ok(json!(true))
             }
             "inventory.targets" => {
+                let p: TargetsParams = if req.params.is_null() {
+                    TargetsParams::default()
+                } else {
+                    params(req)?
+                };
                 let inner = self.state.read();
                 let targets = inner
                     .specs
                     .iter()
+                    .filter(|s| {
+                        p.labels.is_empty()
+                            || inner
+                                .targets
+                                .get(&s.name)
+                                .is_some_and(|t| has_labels(t, &p.labels))
+                    })
                     .map(|s| TargetSummary {
                         name: s.name.clone(),
                         path: s.path.clone(),
@@ -147,6 +159,21 @@ impl Server {
                         doc_digest: inner.targets.get(&s.name).map(|t| t.doc_digest.clone()),
                         ok: inner.targets.contains_key(&s.name),
                         error: inner.errors.get(&s.name).cloned(),
+                        labels: inner
+                            .targets
+                            .get(&s.name)
+                            .map(|t| target_labels(t))
+                            .unwrap_or_default(),
+                        classes: inner
+                            .targets
+                            .get(&s.name)
+                            .map(|t| t.classes.len())
+                            .unwrap_or(0),
+                        inputs: inner
+                            .targets
+                            .get(&s.name)
+                            .map(|t| target_inputs(t))
+                            .unwrap_or_default(),
                     })
                     .collect();
                 Ok(serde_json::to_value(TargetsResult {
@@ -183,10 +210,17 @@ impl Server {
                 .unwrap())
             }
             "inventory.all" => {
+                let p: TargetsParams = if req.params.is_null() {
+                    TargetsParams::default()
+                } else {
+                    params(req)?
+                };
                 let inner = self.state.read();
                 let mut documents = serde_json::Map::new();
                 for (name, t) in &inner.targets {
-                    documents.insert(name.clone(), t.to_document().value.to_json());
+                    if p.labels.is_empty() || has_labels(t, &p.labels) {
+                        documents.insert(name.clone(), t.to_document().value.to_json());
+                    }
                 }
                 Ok(serde_json::to_value(AllResult {
                     generation: inner.generation,
@@ -327,6 +361,68 @@ fn params<T: DeserializeOwned>(req: &Request) -> Result<T, RpcError> {
         code: ERR_PARAMS,
         message: format!("invalid params for {}: {e}", req.method),
         data: None,
+    })
+}
+
+pub fn target_labels(
+    t: &kapitan_inventory::RenderedTarget,
+) -> std::collections::BTreeMap<String, String> {
+    t.parameters
+        .get("kapitan")
+        .and_then(|k| k.get("labels"))
+        .and_then(|l| l.as_map())
+        .map(|m| {
+            m.iter()
+                .map(|(k, v)| (k.clone(), v.value.py_str()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Input types of `parameters.kapitan.compile` with counts (`kadet×2`), in order of appearance.
+pub fn target_inputs(t: &kapitan_inventory::RenderedTarget) -> Vec<String> {
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for item in t
+        .parameters
+        .get("kapitan")
+        .and_then(|k| k.get("compile"))
+        .and_then(|c| c.as_list())
+        .unwrap_or(&[])
+    {
+        let paths = item
+            .get("input_paths")
+            .and_then(|p| p.as_list())
+            .map(|l| l.len())
+            .unwrap_or(0);
+        if paths == 0 {
+            continue;
+        }
+        let ty = item
+            .get("input_type")
+            .map(|n| n.value.py_str())
+            .unwrap_or_else(|| "?".into());
+        match counts.iter_mut().find(|(k, _)| *k == ty) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((ty, 1)),
+        }
+    }
+    counts
+        .into_iter()
+        .map(|(k, n)| if n > 1 { format!("{k}×{n}") } else { k })
+        .collect()
+}
+
+/// `parameters.kapitan.labels` contains every wanted pair.
+pub fn has_labels(t: &kapitan_inventory::RenderedTarget, wanted: &[(String, String)]) -> bool {
+    let labels = t
+        .parameters
+        .get("kapitan")
+        .and_then(|k| k.get("labels"))
+        .and_then(|l| l.as_map());
+    wanted.iter().all(|(k, v)| {
+        labels
+            .and_then(|m| m.get(k))
+            .is_some_and(|n| n.value.py_str() == *v)
     })
 }
 

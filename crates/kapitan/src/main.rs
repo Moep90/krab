@@ -60,6 +60,10 @@ enum Command {
 }
 
 fn main() -> ExitCode {
+    // Piping into `head` must not panic: die quietly on SIGPIPE like other CLIs.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     clap_complete::CompleteEnv::with_factory(Cli::command).complete();
     let cli = Cli::parse();
     let foreground_server = matches!(
