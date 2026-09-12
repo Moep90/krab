@@ -37,7 +37,11 @@ impl Default for Origin {
 }
 
 impl Origin {
-    pub const SYNTHETIC: Origin = Origin { file: SourceId::SYNTHETIC, line: 0, col: 0 };
+    pub const SYNTHETIC: Origin = Origin {
+        file: SourceId::SYNTHETIC,
+        line: 0,
+        col: 0,
+    };
 
     pub fn new(file: SourceId, line: u32, col: u32) -> Self {
         Origin { file, line, col }

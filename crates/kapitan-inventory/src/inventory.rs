@@ -107,13 +107,22 @@ pub struct Provenance {
 
 impl Provenance {
     /// All merge events touching `path` (or its children when `deep`).
-    pub fn merge_events<'p>(&'p self, path: &'p KeyPath, deep: bool) -> impl Iterator<Item = &'p MergeEvent> + 'p {
-        self.merges.iter().flat_map(|log| log.iter()).filter(move |e| {
-            let p = match e {
-                MergeEvent::Override { path, .. } | MergeEvent::ListAppend { path, .. } | MergeEvent::Dereference { path, .. } => path,
-            };
-            p == path || (deep && p.starts_with(path))
-        })
+    pub fn merge_events<'p>(
+        &'p self,
+        path: &'p KeyPath,
+        deep: bool,
+    ) -> impl Iterator<Item = &'p MergeEvent> + 'p {
+        self.merges
+            .iter()
+            .flat_map(|log| log.iter())
+            .filter(move |e| {
+                let p = match e {
+                    MergeEvent::Override { path, .. }
+                    | MergeEvent::ListAppend { path, .. }
+                    | MergeEvent::Dereference { path, .. } => path,
+                };
+                p == path || (deep && p.starts_with(path))
+            })
     }
 
     pub fn resolution_of(&self, path: &KeyPath) -> Option<&ResolveEvent> {
@@ -147,9 +156,17 @@ impl RenderedTarget {
         m.insert("parameters".into(), self.parameters.clone());
         m.insert(
             "classes".into(),
-            Node::synthetic(Value::List(self.classes.iter().map(|c| Node::synthetic(Value::Str(c.clone()))).collect())),
+            Node::synthetic(Value::List(
+                self.classes
+                    .iter()
+                    .map(|c| Node::synthetic(Value::Str(c.clone())))
+                    .collect(),
+            )),
         );
-        m.insert("applications".into(), Node::synthetic(Value::List(self.applications.clone())));
+        m.insert(
+            "applications".into(),
+            Node::synthetic(Value::List(self.applications.clone())),
+        );
         m.insert("exports".into(), self.exports.clone());
         // kapitan 0.36 leaks this internal flag into its output; kept for byte compatibility.
         m.insert("resolved".into(), Node::synthetic(Value::Bool(false)));
@@ -167,11 +184,20 @@ pub struct Inventory {
 
 impl Inventory {
     pub fn new(cfg: InventoryConfig, registry: Arc<Registry>) -> Self {
-        Inventory { cfg, sources: Sources::new(), registry, files: Mutex::new(HashMap::new()), closures: Mutex::new(HashMap::new()) }
+        Inventory {
+            cfg,
+            sources: Sources::new(),
+            registry,
+            files: Mutex::new(HashMap::new()),
+            closures: Mutex::new(HashMap::new()),
+        }
     }
 
     pub fn open(root: impl Into<PathBuf>) -> Self {
-        Self::new(InventoryConfig::new(root), Arc::new(Registry::with_builtins()))
+        Self::new(
+            InventoryConfig::new(root),
+            Arc::new(Registry::with_builtins()),
+        )
     }
 
     /// Forget everything cached about `path` (and every closure built from it).
@@ -194,7 +220,12 @@ impl Inventory {
     /// transitive inputs, so one pass over the cache is enough.
     pub fn invalidate_dependents(&self, paths: &[PathBuf]) {
         let mut closures = self.closures.lock();
-        closures.retain(|_, c| !c.files.iter().chain(c.probes.iter()).any(|f| paths.contains(f)));
+        closures.retain(|_, c| {
+            !c.files
+                .iter()
+                .chain(c.probes.iter())
+                .any(|f| paths.contains(f))
+        });
         let mut files = self.files.lock();
         for p in paths {
             files.remove(p);
@@ -204,7 +235,12 @@ impl Inventory {
     /// Drop every cached closure that depends on anything under `dir`.
     pub fn invalidate_under(&self, dir: &Path) {
         let mut closures = self.closures.lock();
-        closures.retain(|_, c| !c.files.iter().chain(c.probes.iter()).any(|f| f.starts_with(dir)));
+        closures.retain(|_, c| {
+            !c.files
+                .iter()
+                .chain(c.probes.iter())
+                .any(|f| f.starts_with(dir))
+        });
         self.files.lock().retain(|p, _| !p.starts_with(dir));
     }
 
@@ -215,7 +251,11 @@ impl Inventory {
 
     /// Class files currently cached, with the files each depends on.
     pub fn cached_closures(&self) -> Vec<(PathBuf, Vec<PathBuf>)> {
-        self.closures.lock().iter().map(|(k, c)| (k.clone(), c.files.clone())).collect()
+        self.closures
+            .lock()
+            .iter()
+            .map(|(k, c)| (k.clone(), c.files.clone()))
+            .collect()
     }
 
     // ---- discovery --------------------------------------------------------
@@ -223,8 +263,13 @@ impl Inventory {
     pub fn discover_targets(&self) -> Result<Vec<TargetSpec>> {
         let dir = self.cfg.targets_dir();
         if !dir.is_dir() {
-            return Err(Error::new("inventory::no_targets_dir", format!("no targets directory at {}", dir.display()))
-                .with_help("run from the directory containing `inventory/`, or pass --inventory-path"));
+            return Err(Error::new(
+                "inventory::no_targets_dir",
+                format!("no targets directory at {}", dir.display()),
+            )
+            .with_help(
+                "run from the directory containing `inventory/`, or pass --inventory-path",
+            ));
         }
         let mut files = Vec::new();
         walk(&dir, &mut files)?;
@@ -238,20 +283,32 @@ impl Inventory {
                 continue;
             }
             let rel = file.strip_prefix(&dir).unwrap();
-            let rel_str = rel.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
-            let stem = rel_str.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or(rel_str.clone());
+            let rel_str = rel
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/");
+            let stem = rel_str
+                .rsplit_once('.')
+                .map(|(s, _)| s.to_string())
+                .unwrap_or(rel_str.clone());
             let name = if self.cfg.compose_target_name {
                 stem.replace('/', ".")
             } else {
                 file.file_stem().unwrap().to_string_lossy().to_string()
             };
-            specs.push(TargetSpec { name, path: rel_str, file });
+            specs.push(TargetSpec {
+                name,
+                path: rel_str,
+                file,
+            });
         }
         for spec in &specs {
             if let Some(other) = seen.get(&spec.name) {
                 return Err(Error::new(
                     "inventory::conflicting_targets",
-                    format!("conflicting targets {}: {} and {}", spec.name, spec.path, other.path),
+                    format!(
+                        "conflicting targets {}: {} and {}",
+                        spec.name, spec.path, other.path
+                    ),
                 )
                 .with_help("enable compose-target-name so nested targets get distinct names"));
             }
@@ -264,8 +321,11 @@ impl Inventory {
     pub fn target_spec(&self, name: &str) -> Result<TargetSpec> {
         let targets = self.discover_targets()?;
         targets.into_iter().find(|t| t.name == name).ok_or_else(|| {
-            Error::new("inventory::unknown_target", format!("target `{name}` not found"))
-                .with_help("list targets with `kapitan inventory targets`")
+            Error::new(
+                "inventory::unknown_target",
+                format!("target `{name}` not found"),
+            )
+            .with_help("list targets with `kapitan inventory targets`")
         })
     }
 
@@ -281,7 +341,11 @@ impl Inventory {
         let id = self.sources.intern(path);
         let node = yaml::parse_document(&text, id)?;
         let doc = ClassDoc::from_node(node)?;
-        let loaded = Arc::new(LoadedFile { path: path.to_path_buf(), digest, doc });
+        let loaded = Arc::new(LoadedFile {
+            path: path.to_path_buf(),
+            digest,
+            doc,
+        });
         self.files.lock().insert(path.to_path_buf(), loaded.clone());
         Ok(loaded)
     }
@@ -292,11 +356,21 @@ impl Inventory {
     /// the first two name components.
     pub fn resolve_class_file(&self, class_name: &str, from_file: &Path) -> ClassResolution {
         let classes = self.cfg.classes_dir();
-        let parent_dir: PathBuf = match from_file.parent().and_then(|p| p.strip_prefix(&classes).ok()) {
+        let parent_dir: PathBuf = match from_file
+            .parent()
+            .and_then(|p| p.strip_prefix(&classes).ok())
+        {
             Some(rel) => rel.to_path_buf(),
-            None => from_file.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
+            None => from_file
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_default(),
         };
-        let base = if class_name.starts_with('.') { classes.join(&parent_dir) } else { classes.clone() };
+        let base = if class_name.starts_with('.') {
+            classes.join(&parent_dir)
+        } else {
+            classes.clone()
+        };
         let parts: Vec<&str> = class_name.split('.').collect();
         let joined = |segments: &[&str]| -> PathBuf {
             let mut p = base.clone();
@@ -321,7 +395,10 @@ impl Inventory {
                 let hit = case.is_file();
                 tried.push(case.clone());
                 if hit {
-                    return ClassResolution { found: Some(case), tried };
+                    return ClassResolution {
+                        found: Some(case),
+                        tried,
+                    };
                 }
             }
         }
@@ -333,13 +410,20 @@ impl Inventory {
             return Ok(c.clone());
         }
         let closure = Arc::new(self.build_closure(file, None, stack)?);
-        self.closures.lock().insert(file.to_path_buf(), closure.clone());
+        self.closures
+            .lock()
+            .insert(file.to_path_buf(), closure.clone());
         Ok(closure)
     }
 
     /// The recursive loader: classes first (depth first, in order), then the
     /// file's own parameters.
-    fn build_closure(&self, file: &Path, initial: Option<Node>, stack: &mut Vec<PathBuf>) -> Result<ClassClosure> {
+    fn build_closure(
+        &self,
+        file: &Path,
+        initial: Option<Node>,
+        stack: &mut Vec<PathBuf>,
+    ) -> Result<ClassClosure> {
         let loaded = self.load(file)?;
         stack.push(file.to_path_buf());
         let result = self.build_closure_inner(file, &loaded.doc, initial, stack);
@@ -347,7 +431,13 @@ impl Inventory {
         result
     }
 
-    fn build_closure_inner(&self, file: &Path, doc: &ClassDoc, initial: Option<Node>, stack: &mut Vec<PathBuf>) -> Result<ClassClosure> {
+    fn build_closure_inner(
+        &self,
+        file: &Path,
+        doc: &ClassDoc,
+        initial: Option<Node>,
+        stack: &mut Vec<PathBuf>,
+    ) -> Result<ClassClosure> {
         let mut params = initial.unwrap_or_else(|| Node::map(Origin::SYNTHETIC));
         let mut classes = Vec::new();
         let mut applications = Vec::new();
@@ -355,7 +445,11 @@ impl Inventory {
         let mut files = vec![file.to_path_buf()];
         let mut probes: Vec<PathBuf> = Vec::new();
         let mut own_log: Vec<MergeEvent> = Vec::new();
-        let mut log = if self.cfg.track_provenance { Some(&mut own_log) } else { None };
+        let mut log = if self.cfg.track_provenance {
+            Some(&mut own_log)
+        } else {
+            None
+        };
         let mut nested_logs: Vec<Arc<Vec<MergeEvent>>> = Vec::new();
         let deref = EvalDeref { inv: self };
         for class_ref in &doc.classes {
@@ -372,23 +466,39 @@ impl Inventory {
                     if self.cfg.ignore_class_not_found {
                         continue;
                     }
-                    return Err(Error::new("inventory::class_not_found", format!("class `{}` not found", class_ref.name))
-                        .with_label(class_ref.origin, "referenced here")
-                        .with_help(format!(
-                            "looked for:\n{}",
-                            tried.iter().take(4).map(|p| format!("  {}", p.display())).collect::<Vec<_>>().join("\n")
-                        )));
+                    return Err(Error::new(
+                        "inventory::class_not_found",
+                        format!("class `{}` not found", class_ref.name),
+                    )
+                    .with_label(class_ref.origin, "referenced here")
+                    .with_help(format!(
+                        "looked for:\n{}",
+                        tried
+                            .iter()
+                            .take(4)
+                            .map(|p| format!("  {}", p.display()))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    )));
                 }
             };
             if stack.contains(&class_file) {
                 // The reference recurses forever here; we stop with a clear error.
                 return Err(Error::new(
                     "inventory::class_cycle",
-                    format!("class `{}` includes itself (directly or through its parents)", class_ref.name),
+                    format!(
+                        "class `{}` includes itself (directly or through its parents)",
+                        class_ref.name
+                    ),
                 )
                 .with_label(class_ref.origin, "cycle closes here"));
             }
-            let closure = self.class_closure(&class_file, stack).map_err(|e| e.with_label(class_ref.origin, format!("included as `{}`", class_ref.name)))?;
+            let closure = self.class_closure(&class_file, stack).map_err(|e| {
+                e.with_label(
+                    class_ref.origin,
+                    format!("included as `{}`", class_ref.name),
+                )
+            })?;
             if !closure.params.as_map().is_some_and(|m| m.is_empty()) {
                 merge(&mut params, closure.params.clone(), &deref, &mut log);
             }
@@ -419,20 +529,48 @@ impl Inventory {
             combined.extend(l.iter().cloned());
         }
         combined.extend(own_log);
-        Ok(ClassClosure { params, classes, applications, exports, files, probes, log: Arc::new(combined) })
+        Ok(ClassClosure {
+            params,
+            classes,
+            applications,
+            exports,
+            files,
+            probes,
+            log: Arc::new(combined),
+        })
     }
 
     // ---- rendering --------------------------------------------------------
 
     pub fn render(&self, spec: &TargetSpec) -> Result<RenderedTarget> {
-        let path_no_ext = spec.path.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or(spec.path.clone());
+        let path_no_ext = spec
+            .path
+            .rsplit_once('.')
+            .map(|(s, _)| s.to_string())
+            .unwrap_or(spec.path.clone());
         let initial = model::initial_parameters(&spec.name, &path_no_ext);
-        let closure = self.build_closure(&spec.file, Some(initial), &mut Vec::new()).map_err(|e| e.with_target(&spec.name))?;
-        let ClassClosure { mut params, classes, applications, exports, files, probes, log } = closure;
+        let closure = self
+            .build_closure(&spec.file, Some(initial), &mut Vec::new())
+            .map_err(|e| e.with_target(&spec.name))?;
+        let ClassClosure {
+            mut params,
+            classes,
+            applications,
+            exports,
+            files,
+            probes,
+            log,
+        } = closure;
 
         let mut warnings = Vec::new();
         let resolutions = {
-            let mut ev = Evaluator::new(&mut params, &self.registry, &self.sources, &spec.name, self.cfg.track_provenance);
+            let mut ev = Evaluator::new(
+                &mut params,
+                &self.registry,
+                &self.sources,
+                &spec.name,
+                self.cfg.track_provenance,
+            );
             ev.resolve_all(self.cfg.passes)?;
             warnings.extend(ev.warnings.drain(..));
             std::mem::take(&mut ev.events)
@@ -459,7 +597,10 @@ impl Inventory {
             files,
             probes,
             digest,
-            provenance: Provenance { merges: vec![log], resolutions },
+            provenance: Provenance {
+                merges: vec![log],
+                resolutions,
+            },
             warnings,
         })
     }
@@ -476,15 +617,19 @@ impl Inventory {
     }
 
     pub fn render_many(&self, specs: &[TargetSpec]) -> Result<RenderReport> {
-        let results: Vec<(String, Result<RenderedTarget>)> =
-            specs.par_iter().map(|s| (s.name.clone(), self.render(s))).collect();
+        let results: Vec<(String, Result<RenderedTarget>)> = specs
+            .par_iter()
+            .map(|s| (s.name.clone(), self.render(s)))
+            .collect();
         let mut report = RenderReport::default();
         for (name, r) in results {
             match r {
                 Ok(t) => {
                     report.targets.insert(name, t);
                 }
-                Err(e) => report.errors.push(e.with_target(name).resolve(&self.sources)),
+                Err(e) => report
+                    .errors
+                    .push(e.with_target(name).resolve(&self.sources)),
             }
         }
         Ok(report)
@@ -506,7 +651,13 @@ struct EvalDeref<'i> {
 impl MergeDeref for EvalDeref<'_> {
     fn deref(&self, root: &Node, at: &KeyPath, _expr: &str) -> Option<Value> {
         let mut snapshot = root.clone();
-        let mut ev = Evaluator::new(&mut snapshot, &self.inv.registry, &self.inv.sources, "", false);
+        let mut ev = Evaluator::new(
+            &mut snapshot,
+            &self.inv.registry,
+            &self.inv.sources,
+            "",
+            false,
+        );
         let r = ev.deref_at(at).ok()?;
         ev.deep_value(r).ok()
     }
@@ -520,7 +671,9 @@ fn with_ext(p: &Path, ext: &str) -> PathBuf {
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in std::fs::read_dir(dir).map_err(|e| Error::new("io", format!("cannot read {}: {e}", dir.display())))? {
+    for entry in std::fs::read_dir(dir)
+        .map_err(|e| Error::new("io", format!("cannot read {}: {e}", dir.display())))?
+    {
         let entry = entry.map_err(|e| Error::new("io", e.to_string()))?;
         let path = entry.path();
         if path.is_dir() {

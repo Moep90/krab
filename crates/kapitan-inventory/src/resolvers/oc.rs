@@ -43,7 +43,12 @@ fn decode(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     match &args[0] {
         Value::Null => Ok(Value::Null),
         Value::Str(s) => ctx.decode(s),
-        other => Err(format!("`oc.decode` can only take strings or None as input, but `{}` is of type {}", other.py_repr(), other.type_name()).into()),
+        other => Err(format!(
+            "`oc.decode` can only take strings or None as input, but `{}` is of type {}",
+            other.py_repr(),
+            other.type_name()
+        )
+        .into()),
     }
 }
 
@@ -55,10 +60,9 @@ fn create(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 fn deprecated(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("oc.deprecated", args, 1, 2)?;
     let key = as_str("oc.deprecated", args, 0)?.to_string();
-    let message = args
-        .get(1)
-        .map(Value::py_str)
-        .unwrap_or_else(|| "'$OLD_KEY' is deprecated. Change your code and config to use '$NEW_KEY'".to_string());
+    let message = args.get(1).map(Value::py_str).unwrap_or_else(|| {
+        "'$OLD_KEY' is deprecated. Change your code and config to use '$NEW_KEY'".to_string()
+    });
     let old = ctx.full_key();
     ctx.warn(message.replace("$OLD_KEY", &old).replace("$NEW_KEY", &key));
     match ctx.select(&key)? {
@@ -72,7 +76,11 @@ fn dict_input(ctx: &mut Ctx, name: &str, args: &[Value]) -> Result<(String, Valu
     let key = as_str(name, args, 0)?.to_string();
     match ctx.select(&key)? {
         Some(v @ Value::Map(_)) => Ok((key, v)),
-        Some(other) => Err(format!("`{name}` cannot be applied to objects of type: {}", other.type_name()).into()),
+        Some(other) => Err(format!(
+            "`{name}` cannot be applied to objects of type: {}",
+            other.type_name()
+        )
+        .into()),
         None => Err(format!("key not found: '{key}'").into()),
     }
 }
@@ -80,7 +88,11 @@ fn dict_input(ctx: &mut Ctx, name: &str, args: &[Value]) -> Result<(String, Valu
 fn dict_keys(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     let (_, dict) = dict_input(ctx, "oc.dict.keys", args)?;
     let Value::Map(m) = dict else { unreachable!() };
-    Ok(Value::List(m.keys().map(|k| Node::new(Value::Str(k.clone()), ctx.origin)).collect()))
+    Ok(Value::List(
+        m.keys()
+            .map(|k| Node::new(Value::Str(k.clone()), ctx.origin))
+            .collect(),
+    ))
 }
 
 /// OmegaConf returns a list of `${key.k}` interpolations here; they resolve on
@@ -88,9 +100,15 @@ fn dict_keys(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 fn dict_values(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     let (key, dict) = dict_input(ctx, "oc.dict.values", args)?;
     let Value::Map(m) = dict else { unreachable!() };
-    let key = if key.starts_with('.') { format!(".{key}") } else { key };
+    let key = if key.starts_with('.') {
+        format!(".{key}")
+    } else {
+        key
+    };
     Ok(Value::List(
-        m.keys().map(|k| Node::new(Value::Str(format!("${{{key}.{k}}}")), ctx.origin)).collect(),
+        m.keys()
+            .map(|k| Node::new(Value::Str(format!("${{{key}.{k}}}")), ctx.origin))
+            .collect(),
     ))
 }
 

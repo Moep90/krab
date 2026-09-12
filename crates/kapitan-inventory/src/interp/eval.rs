@@ -55,7 +55,13 @@ pub struct Evaluator<'a> {
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(root: &'a mut Node, registry: &'a Registry, sources: &'a Sources, target: &'a str, track: bool) -> Self {
+    pub fn new(
+        root: &'a mut Node,
+        registry: &'a Registry,
+        sources: &'a Sources,
+        target: &'a str,
+        track: bool,
+    ) -> Self {
         Evaluator {
             root,
             registry,
@@ -139,7 +145,12 @@ impl<'a> Evaluator<'a> {
             }
         };
         if self.track {
-            self.events.push(ResolveEvent { path: path.clone(), expr, source, origin });
+            self.events.push(ResolveEvent {
+                path: path.clone(),
+                expr,
+                source,
+                origin,
+            });
         }
         Ok(())
     }
@@ -149,10 +160,13 @@ impl<'a> Evaluator<'a> {
             return Ok(t.clone());
         }
         let text = parse_text(expr).map_err(|e| {
-            Error::new("interpolation::syntax", format!("invalid interpolation {expr:?}: {}", e.message))
-                .with_target(self.target)
-                .with_path(path.to_string())
-                .with_label(origin, "in this value")
+            Error::new(
+                "interpolation::syntax",
+                format!("invalid interpolation {expr:?}: {}", e.message),
+            )
+            .with_target(self.target)
+            .with_path(path.to_string())
+            .with_label(origin, "in this value")
         })?;
         let rc = Rc::new(text);
         self.asts.insert(expr.to_string(), rc.clone());
@@ -192,7 +206,12 @@ impl<'a> Evaluator<'a> {
         Ok(result)
     }
 
-    pub(crate) fn eval_text(&mut self, text: &Text, at: &KeyPath, origin: Origin) -> Result<Resolved> {
+    pub(crate) fn eval_text(
+        &mut self,
+        text: &Text,
+        at: &KeyPath,
+        origin: Origin,
+    ) -> Result<Resolved> {
         if let Some(i) = text.single_interp() {
             return self.eval_interp(i, at, origin);
         }
@@ -211,14 +230,18 @@ impl<'a> Evaluator<'a> {
 
     pub(crate) fn py_str(&self, r: &Resolved) -> String {
         match r {
-            Resolved::At(q) => get(self.root, q).map(|n| n.value.py_str()).unwrap_or_default(),
+            Resolved::At(q) => get(self.root, q)
+                .map(|n| n.value.py_str())
+                .unwrap_or_default(),
             Resolved::Owned(v) => v.py_str(),
         }
     }
 
     pub(crate) fn to_value(&self, r: Resolved) -> Value {
         match r {
-            Resolved::At(q) => get(self.root, &q).map(|n| n.value.clone()).unwrap_or(Value::Null),
+            Resolved::At(q) => get(self.root, &q)
+                .map(|n| n.value.clone())
+                .unwrap_or(Value::Null),
             Resolved::Owned(v) => v,
         }
     }
@@ -281,7 +304,10 @@ impl<'a> Evaluator<'a> {
                                 other => {
                                     return Err(self.err(
                                         "interpolation::bad_resolver_name",
-                                        format!("resolver name must be a string, got {}", other.type_name()),
+                                        format!(
+                                            "resolver name must be a string, got {}",
+                                            other.type_name()
+                                        ),
                                         at,
                                         origin,
                                     ));
@@ -306,10 +332,24 @@ impl<'a> Evaluator<'a> {
                 }
                 let Some(resolver) = self.registry.get(&name) else {
                     return Err(self
-                        .err("interpolation::unknown_resolver", format!("unsupported interpolation type `{name}`"), at, origin)
-                        .with_help(format!("known resolvers: {}", self.registry.names().join(", "))));
+                        .err(
+                            "interpolation::unknown_resolver",
+                            format!("unsupported interpolation type `{name}`"),
+                            at,
+                            origin,
+                        )
+                        .with_help(format!(
+                            "known resolvers: {}",
+                            self.registry.names().join(", ")
+                        )));
                 };
-                let mut ctx = Ctx { ev: self, at: at.clone(), origin, resolver: &name, arg_kinds: kinds };
+                let mut ctx = Ctx {
+                    ev: self,
+                    at: at.clone(),
+                    origin,
+                    resolver: &name,
+                    arg_kinds: kinds,
+                };
                 match resolver(&mut ctx, &values) {
                     Ok(v) => Ok(Resolved::Owned(v)),
                     Err(e) => match e {
@@ -333,7 +373,12 @@ impl<'a> Evaluator<'a> {
         let mut base = at.clone();
         for _ in 0..dots {
             base = base.parent().ok_or_else(|| {
-                self.err("interpolation::bad_relative", "relative interpolation goes above the root", at, origin)
+                self.err(
+                    "interpolation::bad_relative",
+                    "relative interpolation goes above the root",
+                    at,
+                    origin,
+                )
             })?;
         }
         Ok(base)
@@ -366,7 +411,11 @@ impl<'a> Evaluator<'a> {
                                 if idx < 0 {
                                     idx += l.len() as i64;
                                 }
-                                if idx < 0 || idx as usize >= l.len() { None } else { Some(Key::Index(idx as usize)) }
+                                if idx < 0 || idx as usize >= l.len() {
+                                    None
+                                } else {
+                                    Some(Key::Index(idx as usize))
+                                }
                             }
                             Err(_) => {
                                 return Err(self.err(
@@ -393,7 +442,11 @@ impl<'a> Evaluator<'a> {
                     };
                     let Some(child) = child else { return Ok(None) };
                     let cp = p.child(child);
-                    if get(self.root, &cp).unwrap().is_interpolation() { self.deref_at(&cp)? } else { Resolved::At(cp) }
+                    if get(self.root, &cp).unwrap().is_interpolation() {
+                        self.deref_at(&cp)?
+                    } else {
+                        Resolved::At(cp)
+                    }
                 }
                 Resolved::Owned(v) => {
                     let child = match &v {
@@ -503,7 +556,13 @@ impl<'a> Evaluator<'a> {
 
     /// `OmegaConf.select(root, key)` style lookup used by resolvers: absolute
     /// unless `key` starts with `.`, in which case it is relative to `base`.
-    pub(crate) fn select_key(&mut self, base: &KeyPath, key: &str, at: &KeyPath, origin: Origin) -> Result<Option<Resolved>> {
+    pub(crate) fn select_key(
+        &mut self,
+        base: &KeyPath,
+        key: &str,
+        at: &KeyPath,
+        origin: Origin,
+    ) -> Result<Option<Resolved>> {
         let dots = key.chars().take_while(|c| *c == '.').count();
         let rest = &key[dots..];
         let start = if dots == 0 {
@@ -512,7 +571,12 @@ impl<'a> Evaluator<'a> {
             let mut b = base.clone();
             for _ in 1..dots {
                 b = b.parent().ok_or_else(|| {
-                    self.err("interpolation::bad_relative", "relative key goes above the root", at, origin)
+                    self.err(
+                        "interpolation::bad_relative",
+                        "relative key goes above the root",
+                        at,
+                        origin,
+                    )
                 })?;
             }
             b
@@ -528,7 +592,16 @@ impl<'a> Evaluator<'a> {
         }
     }
 
-    pub(crate) fn err(&self, code: &'static str, message: impl Into<String>, at: &KeyPath, origin: Origin) -> Error {
-        Error::new(code, message).with_target(self.target).with_path(at.to_string()).with_label(origin, "in this value")
+    pub(crate) fn err(
+        &self,
+        code: &'static str,
+        message: impl Into<String>,
+        at: &KeyPath,
+        origin: Origin,
+    ) -> Error {
+        Error::new(code, message)
+            .with_target(self.target)
+            .with_path(at.to_string())
+            .with_label(origin, "in this value")
     }
 }

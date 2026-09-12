@@ -18,7 +18,10 @@ pub enum Interp {
     /// `${a.b[0]}`; `dots` leading dots make the path relative (`${.x}`, `${..x}`).
     Node { dots: usize, keys: Vec<KeySeg> },
     /// `${name:arg, arg}`.
-    Resolver { name: Vec<NamePart>, args: Vec<Element> },
+    Resolver {
+        name: Vec<NamePart>,
+        args: Vec<Element>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

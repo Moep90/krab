@@ -47,40 +47,66 @@ pub enum HistoryEntry {
         new_location: Option<Location>,
         new_type: String,
     },
-    ListAppend { index: usize, location: Option<Location> },
-    Dereference { expr: String, location: Option<Location> },
+    ListAppend {
+        index: usize,
+        location: Option<Location>,
+    },
+    Dereference {
+        expr: String,
+        location: Option<Location>,
+    },
 }
 
 pub fn explain(inv: &Inventory, target: &RenderedTarget, path: &str) -> Result<Explanation> {
     let key = KeyPath::parse(path.strip_prefix("parameters.").unwrap_or(path));
     let node = get(&target.parameters, &key).ok_or_else(|| {
-        Error::new("inventory::path_not_found", format!("no value at `{key}` in target `{}`", target.name))
-            .with_target(&target.name)
-            .with_help("paths are relative to `parameters`, e.g. cluster.name or kapitan.compile[0].name")
+        Error::new(
+            "inventory::path_not_found",
+            format!("no value at `{key}` in target `{}`", target.name),
+        )
+        .with_target(&target.name)
+        .with_help(
+            "paths are relative to `parameters`, e.g. cluster.name or kapitan.compile[0].name",
+        )
     })?;
     let loc = |o| Location::from_origin(&inv.sources, o);
     let history: Vec<HistoryEntry> = target
         .provenance
         .merge_events(&key, false)
         .map(|ev| match ev {
-            MergeEvent::Override { old, new, old_value, old_type, new_type, .. } => HistoryEntry::Override {
+            MergeEvent::Override {
+                old,
+                new,
+                old_value,
+                old_type,
+                new_type,
+                ..
+            } => HistoryEntry::Override {
                 old_location: loc(*old),
                 old_value: old_value.clone(),
                 old_type: old_type.to_string(),
                 new_location: loc(*new),
                 new_type: new_type.to_string(),
             },
-            MergeEvent::ListAppend { index, origin, .. } => HistoryEntry::ListAppend { index: *index, location: loc(*origin) },
-            MergeEvent::Dereference { expr, origin, .. } => {
-                HistoryEntry::Dereference { expr: expr.clone(), location: loc(*origin) }
-            }
+            MergeEvent::ListAppend { index, origin, .. } => HistoryEntry::ListAppend {
+                index: *index,
+                location: loc(*origin),
+            },
+            MergeEvent::Dereference { expr, origin, .. } => HistoryEntry::Dereference {
+                expr: expr.clone(),
+                location: loc(*origin),
+            },
         })
         .collect();
     let children_events = target.provenance.merge_events(&key, true).count() - history.len();
     let resolved_from = target.provenance.resolution_of(&key).map(|r| ResolvedFrom {
         expr: r.expr.clone(),
         source_path: r.source.as_ref().map(|p| p.to_string()),
-        source_origin: r.source.as_ref().and_then(|p| get(&target.parameters, p)).and_then(|n| loc(n.origin)),
+        source_origin: r
+            .source
+            .as_ref()
+            .and_then(|p| get(&target.parameters, p))
+            .and_then(|n| loc(n.origin)),
     });
     Ok(Explanation {
         target: target.name.clone(),

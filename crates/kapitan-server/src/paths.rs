@@ -3,7 +3,9 @@
 use std::path::{Path, PathBuf};
 
 fn key(inventory_root: &Path) -> String {
-    let canonical = inventory_root.canonicalize().unwrap_or_else(|_| inventory_root.to_path_buf());
+    let canonical = inventory_root
+        .canonicalize()
+        .unwrap_or_else(|_| inventory_root.to_path_buf());
     blake3::hash(canonical.to_string_lossy().as_bytes()).to_hex()[..16].to_string()
 }
 

@@ -159,7 +159,9 @@ impl Ctx<'_, '_> {
 
     /// Like [`Ctx::select`] with an explicit list of keys (no splitting on dots).
     pub fn select_keys(&mut self, keys: &[String]) -> Result<Option<Value>, ResolverError> {
-        let r = self.ev.select_path(KeyPath::root(), keys, &self.at, self.origin)?;
+        let r = self
+            .ev
+            .select_path(KeyPath::root(), keys, &self.at, self.origin)?;
         match r {
             Some(r) => Ok(Some(self.ev.deep_value(r)?)),
             None => Ok(None),
@@ -168,9 +170,12 @@ impl Ctx<'_, '_> {
 
     /// Evaluate a string as a grammar element (`oc.decode`).
     pub fn decode(&mut self, s: &str) -> Result<Value, ResolverError> {
-        let element = parse_element(s).map_err(|e| ResolverError::Message(format!("cannot decode {s:?}: {}", e.message)))?;
+        let element = parse_element(s)
+            .map_err(|e| ResolverError::Message(format!("cannot decode {s:?}: {}", e.message)))?;
         let text = crate::interp::ast::Text(vec![match element {
-            crate::interp::ast::Element::Prim(crate::interp::ast::Prim::Interp(i)) => crate::interp::ast::TextPart::Interp(*i),
+            crate::interp::ast::Element::Prim(crate::interp::ast::Prim::Interp(i)) => {
+                crate::interp::ast::TextPart::Interp(*i)
+            }
             other => {
                 // Wrap as a single-element resolver-less evaluation.
                 let v = self.eval_element(&other)?;
@@ -199,10 +204,13 @@ impl Ctx<'_, '_> {
 
     /// Attach a non-fatal warning to the render.
     pub fn warn(&mut self, message: impl Into<String>) {
-        let d = Diagnostic::warning("resolver::warning", format!("resolver `{}`: {}", self.resolver, message.into()))
-            .with_target(self.ev.target)
-            .with_path(self.at.to_string())
-            .with_label(self.origin, "in this value");
+        let d = Diagnostic::warning(
+            "resolver::warning",
+            format!("resolver `{}`: {}", self.resolver, message.into()),
+        )
+        .with_target(self.ev.target)
+        .with_path(self.at.to_string())
+        .with_label(self.origin, "in this value");
         self.ev.warnings.push(d);
     }
 
@@ -223,7 +231,11 @@ pub fn arity(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), R
         } else {
             format!("{min} to {max}")
         };
-        return Err(format!("{name}() takes {expected} argument(s) but {} were given", args.len()).into());
+        return Err(format!(
+            "{name}() takes {expected} argument(s) but {} were given",
+            args.len()
+        )
+        .into());
     }
     Ok(())
 }
@@ -231,7 +243,12 @@ pub fn arity(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), R
 pub fn as_str<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v str, ResolverError> {
     match args.get(i) {
         Some(Value::Str(s)) => Ok(s),
-        Some(other) => Err(format!("{name}(): argument {} must be a string, got {}", i + 1, other.type_name()).into()),
+        Some(other) => Err(format!(
+            "{name}(): argument {} must be a string, got {}",
+            i + 1,
+            other.type_name()
+        )
+        .into()),
         None => Err(format!("{name}(): missing argument {}", i + 1).into()),
     }
 }
@@ -247,11 +264,18 @@ pub fn as_int(name: &str, args: &[Value], i: usize) -> Result<i64, ResolverError
         Some(Value::Int(n)) => Ok(*n),
         Some(Value::Bool(b)) => Ok(*b as i64),
         Some(Value::Float(f)) if f.fract() == 0.0 => Ok(*f as i64),
-        Some(Value::Str(s)) => s
-            .trim()
-            .parse()
-            .map_err(|_| ResolverError::Message(format!("{name}(): argument {} must be an integer, got {s:?}", i + 1))),
-        Some(other) => Err(format!("{name}(): argument {} must be an integer, got {}", i + 1, other.type_name()).into()),
+        Some(Value::Str(s)) => s.trim().parse().map_err(|_| {
+            ResolverError::Message(format!(
+                "{name}(): argument {} must be an integer, got {s:?}",
+                i + 1
+            ))
+        }),
+        Some(other) => Err(format!(
+            "{name}(): argument {} must be an integer, got {}",
+            i + 1,
+            other.type_name()
+        )
+        .into()),
         None => Err(format!("{name}(): missing argument {}", i + 1).into()),
     }
 }

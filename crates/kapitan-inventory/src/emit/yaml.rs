@@ -19,14 +19,23 @@ pub struct DumpOptions {
 
 impl Default for DumpOptions {
     fn default() -> Self {
-        DumpOptions { indent: 2, width: 80, sort_keys: true, indent_sequences: true, allow_unicode: false }
+        DumpOptions {
+            indent: 2,
+            width: 80,
+            sort_keys: true,
+            indent_sequences: true,
+            allow_unicode: false,
+        }
     }
 }
 
 impl DumpOptions {
     /// PyYAML `yaml.dump(obj, default_flow_style=False)` defaults.
     pub fn pyyaml_default() -> Self {
-        DumpOptions { indent_sequences: false, ..Self::default() }
+        DumpOptions {
+            indent_sequences: false,
+            ..Self::default()
+        }
     }
 }
 
@@ -75,14 +84,27 @@ struct Scalar {
 
 fn represent(v: &Value) -> Scalar {
     match v {
-        Value::Null => Scalar { text: "null".into(), implicit: true },
-        Value::Bool(b) => Scalar { text: if *b { "true" } else { "false" }.into(), implicit: true },
-        Value::Int(i) => Scalar { text: i.to_string(), implicit: true },
+        Value::Null => Scalar {
+            text: "null".into(),
+            implicit: true,
+        },
+        Value::Bool(b) => Scalar {
+            text: if *b { "true" } else { "false" }.into(),
+            implicit: true,
+        },
+        Value::Int(i) => Scalar {
+            text: i.to_string(),
+            implicit: true,
+        },
         Value::Float(f) => {
             let text = if f.is_nan() {
                 ".nan".to_string()
             } else if f.is_infinite() {
-                if *f > 0.0 { ".inf".into() } else { "-.inf".into() }
+                if *f > 0.0 {
+                    ".inf".into()
+                } else {
+                    "-.inf".into()
+                }
             } else {
                 let mut r = py_float_repr(*f);
                 if !r.contains('.') && r.contains('e') {
@@ -90,9 +112,15 @@ fn represent(v: &Value) -> Scalar {
                 }
                 r
             };
-            Scalar { text, implicit: true }
+            Scalar {
+                text,
+                implicit: true,
+            }
         }
-        Value::Str(s) => Scalar { text: s.clone(), implicit: str_is_implicit(s) },
+        Value::Str(s) => Scalar {
+            text: s.clone(),
+            implicit: str_is_implicit(s),
+        },
         Value::List(_) | Value::Map(_) => unreachable!("containers are not scalars"),
     }
 }
@@ -370,7 +398,8 @@ impl Emitter {
     fn choose_style(&self, s: &Scalar, a: &Analysis) -> Style {
         if s.implicit
             && !(self.simple_key_context && (a.empty || a.multiline))
-            && ((self.flow_level > 0 && a.allow_flow_plain) || (self.flow_level == 0 && a.allow_block_plain))
+            && ((self.flow_level > 0 && a.allow_flow_plain)
+                || (self.flow_level == 0 && a.allow_block_plain))
         {
             return Style::Plain;
         }
@@ -519,7 +548,13 @@ impl Emitter {
         if block_indicators {
             allow_block_plain = false;
         }
-        Analysis { empty: false, multiline: line_breaks, allow_flow_plain, allow_block_plain, allow_single_quoted }
+        Analysis {
+            empty: false,
+            multiline: line_breaks,
+            allow_flow_plain,
+            allow_block_plain,
+            allow_single_quoted,
+        }
     }
 
     // ---- writers ----------------------------------------------------------
@@ -529,7 +564,13 @@ impl Emitter {
         self.column += s.chars().count();
     }
 
-    fn write_indicator(&mut self, indicator: &str, need_whitespace: bool, whitespace: bool, indention: bool) {
+    fn write_indicator(
+        &mut self,
+        indicator: &str,
+        need_whitespace: bool,
+        whitespace: bool,
+        indention: bool,
+    ) {
         if !(self.whitespace || !need_whitespace) {
             self.out.push(' ');
             self.column += 1;
@@ -637,7 +678,12 @@ impl Emitter {
             let ch = text.get(end).copied();
             if spaces {
                 if ch != Some(' ') {
-                    if start + 1 == end && self.column > self.opts.width && split && start != 0 && end != text.len() {
+                    if start + 1 == end
+                        && self.column > self.opts.width
+                        && split
+                        && start != 0
+                        && end != text.len()
+                    {
                         self.write_indent();
                     } else {
                         self.write_chars(&text[start..end]);
@@ -690,10 +736,13 @@ impl Emitter {
             let needs_escape = match ch {
                 None => true,
                 Some(c) => {
-                    matches!(c, '"' | '\\' | '\u{85}' | '\u{2028}' | '\u{2029}' | '\u{feff}')
-                        || !(('\u{20}'..='\u{7e}').contains(&c)
-                            || (self.opts.allow_unicode
-                                && (('\u{a0}'..='\u{d7ff}').contains(&c) || ('\u{e000}'..='\u{fffd}').contains(&c))))
+                    matches!(
+                        c,
+                        '"' | '\\' | '\u{85}' | '\u{2028}' | '\u{2029}' | '\u{feff}'
+                    ) || !(('\u{20}'..='\u{7e}').contains(&c)
+                        || (self.opts.allow_unicode
+                            && (('\u{a0}'..='\u{d7ff}').contains(&c)
+                                || ('\u{e000}'..='\u{fffd}').contains(&c))))
                 }
             };
             if needs_escape {
@@ -732,7 +781,11 @@ impl Emitter {
                 && (self.column as i64 + (end as i64 - start as i64)) > self.opts.width as i64
                 && split
             {
-                let mut data: String = if start < end { text[start..end].iter().collect() } else { String::new() };
+                let mut data: String = if start < end {
+                    text[start..end].iter().collect()
+                } else {
+                    String::new()
+                };
                 data.push('\\');
                 if start < end {
                     start = end;
@@ -759,13 +812,20 @@ mod tests {
 
     fn dump(src: &str, pretty: bool) -> String {
         let node = parse_document(src, SourceId(0)).unwrap();
-        let opts = if pretty { DumpOptions::default() } else { DumpOptions::pyyaml_default() };
+        let opts = if pretty {
+            DumpOptions::default()
+        } else {
+            DumpOptions::pyyaml_default()
+        };
         dump_yaml(&node, &opts)
     }
 
     #[test]
     fn pretty_dumper_basics() {
-        let out = dump("b: [1, 2]\na:\n  x: 'yes'\n  y: ''\n  z: null\n  w: '123'\n  v: hello world\n  u: 1.0\n", true);
+        let out = dump(
+            "b: [1, 2]\na:\n  x: 'yes'\n  y: ''\n  z: null\n  w: '123'\n  v: hello world\n  u: 1.0\n",
+            true,
+        );
         assert_eq!(
             out,
             "a:\n  u: 1.0\n  v: hello world\n  w: '123'\n  x: 'yes'\n  y: ''\n  z: null\nb:\n  - 1\n  - 2\n"

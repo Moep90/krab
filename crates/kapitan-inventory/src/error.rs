@@ -56,12 +56,19 @@ impl Diagnostic {
     }
 
     pub fn warning(code: &'static str, message: impl Into<String>) -> Self {
-        Diagnostic { severity: Severity::Warning, ..Self::error(code, message) }
+        Diagnostic {
+            severity: Severity::Warning,
+            ..Self::error(code, message)
+        }
     }
 
     pub fn with_label(mut self, origin: Origin, text: impl Into<String>) -> Self {
         if !origin.is_synthetic() {
-            self.labels.push(Label { origin, location: None, text: text.into() });
+            self.labels.push(Label {
+                origin,
+                location: None,
+                text: text.into(),
+            });
         }
         self
     }
@@ -126,7 +133,8 @@ impl Error {
     }
 
     pub fn with_label(mut self, origin: Origin, text: impl Into<String>) -> Self {
-        *self.0 = std::mem::replace(&mut *self.0, Diagnostic::error("", "")).with_label(origin, text);
+        *self.0 =
+            std::mem::replace(&mut *self.0, Diagnostic::error("", "")).with_label(origin, text);
         self
     }
 

@@ -30,7 +30,9 @@ impl miette::Diagnostic for Rendered {
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        self.help.as_ref().map(|h| Box::new(h) as Box<dyn std::fmt::Display>)
+        self.help
+            .as_ref()
+            .map(|h| Box::new(h) as Box<dyn std::fmt::Display>)
     }
 
     fn source_code(&self) -> Option<&dyn miette::SourceCode> {
@@ -38,7 +40,11 @@ impl miette::Diagnostic for Rendered {
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
-        if self.labels.is_empty() { None } else { Some(Box::new(self.labels.iter().cloned())) }
+        if self.labels.is_empty() {
+            None
+        } else {
+            Some(Box::new(self.labels.iter().cloned()))
+        }
     }
 
     fn severity(&self) -> Option<miette::Severity> {
@@ -51,7 +57,11 @@ fn offset_of(text: &str, line: u32, col: u32) -> usize {
     for (i, l) in text.split_inclusive('\n').enumerate() {
         if i + 1 == line as usize {
             let col = (col.max(1) - 1) as usize;
-            let in_line = l.char_indices().nth(col).map(|(b, _)| b).unwrap_or(l.trim_end_matches('\n').len());
+            let in_line = l
+                .char_indices()
+                .nth(col)
+                .map(|(b, _)| b)
+                .unwrap_or(l.trim_end_matches('\n').len());
             return offset + in_line;
         }
         offset += l.len();
@@ -83,19 +93,27 @@ pub fn to_report(d: &Diagnostic) -> Report {
     let mut primary_file: Option<std::path::PathBuf> = None;
     for label in &d.labels {
         let Some(loc) = &label.location else { continue };
-        let text = texts.entry(loc.file.clone()).or_insert_with(|| std::fs::read_to_string(&loc.file).ok());
+        let text = texts
+            .entry(loc.file.clone())
+            .or_insert_with(|| std::fs::read_to_string(&loc.file).ok());
         match (&primary_file, text) {
             (None, Some(text)) => {
                 let offset = offset_of(text, loc.line, loc.col);
                 let len = span_len(text, offset);
-                labels.push(LabeledSpan::new_with_span(Some(label.text.clone()), SourceSpan::new(offset.into(), len)));
+                labels.push(LabeledSpan::new_with_span(
+                    Some(label.text.clone()),
+                    SourceSpan::new(offset.into(), len),
+                ));
                 source = Some(NamedSource::new(loc.file.to_string_lossy(), text.clone()));
                 primary_file = Some(loc.file.clone());
             }
             (Some(pf), Some(text)) if pf == &loc.file => {
                 let offset = offset_of(text, loc.line, loc.col);
                 let len = span_len(text, offset);
-                labels.push(LabeledSpan::new_with_span(Some(label.text.clone()), SourceSpan::new(offset.into(), len)));
+                labels.push(LabeledSpan::new_with_span(
+                    Some(label.text.clone()),
+                    SourceSpan::new(offset.into(), len),
+                ));
             }
             _ => extra.push(format!("{}: {}", loc, label.text)),
         }
@@ -108,7 +126,13 @@ pub fn to_report(d: &Diagnostic) -> Report {
             None => related,
         });
     }
-    Report::new(Rendered { message, code: d.code.to_string(), help, source, labels })
+    Report::new(Rendered {
+        message,
+        code: d.code.to_string(),
+        help,
+        source,
+        labels,
+    })
 }
 
 pub fn print_diagnostic(d: &Diagnostic, json: bool) {

@@ -46,13 +46,27 @@ impl Client {
     pub fn connect(socket: &Path) -> std::io::Result<Client> {
         let stream = UnixStream::connect(socket)?;
         stream.set_read_timeout(Some(Duration::from_secs(150)))?;
-        Ok(Client { reader: BufReader::new(stream.try_clone()?), writer: stream, next_id: 1, socket: socket.to_path_buf() })
+        Ok(Client {
+            reader: BufReader::new(stream.try_clone()?),
+            writer: stream,
+            next_id: 1,
+            socket: socket.to_path_buf(),
+        })
     }
 
-    pub fn call<P: Serialize, R: DeserializeOwned>(&mut self, method: &str, params: P) -> Result<R, ClientError> {
+    pub fn call<P: Serialize, R: DeserializeOwned>(
+        &mut self,
+        method: &str,
+        params: P,
+    ) -> Result<R, ClientError> {
         let id = self.next_id;
         self.next_id += 1;
-        let req = Request { jsonrpc: "2.0".into(), id, method: method.into(), params: serde_json::to_value(params).unwrap() };
+        let req = Request {
+            jsonrpc: "2.0".into(),
+            id,
+            method: method.into(),
+            params: serde_json::to_value(params).unwrap(),
+        };
         let mut line = serde_json::to_vec(&req).unwrap();
         line.push(b'\n');
         self.writer.write_all(&line)?;
@@ -61,12 +75,16 @@ impl Client {
         if self.reader.read_line(&mut buf)? == 0 {
             return Err(ClientError::Protocol("server closed the connection".into()));
         }
-        let resp: Response = serde_json::from_str(&buf).map_err(|e| ClientError::Protocol(e.to_string()))?;
+        let resp: Response =
+            serde_json::from_str(&buf).map_err(|e| ClientError::Protocol(e.to_string()))?;
         if let Some(err) = resp.error {
             return Err(ClientError::Rpc(err));
         }
-        let result = resp.result.ok_or_else(|| ClientError::Protocol("response without result".into()))?;
-        serde_json::from_value(result).map_err(|e| ClientError::Protocol(format!("unexpected result: {e}")))
+        let result = resp
+            .result
+            .ok_or_else(|| ClientError::Protocol("response without result".into()))?;
+        serde_json::from_value(result)
+            .map_err(|e| ClientError::Protocol(format!("unexpected result: {e}")))
     }
 
     pub fn info(&mut self) -> Result<InfoResult, ClientError> {
@@ -98,11 +116,20 @@ impl Connector {
         let socket = self.socket();
         let mut client = Client::connect(&socket).ok()?;
         match client.info() {
-            Ok(info) if info.version == self.version && info.protocol == PROTOCOL_VERSION => Some(client),
+            Ok(info) if info.version == self.version && info.protocol == PROTOCOL_VERSION => {
+                Some(client)
+            }
             Ok(info) => {
-                tracing::info!("server version {} != {}, restarting it", info.version, self.version);
+                tracing::info!(
+                    "server version {} != {}, restarting it",
+                    info.version,
+                    self.version
+                );
                 let _ = client.shutdown();
-                wait_until(|| !crate::rpc::socket_alive(&socket), Duration::from_secs(3));
+                wait_until(
+                    || !crate::rpc::socket_alive(&socket),
+                    Duration::from_secs(3),
+                );
                 None
             }
             Err(_) => None,
@@ -116,7 +143,10 @@ impl Connector {
         }
         self.spawn()?;
         let socket = self.socket();
-        if !wait_until(|| crate::rpc::socket_alive(&socket), Duration::from_secs(10)) {
+        if !wait_until(
+            || crate::rpc::socket_alive(&socket),
+            Duration::from_secs(10),
+        ) {
             return Err(ClientError::Protocol(format!(
                 "server did not start; see {}",
                 paths::log_path(&self.inventory_root).display()
@@ -131,7 +161,10 @@ impl Connector {
         if let Some(parent) = log.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let log_file = std::fs::OpenOptions::new().create(true).append(true).open(&log)?;
+        let log_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)?;
         let err_file = log_file.try_clone()?;
         let mut cmd = Command::new(&self.exe);
         cmd.arg("server")

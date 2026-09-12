@@ -31,10 +31,18 @@ pub enum MergeEvent {
         new_type: &'static str,
     },
     /// An item was appended to an existing list.
-    ListAppend { path: KeyPath, index: usize, origin: Origin },
+    ListAppend {
+        path: KeyPath,
+        index: usize,
+        origin: Origin,
+    },
     /// A `${...}` placeholder was expanded at merge time so a container could
     /// be merged into it.
-    Dereference { path: KeyPath, expr: String, origin: Origin },
+    Dereference {
+        path: KeyPath,
+        expr: String,
+        origin: Origin,
+    },
 }
 
 /// Evaluates an interpolation found in the destination tree while merging.
@@ -64,7 +72,12 @@ pub enum ListMode {
 
 /// Merge `src` into `root` (both maps at the top level) with kapitan's
 /// inventory semantics (`ListMode::ExtendUnique`).
-pub fn merge(root: &mut Node, src: Node, deref: &dyn MergeDeref, log: &mut Option<&mut Vec<MergeEvent>>) {
+pub fn merge(
+    root: &mut Node,
+    src: Node,
+    deref: &dyn MergeDeref,
+    log: &mut Option<&mut Vec<MergeEvent>>,
+) {
     merge_with_mode(root, src, ListMode::ExtendUnique, deref, log);
 }
 
@@ -107,9 +120,14 @@ fn merge_at(
                 return;
             }
             for item in src_list {
-                if mode == ListMode::Extend || !dest_list.iter().any(|d| d.value.py_eq(&item.value)) {
+                if mode == ListMode::Extend || !dest_list.iter().any(|d| d.value.py_eq(&item.value))
+                {
                     if let Some(log) = log {
-                        log.push(MergeEvent::ListAppend { path: path.clone(), index: dest_list.len(), origin: item.origin });
+                        log.push(MergeEvent::ListAppend {
+                            path: path.clone(),
+                            index: dest_list.len(),
+                            origin: item.origin,
+                        });
                     }
                     dest_list.push(item);
                 }
@@ -123,7 +141,11 @@ fn merge_at(
             match resolved {
                 Some(container) if container.is_container() => {
                     if let Some(log) = log {
-                        log.push(MergeEvent::Dereference { path: path.clone(), expr, origin: dest_origin });
+                        log.push(MergeEvent::Dereference {
+                            path: path.clone(),
+                            expr,
+                            origin: dest_origin,
+                        });
                     }
                     *get_mut(root, path).unwrap() = Node::new(container, dest_origin);
                     merge_at(root, path, src, mode, deref, log);
@@ -142,7 +164,11 @@ fn replace(root: &mut Node, path: &KeyPath, src: Node, log: &mut Option<&mut Vec
             path: path.clone(),
             old: dest.origin,
             new: src.origin,
-            old_value: if dest.value.is_container() { None } else { Some(dest.value.clone()) },
+            old_value: if dest.value.is_container() {
+                None
+            } else {
+                Some(dest.value.clone())
+            },
             old_type: dest.value.type_name(),
             new_type: src.value.type_name(),
         });
@@ -199,17 +225,29 @@ mod tests {
         let src = doc("a: {x: 2, y: [2, 3], z: 9}\nc: scalar\nd: [1]\n", 1);
         let mut events = Vec::new();
         merge(&mut dest, src, &NoDeref, &mut Some(&mut events));
-        assert_eq!(json(&dest), r#"{"a":{"x":2,"y":[1,2,3],"z":9},"b":"keep","c":"scalar","d":[1]}"#);
+        assert_eq!(
+            json(&dest),
+            r#"{"a":{"x":2,"y":[1,2,3],"z":9},"b":"keep","c":"scalar","d":[1]}"#
+        );
         let overrides: Vec<_> = events
             .iter()
             .filter_map(|e| match e {
-                MergeEvent::Override { path, old, new, .. } => Some((path.to_string(), old.file.0, new.file.0)),
+                MergeEvent::Override { path, old, new, .. } => {
+                    Some((path.to_string(), old.file.0, new.file.0))
+                }
                 _ => None,
             })
             .collect();
-        assert_eq!(overrides, vec![("a.x".to_string(), 0, 1), ("c".to_string(), 0, 1)]);
-        assert!(matches!(events.iter().find(|e| matches!(e, MergeEvent::ListAppend { .. })),
-            Some(MergeEvent::ListAppend { index: 2, .. })));
+        assert_eq!(
+            overrides,
+            vec![("a.x".to_string(), 0, 1), ("c".to_string(), 0, 1)]
+        );
+        assert!(matches!(
+            events
+                .iter()
+                .find(|e| matches!(e, MergeEvent::ListAppend { .. })),
+            Some(MergeEvent::ListAppend { index: 2, .. })
+        ));
     }
 
     #[test]
