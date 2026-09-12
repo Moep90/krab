@@ -80,6 +80,14 @@ pub struct LoadedFile {
     pub doc: ClassDoc,
 }
 
+/// A class file and the number of rendered targets that include it.
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
+pub struct ClassUsage {
+    pub name: String,
+    pub file: PathBuf,
+    pub targets: usize,
+}
+
 /// Everything a class contributes, including its own classes, memoised per
 /// class file. Merging two closures is associative, so a class rendered once
 /// serves every target that includes it.
@@ -144,6 +152,9 @@ pub struct RenderedTarget {
     pub probes: Vec<PathBuf>,
     /// Content digest over `files`: identical digest means identical render.
     pub digest: String,
+    /// Digest of the rendered document (`to_document()` as JSON): identical
+    /// digest means identical compile input.
+    pub doc_digest: String,
     #[serde(skip)]
     pub provenance: Provenance,
     pub warnings: Vec<Diagnostic>,
@@ -327,6 +338,63 @@ impl Inventory {
             )
             .with_help("list targets with `kapitan inventory targets`")
         })
+    }
+
+    /// Every class file under `classes/`, with its dotted class name.
+    pub fn class_files(&self) -> Result<Vec<(String, PathBuf)>> {
+        let dir = self.cfg.classes_dir();
+        let mut files = Vec::new();
+        if dir.is_dir() {
+            walk(&dir, &mut files)?;
+        }
+        files.sort();
+        Ok(files
+            .into_iter()
+            .filter(|f| matches!(f.extension().and_then(|e| e.to_str()), Some("yml" | "yaml")))
+            .map(|f| {
+                let rel = f.strip_prefix(&dir).unwrap().with_extension("");
+                let mut name = rel
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, ".");
+                if let Some(stripped) = name.strip_suffix(".init") {
+                    name = stripped.to_string();
+                } else if name == "init" {
+                    name = String::new();
+                }
+                (name, f)
+            })
+            .collect())
+    }
+
+    /// How many rendered targets each class file ends up in. Classes with a
+    /// zero count are dead: nothing includes them.
+    pub fn class_usage(&self, report: &RenderReport) -> Result<Vec<ClassUsage>> {
+        let mut usage: Vec<ClassUsage> = self
+            .class_files()?
+            .into_iter()
+            .map(|(name, file)| ClassUsage {
+                name,
+                file,
+                targets: 0,
+            })
+            .collect();
+        let index: HashMap<&PathBuf, usize> = usage
+            .iter()
+            .enumerate()
+            .map(|(i, u)| (&u.file, i))
+            .collect();
+        let mut counts = vec![0usize; usage.len()];
+        for t in report.targets.values() {
+            for f in t.files.iter().skip(1) {
+                if let Some(&i) = index.get(f) {
+                    counts[i] += 1;
+                }
+            }
+        }
+        for (u, c) in usage.iter_mut().zip(counts) {
+            u.targets = c;
+        }
+        Ok(usage)
     }
 
     // ---- files & classes --------------------------------------------------
@@ -587,7 +655,7 @@ impl Inventory {
             }
         }
         let digest = hasher.finalize().to_hex().to_string();
-        Ok(RenderedTarget {
+        let mut target = RenderedTarget {
             name: spec.name.clone(),
             path: spec.path.clone(),
             parameters: params,
@@ -597,12 +665,17 @@ impl Inventory {
             files,
             probes,
             digest,
+            doc_digest: String::new(),
             provenance: Provenance {
                 merges: vec![log],
                 resolutions,
             },
             warnings,
-        })
+        };
+        target.doc_digest = blake3::hash(&serde_json::to_vec(&target.to_document()).unwrap())
+            .to_hex()
+            .to_string();
+        Ok(target)
     }
 
     pub fn render_named(&self, name: &str) -> Result<RenderedTarget> {

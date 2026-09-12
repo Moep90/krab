@@ -258,7 +258,9 @@ fn join_with(ctx: &mut Ctx, name: &str, args: &[Value], quote: bool) -> Resolver
     let items = match ctx.select(&key)? {
         Some(Value::List(l)) => l,
         Some(other) => {
-            return Err(format!("{name} resolver expects a list, got {}", other.type_name()).into());
+            return Err(
+                format!("{name} resolver expects a list, got {}", other.type_name()).into(),
+            );
         }
         None => return Err(format!("{name} resolver expects a list, got NoneType").into()),
     };

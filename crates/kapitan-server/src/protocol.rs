@@ -92,6 +92,8 @@ pub struct TargetSummary {
     pub path: String,
     pub file: PathBuf,
     pub digest: Option<String>,
+    #[serde(default)]
+    pub doc_digest: Option<String>,
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Diagnostic>,

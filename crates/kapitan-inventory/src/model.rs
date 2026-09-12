@@ -359,7 +359,11 @@ pub fn normalize(params: &mut Node, target: &str) -> Result<()> {
             let dep_type = match item.get("type").map(|n| &n.value) {
                 Some(Value::Str(s)) => s.clone(),
                 _ => {
-                    return Err(ctx.err(item, &path, "dependency is missing a valid `type`".into()));
+                    return Err(ctx.err(
+                        item,
+                        &path,
+                        "dependency is missing a valid `type`".into(),
+                    ));
                 }
             };
             let Some(fields) = dependency_fields(&dep_type) else {

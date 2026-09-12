@@ -24,7 +24,9 @@ pub mod model;
 pub mod pyfmt;
 pub mod resolvers;
 
-pub use inventory::{Inventory, InventoryConfig, RenderReport, RenderedTarget, TargetSpec};
+pub use inventory::{
+    ClassUsage, Inventory, InventoryConfig, RenderReport, RenderedTarget, TargetSpec,
+};
 pub use resolvers::Registry;
 pub mod dotkapitan;
 pub mod explain;
