@@ -16,6 +16,8 @@ pub struct DotKapitan {
     pub file: Option<PathBuf>,
     /// The raw `compile:` section, keys as written (`search-paths`, `output-path`, ...).
     pub compile: Map,
+    /// The raw `inventory:` section.
+    pub inventory: Map,
 }
 
 impl DotKapitan {
@@ -29,6 +31,16 @@ impl DotKapitan {
         let node = parse_document(&text, SourceId::SYNTHETIC)?;
         let mut cfg = DotKapitan {
             file: Some(file),
+            compile: node
+                .get("compile")
+                .and_then(Node::as_map)
+                .cloned()
+                .unwrap_or_default(),
+            inventory: node
+                .get("inventory")
+                .and_then(Node::as_map)
+                .cloned()
+                .unwrap_or_default(),
             ..Default::default()
         };
         let section = |name: &str| node.get(name).and_then(Node::as_map);
@@ -79,5 +91,47 @@ impl DotKapitan {
             Value::Bool(b) => Some(b),
             _ => None,
         }
+    }
+
+    pub fn compile_int(&self, key: &str) -> Option<i64> {
+        match self.compile.get(key)?.value {
+            Value::Int(i) => Some(i),
+            _ => None,
+        }
+    }
+
+    pub fn inventory_str(&self, key: &str) -> Option<String> {
+        self.inventory
+            .get(key)
+            .and_then(|n| n.as_str())
+            .map(str::to_string)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_compile_section() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".kapitan"),
+            "version: 0.36\nglobal:\n  inventory-backend: omegaconf\ncompile:\n  prune: true\n  indent: 4\n  search-paths:\n    - .\n    - ./system/\ninventory:\n  multiline-string-style: literal\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        assert_eq!(
+            dot.compile_strings("search-paths"),
+            Some(vec![".".to_string(), "./system/".to_string()])
+        );
+        assert_eq!(dot.compile_bool("prune"), Some(true));
+        assert_eq!(dot.compile_int("indent"), Some(4));
+        assert_eq!(
+            dot.inventory_str("multiline-string-style").as_deref(),
+            Some("literal")
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

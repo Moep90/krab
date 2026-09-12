@@ -7,7 +7,11 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use clap::Args;
-use kapitan_compile::{CompileOptions, DocSource, Event, PythonCmd, Selection, Status};
+use kapitan_compile::{
+    Backend, CompileOptions, DocProvider, DocSource, Event, NativeOptions, PythonCmd, Selection,
+    Status,
+};
+use kapitan_inventory::emit::MultilineStyle;
 use kapitan_server::protocol::{TargetParams, TargetResult, TargetsResult};
 
 use crate::app::{App, Failure};
@@ -55,6 +59,17 @@ pub struct CompileArgs {
     /// Extra flags passed through to kapitan's compile (e.g. --indent 4)
     #[arg(long = "flag", num_args = 1)]
     flags: Vec<String>,
+
+    /// `native` runs everything in Rust (Python only evaluates kadet
+    /// components); `python` runs kapitan's own input types in a worker
+    #[arg(long, value_enum, default_value_t = BackendArg::Native)]
+    backend: BackendArg,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
+pub enum BackendArg {
+    Native,
+    Python,
 }
 
 pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
@@ -104,6 +119,37 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         targets: args.targets.clone(),
         labels,
     };
+    let refs_path = app
+        .dot
+        .compile_str("refs-path")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("./refs"));
+    let refs_path = if refs_path.is_absolute() {
+        refs_path
+    } else {
+        repo_root.join(refs_path)
+    };
+    // The reference resolves the multiline style from the *inventory* section
+    // (its compile flag is shadowed); default is double quotes.
+    let multiline = app
+        .dot
+        .inventory_str("multiline-string-style")
+        .and_then(|s| kapitan_compile::native::parse_style(&s))
+        .unwrap_or(MultilineStyle::DoubleQuotes);
+    let native = NativeOptions {
+        repo_root: repo_root.clone(),
+        search_paths: search_paths.clone(),
+        refs_path,
+        embed_refs: app.dot.compile_bool("embed-refs").unwrap_or(false),
+        reveal: args.reveal,
+        indent: app.dot.compile_int("indent").unwrap_or(2).max(0) as usize,
+        use_rapidyaml: app.dot.compile_bool("yaml-use-rapidyaml").unwrap_or(false),
+        null_as_empty: app
+            .dot
+            .compile_bool("yaml-dump-null-as-empty")
+            .unwrap_or(false),
+        multiline,
+    };
     let opts = CompileOptions {
         repo_root: repo_root.clone(),
         output_path,
@@ -117,6 +163,11 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         }),
         force: args.force,
         dry_run: args.dry_run,
+        backend: match args.backend {
+            BackendArg::Native => Backend::Native,
+            BackendArg::Python => Backend::Python,
+        },
+        native,
     };
     let source = AppDocs { app };
 
@@ -138,9 +189,13 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
                 } else if opts.dry_run {
                     let _ = writeln!(err, "{stale}/{total} targets would compile");
                 } else {
+                    let backend = match opts.backend {
+                        Backend::Native => "native",
+                        Backend::Python => "python",
+                    };
                     let _ = writeln!(
                         err,
-                        "compiling {stale}/{total} targets with {workers} worker(s) ({})",
+                        "compiling {stale}/{total} targets with {workers} worker(s) ({backend}; {})",
                         opts.python.description
                     );
                 }
@@ -220,6 +275,98 @@ struct AppDocs<'a> {
     app: &'a App,
 }
 
+/// On-demand document access handed to generators and templates.
+struct AppProvider {
+    socket: Option<PathBuf>,
+    inv: kapitan_inventory::Inventory,
+    client: parking_lot::Mutex<Option<kapitan_server::Client>>,
+}
+
+impl AppProvider {
+    fn with_client<T>(
+        &self,
+        f: impl FnOnce(&mut kapitan_server::Client) -> Result<T, kapitan_server::ClientError>,
+    ) -> Option<T> {
+        let socket = self.socket.as_ref()?;
+        let mut guard = self.client.lock();
+        if guard.is_none() {
+            *guard = kapitan_server::Client::connect(socket).ok();
+        }
+        let client = guard.as_mut()?;
+        f(client).ok()
+    }
+}
+
+impl DocProvider for AppProvider {
+    fn get(&self, name: &str) -> Option<Value> {
+        if self.socket.is_some() {
+            return self
+                .with_client(|c| {
+                    c.call::<_, TargetResult>(
+                        "inventory.target",
+                        TargetParams {
+                            name: name.to_string(),
+                            path: None,
+                        },
+                    )
+                })
+                .map(|r| r.document);
+        }
+        self.inv
+            .render_named(name)
+            .ok()
+            .map(|t| t.to_document().value.to_json())
+    }
+
+    fn names(&self) -> Vec<String> {
+        if self.socket.is_some() {
+            return self
+                .with_client(|c| {
+                    c.call::<_, TargetsResult>("inventory.targets", serde_json::Value::Null)
+                })
+                .map(|r| {
+                    r.targets
+                        .into_iter()
+                        .filter(|t| t.ok)
+                        .map(|t| t.name)
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
+        self.inv
+            .discover_targets()
+            .map(|s| s.into_iter().map(|t| t.name).collect())
+            .unwrap_or_default()
+    }
+
+    fn all(&self) -> BTreeMap<String, Value> {
+        if self.socket.is_some() {
+            return self
+                .with_client(|c| {
+                    c.call::<_, kapitan_server::protocol::AllResult>(
+                        "inventory.all",
+                        serde_json::Value::Null,
+                    )
+                })
+                .map(|r| r.documents.into_iter().collect())
+                .unwrap_or_default();
+        }
+        self.inv
+            .render_all()
+            .map(|r| {
+                r.targets
+                    .iter()
+                    .map(|(n, t)| (n.clone(), t.to_document().value.to_json()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn socket(&self) -> Option<PathBuf> {
+        self.socket.clone()
+    }
+}
+
 impl DocSource for AppDocs<'_> {
     fn digests(&self) -> Result<BTreeMap<String, String>, String> {
         if let Some(mut c) = self.app.client() {
@@ -285,6 +432,19 @@ impl DocSource for AppDocs<'_> {
             out.insert(name.clone(), t.to_document().value.to_json());
         }
         Ok(out)
+    }
+
+    fn provider(&self) -> kapitan_compile::SharedDocs {
+        // A live server means documents can be fetched one at a time.
+        let socket = self.app.client().map(|c| c.socket.clone());
+        std::sync::Arc::new(AppProvider {
+            socket,
+            inv: kapitan_inventory::Inventory::new(
+                self.app.inv.cfg.clone(),
+                self.app.inv.registry.clone(),
+            ),
+            client: parking_lot::Mutex::new(None),
+        })
     }
 
     fn all_docs(&self) -> Result<BTreeMap<String, Value>, String> {

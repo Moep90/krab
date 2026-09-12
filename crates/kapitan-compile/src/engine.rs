@@ -12,10 +12,22 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::digest::{Digests, digest_str};
+use crate::inputs::Reads;
+use crate::inputs::kadet::kadet_runner_digest;
 use crate::manifest::{MANIFEST_FILE, MANIFEST_VERSION, Manifest, TargetRecord};
+use crate::native::{NativeCompiler, NativeOptions};
 use crate::plan::TargetPlan;
 use crate::python::{PythonCmd, materialize_runner, runner_digest};
 use crate::worker::{Worker, WorkerError};
+
+/// How targets are compiled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backend {
+    /// Native input types; Python only evaluates kadet components.
+    Native,
+    /// kapitan's Python input types inside a worker process (reference behaviour).
+    Python,
+}
 
 #[derive(Clone, Debug)]
 pub struct CompileOptions {
@@ -32,6 +44,9 @@ pub struct CompileOptions {
     pub force: bool,
     /// Only report what would be compiled.
     pub dry_run: bool,
+    pub backend: Backend,
+    /// Settings for the native backend.
+    pub native: NativeOptions,
 }
 
 impl CompileOptions {
@@ -48,8 +63,25 @@ impl CompileOptions {
             "search_paths": self.search_paths,
             "flags": self.flags,
             "output_path": self.output_path,
+            "backend": format!("{:?}", self.backend),
+            "native": format!("{:?}", self.native),
         });
         digest_str(&repr.to_string())
+    }
+
+    fn engine_identity(&self, versions: &str) -> String {
+        match self.backend {
+            Backend::Native => format!(
+                "kapitan {} native {} {versions}",
+                env!("CARGO_PKG_VERSION"),
+                kadet_runner_digest()
+            ),
+            Backend::Python => format!(
+                "kapitan {} runner {} {versions}",
+                env!("CARGO_PKG_VERSION"),
+                runner_digest()
+            ),
+        }
     }
 }
 
@@ -129,6 +161,8 @@ pub trait DocSource: Sync {
     fn docs(&self, names: &[String]) -> Result<BTreeMap<String, Value>, String>;
     /// Rendered documents of every target (workers need the global inventory).
     fn all_docs(&self) -> Result<BTreeMap<String, Value>, String>;
+    /// On-demand access to documents for generators and templates.
+    fn provider(&self) -> crate::docs::SharedDocs;
 }
 
 /// Which targets to consider.
@@ -157,11 +191,7 @@ pub fn compile(
         .python
         .versions()
         .unwrap_or_else(|e| format!("unknown ({e})"));
-    let engine = format!(
-        "kapitan {} runner {} {versions}",
-        env!("CARGO_PKG_VERSION"),
-        runner_digest()
-    );
+    let engine = opts.engine_identity(&versions);
     let config_digest = opts.config_digest();
     let digests = Digests::new();
     let compiled_dir = opts.compiled_dir();
@@ -265,7 +295,22 @@ pub fn compile(
     let mut removed = Vec::new();
     if !stale_names.is_empty() {
         // 2. Documents (all of them: workers serve the global inventory) and plans.
-        let all_docs = source.all_docs()?;
+        // With a server, only the stale targets' documents are fetched;
+        // generators and templates pull other targets from the server on demand.
+        let provider = source.provider();
+        let socket = provider
+            .socket()
+            .filter(|_| opts.backend == Backend::Native);
+        let all_docs: BTreeMap<String, Value> = if socket.is_some() {
+            source.docs(
+                &stale_names
+                    .iter()
+                    .map(|(n, _)| n.clone())
+                    .collect::<Vec<_>>(),
+            )?
+        } else {
+            source.all_docs()?
+        };
         let stale: Vec<(TargetPlan, String)> = stale_names
             .into_iter()
             .filter_map(|(name, reason)| {
@@ -286,8 +331,10 @@ pub fn compile(
         ));
         std::fs::create_dir_all(temp_root.join("compiled")).map_err(|e| e.to_string())?;
         let inventory_file = temp_root.join("inventory.json");
-        std::fs::write(&inventory_file, serde_json::to_vec(&all_docs).unwrap())
-            .map_err(|e| e.to_string())?;
+        if socket.is_none() {
+            std::fs::write(&inventory_file, serde_json::to_vec(&all_docs).unwrap())
+                .map_err(|e| e.to_string())?;
+        }
         let script = materialize_runner().map_err(|e| e.to_string())?;
         let init = json!({
             "cwd": opts.repo_root,
@@ -295,6 +342,20 @@ pub fn compile(
             "temp_root": temp_root,
             "flags": opts.flags,
         });
+        let native = match opts.backend {
+            Backend::Native => Some(
+                NativeCompiler::new(
+                    opts.native.clone(),
+                    opts.python.clone(),
+                    socket.as_deref(),
+                    &inventory_file,
+                    &opts.flags,
+                    provider.clone(),
+                )
+                .map_err(|e| format!("cannot set up the native compiler: {e}"))?,
+            ),
+            Backend::Python => None,
+        };
 
         manifest.engine = engine.clone();
         manifest.version = MANIFEST_VERSION;
@@ -305,6 +366,7 @@ pub fn compile(
         let ctx = Ctx {
             opts,
             engine: &engine,
+            native: native.as_ref(),
             compiled_dir: &compiled_dir,
             temp_root: &temp_root,
             all_digests: &all_digests,
@@ -374,6 +436,7 @@ pub fn compile(
 struct Ctx<'a> {
     opts: &'a CompileOptions,
     engine: &'a str,
+    native: Option<&'a NativeCompiler>,
     compiled_dir: &'a Path,
     temp_root: &'a Path,
     all_digests: &'a BTreeMap<String, String>,
@@ -393,6 +456,45 @@ fn run_one(
     manifest: &Mutex<Manifest>,
 ) -> Outcome {
     let started = Instant::now();
+    if let Some(native) = ctx.native {
+        let temp_dir = ctx.temp_root.join(&plan.name);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let temp_target = temp_dir.join("compiled").join(&plan.target_path);
+        let outcome = match native.compile_target(plan, &temp_dir) {
+            Ok(out) => {
+                match install_and_record(plan, out.reads, &temp_target, ctx, manifest, started) {
+                    Ok(()) => Outcome {
+                        target: plan.name.clone(),
+                        status: Status::Compiled {
+                            ms: started.elapsed().as_millis() as u64,
+                        },
+                        reason,
+                        warnings: out.warnings,
+                    },
+                    Err(e) => Outcome {
+                        target: plan.name.clone(),
+                        status: Status::Failed {
+                            error: e,
+                            traceback: None,
+                        },
+                        reason,
+                        warnings: out.warnings,
+                    },
+                }
+            }
+            Err(e) => Outcome {
+                target: plan.name.clone(),
+                status: Status::Failed {
+                    error: e,
+                    traceback: None,
+                },
+                reason,
+                warnings: vec![],
+            },
+        };
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        return outcome;
+    }
     let mut attempts = 0;
     loop {
         attempts += 1;
@@ -437,8 +539,14 @@ fn run_one(
                             .collect()
                     })
                     .unwrap_or_default();
-                let installed =
-                    install_and_record(plan, &resp, &temp_target, ctx, manifest, started);
+                let installed = install_and_record(
+                    plan,
+                    reads_from_response(&resp),
+                    &temp_target,
+                    ctx,
+                    manifest,
+                    started,
+                );
                 let _ = std::fs::remove_dir_all(&temp_dir);
                 match installed {
                     Ok(()) => {
@@ -491,9 +599,41 @@ fn run_one(
     }
 }
 
+/// Dependency information reported by the Python worker.
+fn reads_from_response(resp: &Value) -> Reads {
+    let mut reads = Reads::default();
+    for p in resp
+        .get("files")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        reads.file(Path::new(p));
+    }
+    for p in resp
+        .get("dirs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        reads.dir(Path::new(p));
+    }
+    reads.globals.extend(
+        resp.get("globals")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string),
+    );
+    reads
+}
+
 fn install_and_record(
     plan: &TargetPlan,
-    resp: &Value,
+    reads: Reads,
     temp_target: &Path,
     ctx: &Ctx,
     manifest: &Mutex<Manifest>,
@@ -516,33 +656,18 @@ fn install_and_record(
             deps.insert(rel, Digests::new().fingerprint(p));
         }
     };
-    for key in ["files", "dirs"] {
-        for p in resp
-            .get(key)
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-        {
-            record_dep(Path::new(p));
-        }
+    for p in reads.files.iter().chain(reads.dirs.iter()) {
+        record_dep(p);
     }
     for p in &plan.probes {
         record_dep(p);
     }
     let mut globals = BTreeMap::new();
-    let accessed: Vec<&str> = resp
-        .get("globals")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    if accessed.iter().any(|g| *g == "*") {
+    if reads.globals.iter().any(|g| g == "*") {
         globals.insert("*".to_string(), ctx.everything_digest.to_string());
     } else {
-        for g in accessed {
-            if g != plan.name
+        for g in &reads.globals {
+            if g != &plan.name
                 && let Some(d) = ctx.all_digests.get(g)
             {
                 globals.insert(g.to_string(), d.clone());
