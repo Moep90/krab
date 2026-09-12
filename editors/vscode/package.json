@@ -1,0 +1,36 @@
+{
+  "name": "kapitan",
+  "displayName": "Kapitan",
+  "description": "Kapitan inventory support: live diagnostics, hover with resolved values and provenance, go to definition, completion",
+  "version": "0.1.0",
+  "publisher": "kapicorp",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages", "Linters"],
+  "activationEvents": ["workspaceContains:**/.kapitan", "onLanguage:yaml"],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Kapitan",
+      "properties": {
+        "kapitan.path": {
+          "type": "string",
+          "default": "kapitan",
+          "description": "Path to the kapitan binary (must support `kapitan lsp`)."
+        },
+        "kapitan.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Trace LSP traffic in the Kapitan output channel."
+        }
+      }
+    },
+    "commands": [
+      { "command": "kapitan.restartServer", "title": "Kapitan: Restart Language Server" }
+    ]
+  },
+  "dependencies": { "vscode-languageclient": "^9.0.1" },
+  "devDependencies": { "@types/vscode": "^1.85.0", "@vscode/vsce": "^3.0.0" },
+  "scripts": { "package": "vsce package" }
+}

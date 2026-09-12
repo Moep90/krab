@@ -13,6 +13,7 @@ rust-version = "1.85"
 kapitan-inventory = { path = "crates/kapitan-inventory" }
 kapitan-server = { path = "crates/kapitan-server" }
 kapitan-compile = { path = "crates/kapitan-compile" }
+kapitan-lsp = { path = "crates/kapitan-lsp" }
 saphyr-parser = "0.0.12"
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive", "rc"] }
@@ -33,6 +34,10 @@ regex = "1"
 base64 = "0.22"
 glob = "0.3"
 hex = "0.4"
+lsp-server = "0.7"
+lsp-types = "0.95"
+url = "2"
+crossbeam-channel = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 parking_lot = "0.12"
