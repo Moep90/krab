@@ -1,0 +1,9 @@
+classes:
+  - roles.web
+
+parameters:
+  cache_copy:
+    ttl: 60
+  database:
+    engine: mysql
+  list: [c, d, a]

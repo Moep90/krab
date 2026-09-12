@@ -1,0 +1,72 @@
+classes:
+  - .database
+  - components.app.cache
+
+parameters:
+  app:
+    name: ${_kapitan_.name.short}
+    full: ${_kapitan_.name.full}
+    part1: ${_kapitan_.name.parts[1]}
+    hostname: ${replace:${target},.,-}.${org}.example
+    short_hostname: ${truncate:${app.hostname},20}
+    digest: ${sha256:${app.hostname}}
+    digest_short: ${sha256:${app.hostname},8}
+    config: ${defaults}
+    labels_yaml: ${to_yaml:defaults.labels}
+    labels_json: ${json:defaults.labels}
+    region_default: ${oc.select:nope.region,${region}}
+    maybe: ${oc.select:nope}
+    flag: ${if:${oc.select:app.enabled,},enabled}
+    choice: ${ifelse:true,yes,no}
+    neg: ${not:false}
+    both: ${and:true,1,nonempty}
+    either: ${or:false,0,}
+    same: ${equal:1,1.0}
+    tf_ref: ${escape:google_compute_network.default.self_link}
+    tf_expr: ${escape:'cidrsubnet("10.0.0.0/8", 8, ${defaults.replicas})'}
+    fullkey: ${fullkey:}
+    key_of_this: ${key:}
+    nested:
+      parent: ${parentkey:}
+      me: ${key:}
+      up: ${..name}
+    multiline: |
+      line one
+      line two ${org}
+    quoted: "a: b, [c] {d} #e"
+    unicode: "héllo wörld ✓"
+    long: "This is a long string that goes on and on so that PyYAML will have to fold it onto several lines when it emits the document as YAML text."
+    long_plain: This is a long plain scalar that also goes on and on so that PyYAML will have to fold it onto several lines when dumping.
+    added_default: ${default:nope.a,nope.b,fallback}
+    relpath: ${relpath:defaults.replicas}
+    keys: ${oc.dict.keys:defaults.labels}
+    values: ${oc.dict.values:defaults.labels}
+    as_list: ${list:${defaults.labels}}
+    as_dict: ${dict:${app.as_list}}
+    sum: ${add:1,2}
+    concat: ${add:a,b}
+    empty_arg: ${oc.select:zz,}
+    merged: "${merge:${defaults.labels},{extra: x}}"
+  kapitan:
+    compile:
+      - input_type: kadet
+        input_paths: [system/generators/kubernetes]
+        output_path: manifests
+      - name: docs
+        input_type: jinja2
+        input_paths: [templates/docs]
+        output_path: docs
+      - input_type: helm
+        input_paths: [charts/foo]
+        output_path: helm
+        output_type: yaml
+        helm_values:
+          replicas: ${defaults.replicas}
+      - input_type: external
+        input_paths: [scripts/run.sh]
+        output_path: ext
+        args: [--flag]
+        env_vars:
+          FOO: bar
+    labels:
+      type: kubernetes

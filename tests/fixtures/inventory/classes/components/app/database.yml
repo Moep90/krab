@@ -1,0 +1,9 @@
+classes:
+  - .common
+
+parameters:
+  database:
+    engine: postgres
+    hosts: [db1, db2]
+    settings:
+      pool: 5

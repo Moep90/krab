@@ -1,0 +1,8 @@
+classes:
+  - roles.web
+
+parameters:
+  defaults:
+    replicas: 1
+  app:
+    enabled: false

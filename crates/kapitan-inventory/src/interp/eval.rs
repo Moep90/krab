@@ -292,15 +292,24 @@ impl<'a> Evaluator<'a> {
                 }
                 let name = parts.join(".");
                 let mut values = Vec::with_capacity(args.len());
+                let mut kinds = Vec::with_capacity(args.len());
                 for a in args {
                     values.push(self.eval_element(a, at, origin)?);
+                    kinds.push(match a {
+                        Element::Prim(Prim::Interp(i)) => match **i {
+                            Interp::Node { .. } => crate::resolvers::ArgKind::Node,
+                            Interp::Resolver { .. } => crate::resolvers::ArgKind::Computed,
+                        },
+                        Element::Prim(Prim::Concat(_)) => crate::resolvers::ArgKind::Computed,
+                        _ => crate::resolvers::ArgKind::Literal,
+                    });
                 }
                 let Some(resolver) = self.registry.get(&name) else {
                     return Err(self
                         .err("interpolation::unknown_resolver", format!("unsupported interpolation type `{name}`"), at, origin)
                         .with_help(format!("known resolvers: {}", self.registry.names().join(", "))));
                 };
-                let mut ctx = Ctx { ev: self, at: at.clone(), origin, resolver: &name };
+                let mut ctx = Ctx { ev: self, at: at.clone(), origin, resolver: &name, arg_kinds: kinds };
                 match resolver(&mut ctx, &values) {
                     Ok(v) => Ok(Resolved::Owned(v)),
                     Err(e) => match e {

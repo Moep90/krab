@@ -1,0 +1,4 @@
+parameters:
+  database:
+    tls: true
+    hosts: [db0]

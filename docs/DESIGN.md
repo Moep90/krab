@@ -120,13 +120,39 @@ Every error is a `Diagnostic { code, message, target, path, labels, help }`.
 Labels carry origins that resolve to `file:line:col`. The CLI renders them with
 miette (source snippets) or as JSON lines (`--json`).
 
-## Server (planned in `kapitan-server`)
+## Server (`kapitan-server`)
 
-A daemon per inventory directory: holds `Inventory` and the rendered targets,
-watches `inventory/` with `notify`, maps a changed file to the class closures
-and targets that depend on it (each `RenderedTarget.files` lists them),
-re-renders those, and serves JSON-RPC 2.0 over a unix socket
-(`$XDG_RUNTIME_DIR/kapitan/<hash of inventory path>.sock`). The CLI connects
-when the socket exists and the versions match, otherwise it renders locally;
-`--no-daemon` forces local rendering. Every response carries the target digest
-so clients can cache. Secrets are never revealed server-side.
+One daemon per inventory directory, started on demand by the CLI (or with
+`kapitan server start`), exiting after 30 minutes without requests.
+
+* **State**: the `Inventory` (with its file and class-closure caches), the
+  rendered targets, the failed targets with their diagnostics, and an index
+  from every relevant path to the targets it matters to. "Relevant" means the
+  files a target was rendered from *and* every path probed while resolving
+  its class names, so creating `classes/common/init.yml` next to
+  `classes/common.yml` invalidates exactly the targets that include `common`.
+* **Watching**: `notify` (debounced 150 ms) on the inventory directory, plus
+  the real directories of symlinked files. Any event on a path re-renders the
+  indexed targets (prefix match for directories and vanished paths), retries
+  every failed target, and picks up new or deleted target files. Atomic
+  editor saves (write temp + rename) therefore cost one target render.
+* **Protocol**: JSON-RPC 2.0, newline delimited, over
+  `$XDG_RUNTIME_DIR/kapitan/<hash of inventory path>.sock` (see
+  `protocol.rs` for the method list). `inventory.wait` is a long poll on the
+  generation counter; `kapitan inventory watch` is a thin client of it.
+* **Parity**: the CLI uses the server when it can and renders locally
+  otherwise (`--no-daemon`, `--raw`, or a server that failed to start); the
+  same library code runs in both, so results are identical. A version
+  mismatch restarts the server transparently.
+* **Secrets** are never revealed server-side; the inventory holds references
+  only.
+
+## Testing
+
+`tests/fixtures/inventory` is a small inventory exercising class resolution,
+list merging, merge-time dereferencing, every shipped resolver, YAML 1.1
+scalars and emitter quirks; `tests/fixtures/expected/*.yaml` is the reference
+implementation's output for it (regenerate with `generate_expected.py`).
+`crates/kapitan-inventory/tests/fixture.rs` renders it and compares byte for
+byte. The production inventory this was developed against renders identically
+for all 160 targets.

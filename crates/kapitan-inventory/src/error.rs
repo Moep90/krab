@@ -2,6 +2,7 @@
 //! code, a message, optional labelled source locations and a help text, so
 //! the CLI can render it prettily and IDEs / LLM tooling can consume it as JSON.
 
+use std::borrow::Cow;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -28,7 +29,7 @@ pub struct Label {
 pub struct Diagnostic {
     pub severity: Severity,
     /// Stable machine readable code, e.g. `inventory::class_not_found`.
-    pub code: &'static str,
+    pub code: Cow<'static, str>,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
@@ -45,7 +46,7 @@ impl Diagnostic {
     pub fn error(code: &'static str, message: impl Into<String>) -> Self {
         Diagnostic {
             severity: Severity::Error,
-            code,
+            code: Cow::Borrowed(code),
             message: message.into(),
             target: None,
             path: None,
