@@ -203,8 +203,9 @@ daemon, so they are always current).
 Every command accepts `--json`. Tables become arrays of objects, rendered
 targets become JSON documents, diagnostics become one JSON object per line. Combined with `explain`, `deps`, `check --json` and
 `compile --dry-run --json` this gives a script or an LLM agent the same
-picture a person gets from the editor. `docs/ROADMAP.md` lists what is
-planned in that direction.
+picture a person gets from the editor. The `area: llm` issues on the
+project board (linked from `docs/ROADMAP.md`) list what is planned in that
+direction.
 
 ## Where next
 

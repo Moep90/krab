@@ -77,7 +77,7 @@ target names.
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | installing, the daemon, inspecting an inventory, compiling, editor setup |
 | [docs/CLI.md](docs/CLI.md) | every command and flag, environment variables, `.kapitan` keys |
 | [docs/DESIGN.md](docs/DESIGN.md) | the data model, the exact merge and interpolation semantics, provenance, the server protocol, how compile decides what is stale |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | what is left and what is planned |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | current status and a pointer to the project board where planned work is tracked |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | building, testing, checking parity against the reference implementation |
 | [editors/vscode/README.md](editors/vscode/README.md) | the VS Code extension |
 
