@@ -17,6 +17,7 @@ While an eval runs the evaluator may ask the host for things the same way
 
 import argparse
 import builtins
+import copy
 import inspect
 import io
 import json
@@ -211,7 +212,7 @@ class Recorder:
         self.reset()
 
     def reset(self):
-        self.files, self.dirs, self.globals = set(), set(), set()
+        self.files, self.dirs, self.globals, self.doc_reads = set(), set(), set(), set()
 
     def _real(self, path):
         try:
@@ -231,6 +232,14 @@ class Recorder:
     def global_target(self, key):
         if self.active:
             self.globals.add(key if isinstance(key, str) else "*")
+        if key == STATE.get("target"):
+            self.doc_read("*")
+
+    def doc_read(self, key):
+        """A part of the target's own document was read: `parameters.<key>`,
+        another top-level key, or `*` for all of it."""
+        if self.active:
+            self.doc_reads.add(key)
 
     def modules(self):
         out = set()
@@ -242,6 +251,160 @@ class Recorder:
 
 
 RECORDER = None
+STATE = {}
+
+
+def own_doc(name):
+    """`name` is the target being evaluated: whatever is read of its document
+    through this path is not tracked by key, so it counts as all of it."""
+    if RECORDER and name == STATE.get("target"):
+        RECORDER.doc_read("*")
+
+
+class RecordingParams:
+    """A target's `parameters` as a component sees them: the underlying
+    kadet.Dict, with every top-level key read noted so the compile knows
+    which parts of the document the component depends on. Anything that is
+    not a plain key read (iteration, Box methods, writes) counts as all."""
+
+    __slots__ = ("_box",)
+
+    def __init__(self, box):
+        object.__setattr__(self, "_box", box)
+
+    def _key(self, key):
+        RECORDER.doc_read(f"parameters.{key}" if isinstance(key, str) else "*")
+
+    def __getitem__(self, key):
+        self._key(key)
+        return self._box[key]
+
+    def get(self, key, default=None):
+        self._key(key)
+        return self._box.get(key, default)
+
+    def __contains__(self, key):
+        self._key(key)
+        return key in self._box
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if hasattr(type(self._box), name):
+            RECORDER.doc_read("*")
+        else:
+            self._key(name)
+        return getattr(self._box, name)
+
+    def __setattr__(self, name, value):
+        RECORDER.doc_read("*")
+        setattr(self._box, name, value)
+
+    def __setitem__(self, key, value):
+        RECORDER.doc_read("*")
+        self._box[key] = value
+
+    def __delitem__(self, key):
+        RECORDER.doc_read("*")
+        del self._box[key]
+
+    def __iter__(self):
+        RECORDER.doc_read("*")
+        return iter(self._box)
+
+    def __len__(self):
+        RECORDER.doc_read("*")
+        return len(self._box)
+
+    def __bool__(self):
+        RECORDER.doc_read("*")
+        return bool(self._box)
+
+    def __eq__(self, other):
+        RECORDER.doc_read("*")
+        return self._box == other
+
+    def __repr__(self):
+        RECORDER.doc_read("*")
+        return repr(self._box)
+
+    def __deepcopy__(self, memo):
+        RECORDER.doc_read("*")
+        return copy.deepcopy(self._box, memo)
+
+    def __copy__(self):
+        RECORDER.doc_read("*")
+        return copy.copy(self._box)
+
+
+class RecordingTarget:
+    """The document of the target being evaluated, as `inventory()` returns
+    it: `parameters` comes back as a RecordingParams, other top-level keys
+    are noted by name, anything else counts as reading the whole document."""
+
+    __slots__ = ("_box",)
+
+    def __init__(self, box):
+        object.__setattr__(self, "_box", box)
+
+    def _read(self, key, value):
+        if key == "parameters":
+            return RecordingParams(value())
+        RECORDER.doc_read(key if isinstance(key, str) else "*")
+        return value()
+
+    def __getitem__(self, key):
+        return self._read(key, lambda: self._box[key])
+
+    def get(self, key, default=None):
+        return self._read(key, lambda: self._box.get(key, default))
+
+    def __contains__(self, key):
+        RECORDER.doc_read(key if isinstance(key, str) else "*")
+        return key in self._box
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if hasattr(type(self._box), name):
+            RECORDER.doc_read("*")
+            return getattr(self._box, name)
+        return self._read(name, lambda: getattr(self._box, name))
+
+    def __setattr__(self, name, value):
+        RECORDER.doc_read("*")
+        setattr(self._box, name, value)
+
+    def __setitem__(self, key, value):
+        RECORDER.doc_read("*")
+        self._box[key] = value
+
+    def __iter__(self):
+        RECORDER.doc_read("*")
+        return iter(self._box)
+
+    def __len__(self):
+        RECORDER.doc_read("*")
+        return len(self._box)
+
+    def __bool__(self):
+        return True
+
+    def __eq__(self, other):
+        RECORDER.doc_read("*")
+        return self._box == other
+
+    def __repr__(self):
+        RECORDER.doc_read("*")
+        return repr(self._box)
+
+    def __deepcopy__(self, memo):
+        RECORDER.doc_read("*")
+        return copy.deepcopy(self._box, memo)
+
+    def __copy__(self):
+        RECORDER.doc_read("*")
+        return copy.copy(self._box)
 
 
 def install_hooks(recorder):
@@ -313,6 +476,7 @@ class FakeInventory:
         self._docs = docs
 
     def __getitem__(self, name):
+        own_doc(name)
         return self._docs[name]
 
     def __contains__(self, name):
@@ -323,28 +487,37 @@ class FakeInventory:
 
     @property
     def inventory(self):
+        own_doc(STATE.get("target"))
         return self._docs
 
     @property
     def targets(self):
+        own_doc(STATE.get("target"))
         return {n: FakeTarget(n, d) for n, d in self._docs.items()}
 
     def get_target(self, name, *a, **kw):
+        own_doc(name)
         doc = self._docs.get(name)
         return FakeTarget(name, doc) if doc is not None else None
 
     def get_targets(self, names=None, *a, **kw):
         if names:
+            for n in names:
+                own_doc(n)
             return {n: FakeTarget(n, self._docs[n]) for n in names if n in self._docs}
         return self.targets
 
     def get_parameters(self, names, *a, **kw):
         if isinstance(names, str):
+            own_doc(names)
             return (self._docs.get(names) or {}).get("parameters")
+        for n in names:
+            own_doc(n)
         return {n: {"parameters": (self._docs.get(n) or {}).get("parameters")} for n in names}
 
     @property
     def topics(self):
+        own_doc(STATE.get("target"))
         topics = {}
         for name, doc in self._docs.items():
             kap = (doc.get("parameters") or {}).get("kapitan") or {}
@@ -355,6 +528,8 @@ class FakeInventory:
         return {n: {"parameters": {"targets": t}} for n, t in topics.items()}
 
     def consumed_topics(self, target):
+        if target == STATE.get("target"):
+            RECORDER.doc_read("parameters.kapitan")
         kap = ((self._docs.get(target) or {}).get("parameters") or {}).get("kapitan") or {}
         return {n for n, v in (kap.get("topics") or {}).items() if isinstance(v, dict) and v.get("consume") is True}
 
@@ -401,7 +576,6 @@ class RecordingGlobal(dict):
         return self._docs.items()
 
 
-STATE = {}
 
 
 def op_init(req):
@@ -456,14 +630,20 @@ def op_init(req):
                 self._boxes[name] = kadet.Dict(self._source[name], default_box=self._lazy)
             return self._boxes[name]
 
+        def _target(self, name):
+            box = self._box(name)
+            return RecordingTarget(box) if name == STATE.get("target") else box
+
         def __getitem__(self, name):
-            RECORDER.global_target(name)
-            return self._box(name)
+            if name != STATE.get("target"):
+                RECORDER.global_target(name)
+            return self._target(name)
 
         def get(self, name, default=None):
-            RECORDER.global_target(name)
+            if name != STATE.get("target"):
+                RECORDER.global_target(name)
             try:
-                return self._box(name)
+                return self._target(name)
             except KeyError:
                 return default
 
@@ -485,14 +665,17 @@ def op_init(req):
 
         def values(self):
             RECORDER.global_target("*")
+            RECORDER.doc_read("*")
             return [self._box(n) for n, _ in self._source.items()]
 
         def items(self):
             RECORDER.global_target("*")
+            RECORDER.doc_read("*")
             return [(n, self._box(n)) for n, _ in self._source.items()]
 
         def to_dict(self):
             RECORDER.global_target("*")
+            RECORDER.doc_read("*")
             return {n: d for n, d in self._source.items()}
 
         def __getattr__(self, name):
@@ -552,6 +735,7 @@ def op_eval(req):
     input_params.setdefault("compile_path", req["compile_path"])
     RECORDER.reset()
     RECORDER.active = True
+    STATE["target"] = target
     token = current_target.set(target)
     try:
         kadet_input.search_paths.set(STATE["search_paths"] + [req["temp_dir"]])
@@ -569,11 +753,13 @@ def op_eval(req):
             "files": sorted(RECORDER.files | RECORDER.modules()),
             "dirs": sorted(RECORDER.dirs),
             "globals": sorted(RECORDER.globals),
+            "doc_reads": sorted(RECORDER.doc_reads),
         }
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": f"Could not load Kadet module: {os.path.basename(input_path)}: {e}", "traceback": traceback.format_exc()}
     finally:
         RECORDER.active = False
+        STATE.pop("target", None)
         current_target.reset(token)
 
 
