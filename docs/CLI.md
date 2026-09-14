@@ -146,8 +146,10 @@ hover, go to definition, completion (see
 
 ## `kapitan completions <bash|zsh|fish|elvish|powershell>`
 
-Print the completion script: `source <(kapitan completions bash)`. Target
-names are completed from the daemon.
+Print the completion script: `source <(kapitan completions bash)`. The script
+registers whatever name the command was invoked as, so an install like
+`~/.local/bin/kapitan2 -> .../kapitan` completes as `kapitan2` (run
+`kapitan2 completions bash`). Target names are completed from the daemon.
 
 ## Environment variables
 
