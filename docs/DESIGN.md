@@ -232,9 +232,35 @@ directories that belong to no target.
   Multiline strings default to double quotes, matching a quirk of the
   reference where the compile flag is shadowed by the inventory one.
 
+### Dependency fetching (`kapitan-compile/src/fetch.rs`)
+
+`parameters.kapitan.dependencies` is fetched before staleness is decided,
+so the files it produces are ordinary inputs: the inputs that read them
+record them and the manifest tracks them. The daemon is asked for just that
+path of each candidate target. Items are deduplicated by source and
+destination across targets, grouped by source (git, http) or chart
+identity (helm), and the groups fetched in parallel; each source is
+fetched once per run into a temporary directory and copied to every
+destination. `git` and `helm` are driven as subprocesses (the reference
+does the same through GitPython and `helm pull`); http(s) uses `ureq`,
+with tar, gzip and zip unpacking by content type or magic bytes, as
+kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
+`safe_copy_tree` (never overwrite, skip dot-entries) or, when forced,
+`copy_tree` (overwrite everything). Versioned helm charts are cached under
+`$XDG_CACHE_HOME/kapitan/charts` because a published chart version is
+immutable; `--force-fetch` pulls again.
+
+Two deliberate differences from the reference: a dependency whose output
+path already exists is not fetched (kapitan re-clones every git source and
+adds files that happen to be missing), which keeps `fetch: true`
+repositories offline once populated; and `force_fetch: true` on an item
+forces that item even when `--fetch` is given (kapitan only honours it
+when neither flag is set). `type: oci` (oras artifacts) is not
+implemented.
+
 Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
-output, `--reveal`, creating missing refs (`||random:str`), dependency
-fetching. `--backend python` runs kapitan's Python input types instead.
+output, `--reveal`, creating missing refs (`||random:str`), `oci`
+dependencies. `--backend python` runs kapitan's Python input types instead.
 
 ## Testing
 
