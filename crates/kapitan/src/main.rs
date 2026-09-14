@@ -3,6 +3,7 @@
 mod app;
 mod cmd_compile;
 mod cmd_inventory;
+mod cmd_refs;
 mod cmd_server;
 mod completions;
 mod explain;
@@ -47,6 +48,8 @@ enum Command {
     /// Compile the targets whose inputs changed
     #[command(visible_alias = "c")]
     Compile(cmd_compile::CompileArgs),
+    /// Write, reveal, update and validate references (`?{type:path}` tags)
+    Refs(cmd_refs::RefsArgs),
     /// The inventory server (started automatically; these commands manage it)
     Server {
         #[command(subcommand)]
@@ -112,6 +115,7 @@ fn run(cli: Cli) -> Result<(), Failure> {
     match cli.command {
         Command::Inventory(args) => cmd_inventory::run(&app, args),
         Command::Compile(args) => cmd_compile::run(&app, args),
+        Command::Refs(args) => cmd_refs::run(&app, args),
         Command::Server { command } => cmd_server::run(&app, command),
         Command::Lsp { .. } => {
             let connector = app.connector.clone().ok_or_else(|| {
