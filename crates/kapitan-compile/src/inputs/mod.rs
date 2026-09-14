@@ -3,6 +3,7 @@
 
 pub mod copy;
 pub mod external;
+pub mod helm;
 pub mod jinja;
 pub mod kadet;
 pub mod remove;

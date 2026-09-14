@@ -26,31 +26,56 @@ pub fn load_file(sources: &Sources, path: &Path) -> Result<Node> {
 
 /// Parse the first document of `text`. An empty document yields `Null`.
 pub fn parse_document(text: &str, file: SourceId) -> Result<Node> {
+    let docs = parse_stream(text, file, true)?;
+    Ok(docs
+        .into_iter()
+        .find(|d| !d.value.is_null())
+        .unwrap_or_else(|| Node::new(Value::Null, Origin::new(file, 1, 1))))
+}
+
+/// Every document of a `---`-separated stream, in order; an empty document
+/// yields `Null`, like PyYAML's `safe_load_all`.
+pub fn parse_documents(text: &str, file: SourceId) -> Result<Vec<Node>> {
+    parse_stream(text, file, false)
+}
+
+fn parse_stream(text: &str, file: SourceId, single: bool) -> Result<Vec<Node>> {
     let mut loader = Loader {
         file,
         anchors: HashMap::new(),
     };
     let mut parser = Parser::new_from_str(text);
-    let mut root: Option<Node> = None;
+    let mut docs = Vec::new();
+    let mut current: Option<Node> = None;
+    let mut seen_content = false;
     loop {
         let (event, span) = loader.next(&mut parser)?;
         match event {
-            Event::StreamStart | Event::DocumentStart(_) | Event::Nothing => {}
-            Event::DocumentEnd => {}
+            Event::StreamStart | Event::Nothing => {}
+            Event::DocumentStart(_) => loader.anchors.clear(),
+            Event::DocumentEnd => docs.push(
+                current
+                    .take()
+                    .unwrap_or_else(|| Node::new(Value::Null, Origin::new(file, 1, 1))),
+            ),
             Event::StreamEnd => break,
             other => {
-                if root.is_some() {
+                if single && seen_content {
                     return Err(Error::new(
                         "yaml::multiple_documents",
                         "expected a single document in the stream",
                     )
                     .with_label(loader.origin(&span), "second document starts here"));
                 }
-                root = Some(loader.build(other, span, &mut parser)?);
+                seen_content = true;
+                current = Some(loader.build(other, span, &mut parser)?);
             }
         }
     }
-    Ok(root.unwrap_or_else(|| Node::new(Value::Null, Origin::new(file, 1, 1))))
+    if let Some(node) = current {
+        docs.push(node);
+    }
+    Ok(docs)
 }
 
 struct Loader {
@@ -490,5 +515,22 @@ mod tests {
         assert_eq!(m["c"].get("k").unwrap().as_str(), Some("v"));
         let d = m["d"].as_map().unwrap();
         assert_eq!(d.keys().collect::<Vec<_>>(), vec!["k", "k2"]);
+    }
+
+    #[test]
+    fn multi_document_streams() {
+        // helm output: leading separator, `# Source:` comments, empty documents.
+        let text = "---\n# Source: a.yaml\napiVersion: v1\nkind: A\n---\n---\n# Source: b.yaml\nkind: B\nvalue: '='\n";
+        let docs = parse_documents(text, SourceId(0)).unwrap();
+        let kinds: Vec<Option<&str>> = docs
+            .iter()
+            .map(|d| d.get("kind").and_then(|k| k.as_str()))
+            .collect();
+        assert_eq!(kinds, vec![Some("A"), None, Some("B")]);
+        assert!(docs[1].value.is_null());
+        assert_eq!(docs[2].get("value").unwrap().as_str(), Some("="));
+        assert!(parse_documents("", SourceId(0)).unwrap().is_empty());
+        // The single-document loader still rejects a second document.
+        assert!(parse_document("a: 1\n---\nb: 2\n", SourceId(0)).is_err());
     }
 }

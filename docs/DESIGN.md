@@ -203,9 +203,16 @@ directories that belong to no target.
   and calls `main()`; its output comes back as JSON. It records files read,
   directories listed, modules imported and targets read from the global
   inventory. With an inventory server running it fetches targets over the
-  socket on demand; without one it loads a snapshot file. kapitan's helm
-  render cache stays on (chart-heavy generators need it); its kadet output
-  cache is off because a hit would hide what a component reads.
+  socket on demand; without one it loads a snapshot file. `HelmChart`
+  renders inside a component go through the host: mid-evaluation the runner
+  sends a `helm` request on its stdout (`worker.rs` answers host requests
+  between the eval request and its reply) and `inputs/helm.rs` builds the
+  `helm template` arguments the way kapitan's `render_chart` does, hashes
+  the chart directory so every chart file becomes a dependency of the
+  target, runs helm, caches the output by content under
+  `$XDG_CACHE_HOME/kapitan/helm-render` and parses it with the inventory's
+  loader. kapitan's kadet output cache is off because a hit would hide what
+  a component reads.
 * Output: `prune_empty`, output-type resolution, ref embedding
   (`?{type:base64(json(ref)):embedded}`) or hashing, then rapidyaml-compatible
   YAML (`emit/ryml.rs`, verified byte for byte on ~7000 compiled files),
