@@ -88,7 +88,7 @@ kapitan2 compile --force-fetch      # refetch every dependency, overwriting (upd
 kapitan2 compile --no-fetch         # ignore `fetch: true` in .kapitan
 ```
 
-Dependencies (git, http(s), helm; not `oci`) are fetched natively before
+Dependencies (git, http(s), helm, oci) are fetched natively before
 staleness is decided. grid has `fetch: true` in `.kapitan`, so a missing
 chart directory (`system/sources/charts/<name>/<version>` after a version
 bump) or generator checkout is fetched on the next compile; whatever exists
@@ -106,10 +106,10 @@ currently untracked in git; do not commit it unless asked.
 
 Native today: `jinja2`, `kadet` (Python evaluates the component, Rust does
 the rest), `copy`, `remove`, `external`; output types yaml/json/plain, refs
-embedded; dependency fetching (git, http, helm). **Not yet native**: helm,
-jsonnet, kustomize, cuelang inputs, toml output, `--reveal`, creating missing
-refs (`||random`), `oci` dependencies. For those use `--backend python` or
-the reference `kapitan`.
+embedded; dependency fetching (git, http, helm, oci). **Not yet native**:
+helm, jsonnet, kustomize, cuelang inputs, toml output, `--reveal`, creating
+missing refs (`||random`). For those use `--backend python` or the reference
+`kapitan`.
 
 ## Parity check (after any engine change)
 

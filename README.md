@@ -143,9 +143,8 @@ Deliberate differences: class cycles are reported instead of recursing
 forever; unknown YAML tags are errors; timestamps stay strings. Not
 implemented yet: `jsonnet`, `helm` (as a direct input type; charts rendered
 by kgenlib inside kadet work), `kustomize` and `cuelang` inputs, `toml`
-output, `--reveal`, creating missing refs (`||random:str`), `oci`
-dependencies, Python-defined jinja2 filters other than the common ones, and
-the `write` resolver. [docs/DESIGN.md](docs/DESIGN.md) lists the semantics in
+output, `--reveal`, creating missing refs (`||random:str`), Python-defined
+jinja2 filters other than the common ones, and the `write` resolver. [docs/DESIGN.md](docs/DESIGN.md) lists the semantics in
 detail.
 
 ## Writing a resolver

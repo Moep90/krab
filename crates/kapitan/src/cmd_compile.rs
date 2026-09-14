@@ -268,6 +268,9 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
                 match &f.status {
                     FetchStatus::Fetched { ms } => {
                         let _ = writeln!(err, "fetched {what} ({:.2}s){why}", *ms as f64 / 1000.0);
+                        for w in &f.warnings {
+                            let _ = writeln!(err, "  warning: {w}");
+                        }
                     }
                     FetchStatus::WouldFetch => {
                         let _ = writeln!(err, "would fetch {what}  [{}]", f.reason);
