@@ -204,7 +204,7 @@ into a private temporary tree that then replaces `compiled/<target path>`
 while leaving nested targets' directories alone. Full runs remove output
 directories that belong to no target.
 
-### Native input types (`kapitan-compile/src/inputs`, `output.rs`, `refs.rs`)
+### Native input types (`kapitan-compile/src/inputs`, `output.rs`, `refs/`)
 
 * `jinja2`: minijinja with Jinja2's environment (strict undefined,
   `trim_blocks`, `lstrip_blocks`, no auto-escaping), Python-style rendering of
@@ -231,6 +231,20 @@ directories that belong to no target.
   PyYAML fallback for control characters, and Python-compatible JSON.
   Multiline strings default to double quotes, matching a quirk of the
   reference where the compile flag is shadowed by the inventory one.
+* References (`refs/`): a port of `kapitan/refs`. `RefController` loads ref
+  files (cached), compiles tags (`?{type:path:hash}`, embedded payloads,
+  `plain` inlined, `env` always hashed), creates missing refs from their
+  functions (`random`, `sha256`, `rsa`, `ed25519`, `publickey`, `reveal`,
+  `basicauth`, `base64`) with the target's `parameters.kapitan.secrets`, and
+  reveals them. Mappings are compiled in passes so a `||reveal:` tag can
+  depend on a sibling key's ref, as in kapitan. Backends: `plain`, `base64`,
+  `env` in process; `gkms` over the Cloud KMS REST API with
+  application-default credentials (`authorized_user` refresh, service
+  account JWT, metadata server, `gcloud` fallback); `gpg` through the `gpg`
+  binary with python-gnupg's flags; Vault KV/transit over the HTTP API with
+  token/approle/userpass/ldap/github auth; `awskms`/`azkms` through their
+  CLIs. Ref files are written with `yaml.safe_dump`'s layout so kapitan and
+  krab can read each other's. kapitan's `mock` key is honoured for tests.
 
 ### Dependency fetching (`kapitan-compile/src/fetch.rs`)
 
@@ -273,8 +287,7 @@ forces that item even when `--fetch` is given (kapitan only honours it
 when neither flag is set).
 
 Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
-output, `--reveal`, creating missing refs (`||random:str`). `--backend
-python` runs kapitan's Python input types instead.
+output. `--backend python` runs kapitan's Python input types instead.
 
 ## Testing
 

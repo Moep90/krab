@@ -9,7 +9,7 @@ use kapitan_inventory::emit::{MultilineStyle, dumps_pretty};
 use kapitan_inventory::{Node, Value};
 
 use crate::inputs::Reads;
-use crate::refs::RefController;
+use crate::refs::{RefController, TargetSecrets};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputType {
@@ -53,6 +53,8 @@ pub struct WriterOptions {
     pub use_rapidyaml: bool,
     pub null_as_empty: bool,
     pub multiline: MultilineStyle,
+    /// Reveal refs instead of compiling them (`--reveal`).
+    pub reveal: bool,
 }
 
 impl Default for WriterOptions {
@@ -62,6 +64,7 @@ impl Default for WriterOptions {
             use_rapidyaml: false,
             null_as_empty: false,
             multiline: MultilineStyle::Literal,
+            reveal: false,
         }
     }
 }
@@ -69,9 +72,31 @@ impl Default for WriterOptions {
 pub struct Writer<'a> {
     pub opts: WriterOptions,
     pub refs: &'a RefController,
+    /// The target's `parameters.kapitan.secrets`, for refs created from functions.
+    pub target: TargetSecrets,
 }
 
 impl Writer<'_> {
+    /// Compile the refs in a string, or reveal them under `--reveal`.
+    pub fn refs_str(&self, s: &str, reads: &mut Reads) -> Result<String, String> {
+        if self.opts.reveal {
+            self.refs.reveal_str(s, reads)
+        } else {
+            self.refs.compile_str(s, &self.target, reads)
+        }
+        .map_err(|e| e.to_string())
+    }
+
+    /// Compile the refs in every string of a value tree, or reveal them under `--reveal`.
+    pub fn refs_value(&self, v: &mut Value, reads: &mut Reads) -> Result<(), String> {
+        if self.opts.reveal {
+            self.refs.reveal_value(v, reads)
+        } else {
+            self.refs.compile_value(v, &self.target, reads)
+        }
+        .map_err(|e| e.to_string())
+    }
+
     /// `to_file`: `file_path` has no extension yet; the output type decides
     /// it. Returns the path written (or `None` when kapitan would skip an
     /// empty document).
@@ -112,23 +137,17 @@ impl Writer<'_> {
                     Value::Str(s) => s.clone(),
                     other => other.py_str(),
                 };
-                self.refs
-                    .compile_str(&s, reads)
-                    .map_err(|e| e.to_string())?
+                self.refs_str(&s, reads)?
             }
             OutputType::Json => {
-                self.refs
-                    .compile_value(&mut content, reads)
-                    .map_err(|e| e.to_string())?;
+                self.refs_value(&mut content, reads)?;
                 if !content.truthy() {
                     return Ok(None);
                 }
                 dumps_pretty(&content, self.opts.indent, true)
             }
             OutputType::Yaml | OutputType::Yml => {
-                self.refs
-                    .compile_value(&mut content, reads)
-                    .map_err(|e| e.to_string())?;
+                self.refs_value(&mut content, reads)?;
                 if !content.truthy() {
                     return Ok(None);
                 }
