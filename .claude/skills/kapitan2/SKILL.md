@@ -1,6 +1,6 @@
 ---
 name: kapitan2
-description: How to operate kapitan2, the Rust Kapitan (repo path/to/krab, binary `kapitan2`): render and inspect the inventory through its daemon, explain where a value came from, find what a file affects, compile incrementally, run the language server, verify parity against the reference `kapitan`, and rebuild after engine changes. Use whenever kapitan2 is mentioned, when working in kapitan-rs, or when inspecting or changing `example-inventory/inventory` and a faster or more informative tool than `kapitan` helps.
+description: How to operate kapitan2, the Rust Kapitan (this repo, binary `kapitan2`): render and inspect the inventory through its daemon, explain where a value came from, find what a file affects, compile incrementally, run the language server, verify parity against the reference `kapitan`, and rebuild after engine changes. Use whenever kapitan2 is mentioned, when working in kapitan-rs, or when inspecting or changing `example-inventory/inventory` and a faster or more informative tool than `kapitan` helps.
 ---
 
 # kapitan2
@@ -10,10 +10,10 @@ description: How to operate kapitan2, the Rust Kapitan (repo path/to/krab, binar
 compiled output as kapitan 0.36.3, only faster and with provenance. Run it
 from the directory holding `.kapitan` (in the platform repo: `example-inventory`).
 
-- Source: `path/to/krab` (cargo workspace). Design in
+- Source: this repository (cargo workspace). Design in
   `docs/DESIGN.md`, open work in `docs/ROADMAP.md`.
 - Binary: `~/.local/bin/kapitan2` is a symlink to
-  `path/to/krab/target/release/kapitan`. Rebuilding replaces it.
+  `target/release/kapitan` in this repository. Rebuilding replaces it.
 - Reference: `/usr/local/bin/kapitan` is the Python kapitan (a PEX). Keep
   using it for anything kapitan2 does not do yet (see "Not yet native").
 
@@ -101,7 +101,7 @@ For those use `--backend python` or the reference `kapitan`.
 ## Parity check (after any engine change)
 
 ```bash
-cd path/to/inventory/repo     # or wherever example-inventory is checked out
+cd path/to/example-inventory                                     # wherever example-inventory is checked out
 kapitan2 compile --force && git status --short compiled   # must print nothing
 ```
 
@@ -139,8 +139,8 @@ extension is `editors/vscode` (installed here as `kapicorp.kapitan`, with
 Smoke test without an editor:
 
 ```bash
-python3 path/to/krab/scripts/lsp-smoke.py example-inventory inventory/targets/env/dev.yml 1:10 20:24
-python3 path/to/krab/scripts/lsp-smoke-live.py example-inventory    # completion + diagnostics (edits and restores a class)
+python3 scripts/lsp-smoke.py example-inventory inventory/targets/env/dev.yml 1:10 20:24
+python3 scripts/lsp-smoke-live.py example-inventory    # completion + diagnostics (edits and restores a class)
 ```
 
 Server-side problems show in the "Kapitan (example-inventory)" output channel, whose log
@@ -149,7 +149,6 @@ is under `~/.vscode-server/data/logs/*/exthost*/output_logging_*/`.
 ## Developing kapitan2
 
 ```bash
-cd path/to/krab
 cargo build --release          # updates kapitan2 on PATH; a running daemon restarts itself
 cargo fmt --all && cargo clippy --all-targets --release && cargo test --release
 ```

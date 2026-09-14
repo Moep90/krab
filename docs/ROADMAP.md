@@ -173,13 +173,14 @@ Integrate
 ## How to resume
 
 ```sh
-cd path/to/krab && cargo build --release      # kapitan2 on PATH is a symlink to the build
-cd path/to/inventory/repo
-kapitan2 inventory check && kapitan2 compile --dry-run     # daemon + manifest sanity
-python3 path/to/krab/scripts/lsp-smoke.py . inventory/targets/env/dev.yml 1:10 20:24
-python3 path/to/krab/scripts/lsp-smoke-live.py . # completion + live diagnostics (edits and restores a class)
+cargo build --release                                     # kapitan2 on PATH is a symlink to the build
+cd path/to/an/inventory/repo                              # the directory holding .kapitan
+kapitan2 inventory check && kapitan2 compile --dry-run    # daemon + manifest sanity
+python3 path/to/krab/scripts/lsp-smoke.py . inventory/targets/some/target.yml 1:10 20:24
+python3 path/to/krab/scripts/lsp-smoke-live.py .          # completion + live diagnostics (edits and restores a class)
 ```
 
-Parity check after engine changes: `kapitan2 compile --force` in example-inventory, then
-`git status compiled` must be clean. The reference implementation is the PEX
-at `/usr/local/bin/kapitan` (run scripts with `PEX_INTERPRETER=1`).
+Parity check after engine changes: `kapitan2 compile --force` in the
+inventory repo, then `git status compiled` must be clean. The reference
+implementation is the Python kapitan (a PEX; run scripts with
+`PEX_INTERPRETER=1`).
