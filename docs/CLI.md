@@ -126,7 +126,13 @@ forced; unlike kapitan, a dependency whose output path already exists is
 not fetched at all, so a repository with everything in place compiles
 offline. Without `--fetch` only items marked `force_fetch: true` are
 fetched (and overwritten). `--dry-run` lists what would be fetched.
-`type: oci` (oras artifacts) is not supported natively yet.
+`type: oci` pulls an artifact (what `oras push` produces) from `source`, a
+bare `registry/repository:tag` or `@digest` reference, with the registry
+distribution API: layers are saved under their title annotation, tar blobs
+are extracted, and the artifact or its `subpath` is copied; `media_type`
+keeps only matching layers, `insecure: true` uses plain http, `tls_verify`
+is a boolean or a CA bundle path, and credentials come from `OCI_USERNAME`
+/ `OCI_PASSWORD`.
 
 `.kapitan` keys used: `compile.search-paths`, `compile.output-path`,
 `compile.indent`, `compile.fetch`, `compile.force-fetch`,

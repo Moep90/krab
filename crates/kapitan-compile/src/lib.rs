@@ -13,6 +13,7 @@ pub mod fetch;
 pub mod inputs;
 pub mod manifest;
 pub mod native;
+pub mod oci;
 pub mod output;
 pub mod plan;
 pub mod python;

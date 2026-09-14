@@ -250,17 +250,31 @@ kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
 `$XDG_CACHE_HOME/kapitan/charts` because a published chart version is
 immutable; `--force-fetch` pulls again.
 
+`type: oci` (`oci.rs`) speaks the registry distribution API the way oras
+does: the manifest (an index is followed to its first manifest) lists the
+layers, each is downloaded to the path in its
+`org.opencontainers.image.title` annotation (the digest when there is
+none), verified against its `sha256` digest, and, as in kapitan's
+`_extract_tar_blobs`, layers that are tar archives (gzipped or not) are
+extracted into the artifact root and removed. Authentication answers one
+`WWW-Authenticate` challenge: a bearer token from the realm (Docker Hub,
+ghcr.io, Artifact Registry) with `OCI_USERNAME` / `OCI_PASSWORD` as basic
+credentials when set, or basic authentication directly. `insecure` selects
+plain http and `tls_verify` disables verification or names a CA bundle
+(parsed with ureq's PEM reader). Conflicting connection settings for one
+source are an error and `media_type` filters are unioned, as in the
+reference.
+
 Two deliberate differences from the reference: a dependency whose output
 path already exists is not fetched (kapitan re-clones every git source and
 adds files that happen to be missing), which keeps `fetch: true`
 repositories offline once populated; and `force_fetch: true` on an item
 forces that item even when `--fetch` is given (kapitan only honours it
-when neither flag is set). `type: oci` (oras artifacts) is not
-implemented.
+when neither flag is set).
 
 Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
-output, `--reveal`, creating missing refs (`||random:str`), `oci`
-dependencies. `--backend python` runs kapitan's Python input types instead.
+output, `--reveal`, creating missing refs (`||random:str`). `--backend
+python` runs kapitan's Python input types instead.
 
 ## Testing
 

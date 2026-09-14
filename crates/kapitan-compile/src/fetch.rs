@@ -10,6 +10,7 @@
 //! exists is not fetched at all (kapitan does the same for helm charts, and
 //! for git and http would only add files that are missing), so a compile
 //! with `fetch: true` in `.kapitan` stays offline once everything is there.
+//! OCI artifacts (`type: oci`) are pulled by `oci.rs` the way oras does.
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -24,6 +25,7 @@ use serde_json::Value as Json;
 use sha2::{Digest, Sha256};
 
 use crate::inputs::helm::{helm_binary, run_helm};
+use crate::oci::{self, TlsVerify};
 
 pub const DEPENDENCIES_PATH: &str = "parameters.kapitan.dependencies";
 
@@ -49,8 +51,16 @@ pub enum Kind {
         #[serde(skip_serializing_if = "Option::is_none")]
         helm_path: Option<String>,
     },
-    /// An OCI artifact pulled with oras; not implemented natively.
-    Oci,
+    /// An OCI artifact (what `oras push` produces).
+    Oci {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        subpath: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        media_type: Option<String>,
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        insecure: bool,
+        tls_verify: TlsVerify,
+    },
 }
 
 impl Kind {
@@ -59,7 +69,7 @@ impl Kind {
             Kind::Git { .. } => "git",
             Kind::Http { .. } => "http",
             Kind::Helm { .. } => "helm",
-            Kind::Oci => "oci",
+            Kind::Oci { .. } => "oci",
         }
     }
 }
@@ -119,7 +129,33 @@ pub fn dependencies(
                     version: s("version"),
                     helm_path: s("helm_path"),
                 },
-                "oci" => Kind::Oci,
+                "oci" => {
+                    let source = required("source")?;
+                    for prefix in ["https://", "http://", "oci://"] {
+                        if source.starts_with(prefix) {
+                            return Err(format!(
+                                "target {target}: {DEPENDENCIES_PATH}[{i}]: OCI source must be a bare registry reference (e.g. 'ghcr.io/org/repo:tag'), not a URL. Remove the '{prefix}' prefix."
+                            ));
+                        }
+                    }
+                    if let Some(mt) = s("media_type")
+                        && !mt.contains('/')
+                    {
+                        return Err(format!(
+                            "target {target}: {DEPENDENCIES_PATH}[{i}]: media_type '{mt}' is not a valid MIME type (expected 'type/subtype')"
+                        ));
+                    }
+                    Kind::Oci {
+                        subpath: s("subpath"),
+                        media_type: s("media_type"),
+                        insecure: b("insecure"),
+                        tls_verify: match item.get("tls_verify") {
+                            Some(Json::Bool(v)) => TlsVerify::Bool(*v),
+                            Some(Json::String(path)) => TlsVerify::CaBundle(path.clone()),
+                            _ => TlsVerify::Bool(true),
+                        },
+                    }
+                }
                 other => {
                     return Err(format!(
                         "target {target}: {DEPENDENCIES_PATH}[{i}] has unknown type `{other}` (git, http, https, helm, oci)"
@@ -197,6 +233,8 @@ pub struct FetchOutcome {
     #[serde(flatten)]
     pub status: FetchStatus,
     pub reason: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 impl FetchOutcome {
@@ -327,6 +365,7 @@ fn outcome(root: &Path, dep: &Dependency, status: FetchStatus, reason: &str) -> 
         target: dep.target.clone(),
         status,
         reason: reason.to_string(),
+        warnings: vec![],
     }
 }
 
@@ -346,36 +385,33 @@ fn fetch_group(
 ) -> Vec<FetchOutcome> {
     let started = Instant::now();
     let first = &wanted[0].dep;
-    let results: Vec<Result<(), String>> = match &first.kind {
+    let results: Vec<Result<Vec<String>, String>> = match &first.kind {
         Kind::Git { .. } => fetch_git(wanted, save_dir),
         Kind::Http { .. } => fetch_http(wanted, save_dir, counter),
         Kind::Helm { .. } => fetch_helm(wanted, save_dir, opts, counter),
-        Kind::Oci => wanted
-            .iter()
-            .map(|_| {
-                Err(format!(
-                    "Dependency {}: oci dependencies are not supported natively yet; fetch them with the reference kapitan",
-                    first.source
-                ))
-            })
-            .collect(),
+        Kind::Oci { .. } => fetch_oci(wanted, save_dir),
     };
     let ms = started.elapsed().as_millis() as u64;
     wanted
         .iter()
         .zip(results)
         .map(|(w, r)| {
-            let status = match r {
-                Ok(()) => FetchStatus::Fetched { ms },
-                Err(error) => FetchStatus::Failed { error },
+            let (status, warnings) = match r {
+                Ok(warnings) => (FetchStatus::Fetched { ms }, warnings),
+                Err(error) => (FetchStatus::Failed { error }, vec![]),
             };
-            outcome(opts.repo_root, &w.dep, status, &w.reason)
+            let mut o = outcome(opts.repo_root, &w.dep, status, &w.reason);
+            o.warnings = warnings;
+            o
         })
         .collect()
 }
 
+/// Results for every destination when the shared step succeeded.
+type GroupResults = Vec<Result<Vec<String>, String>>;
+
 /// Results for every destination; a failure of the shared step fails all of them.
-fn all_failed(wanted: &[Wanted], e: String) -> Vec<Result<(), String>> {
+fn all_failed(wanted: &[Wanted], e: String) -> GroupResults {
     wanted.iter().map(|_| Err(e.clone())).collect()
 }
 
@@ -417,7 +453,7 @@ fn git(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
 /// kapitan `fetch_git_dependency`: clone once, then per destination check
 /// out the ref (the remote's default branch when none is given), update
 /// submodules if asked, and copy the repository or its `subdir`.
-fn fetch_git(wanted: &[Wanted], save_dir: &Path) -> Vec<Result<(), String>> {
+fn fetch_git(wanted: &[Wanted], save_dir: &Path) -> GroupResults {
     let source = &wanted[0].dep.source;
     let (dir, base) = split_source(source);
     let clone = save_dir.join(format!("{}{base}", hash8(dir)));
@@ -471,7 +507,7 @@ fn fetch_git(wanted: &[Wanted], save_dir: &Path) -> Vec<Result<(), String>> {
             } else {
                 safe_copy_tree(&src, &w.dep.dest)
             }
-            .map(|_| ())
+            .map(|_| vec![])
             .map_err(|e| {
                 format!(
                     "Dependency {source}: cannot copy to {}: {e}",
@@ -512,11 +548,7 @@ fn download(source: &str) -> Result<(Vec<u8>, Option<String>), String> {
 
 /// kapitan `fetch_http_dependency`: download once, then per destination
 /// either unpack the archive into it or save the file there.
-fn fetch_http(
-    wanted: &[Wanted],
-    save_dir: &Path,
-    counter: &AtomicUsize,
-) -> Vec<Result<(), String>> {
+fn fetch_http(wanted: &[Wanted], save_dir: &Path, counter: &AtomicUsize) -> GroupResults {
     let source = &wanted[0].dep.source;
     let (dir, base) = split_source(source);
     let file = save_dir.join(format!("{}{base}", hash8(dir)));
@@ -574,7 +606,7 @@ fn fetch_http(
                         content_type.as_deref().unwrap_or("unknown")
                     ));
                 }
-                Ok(())
+                Ok(vec![])
             } else {
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
@@ -589,7 +621,7 @@ fn fetch_http(
                         format!("Dependency {source}: cannot write {}: {e}", dest.display())
                     })?;
                 }
-                Ok(())
+                Ok(vec![])
             }
         })
         .collect()
@@ -656,7 +688,7 @@ fn fetch_helm(
     save_dir: &Path,
     opts: &FetchOptions,
     counter: &AtomicUsize,
-) -> Vec<Result<(), String>> {
+) -> GroupResults {
     let first = &wanted[0];
     let Kind::Helm {
         chart_name,
@@ -752,10 +784,206 @@ fn fetch_helm(
             } else {
                 safe_copy_tree(&cached, dest)
             }
-            .map(|_| ())
+            .map(|_| vec![])
             .map_err(|e| format!("{label}: cannot copy to {}: {e}", dest.display()))
         })
         .collect()
+}
+
+/// kapitan `fetch_oci_dependency`: pull the artifact once (the layers every
+/// destination asks for), extract the tar blobs in it, then copy the
+/// artifact or the declared `subpath` to each destination.
+fn fetch_oci(wanted: &[Wanted], save_dir: &Path) -> GroupResults {
+    let source = &wanted[0].dep.source;
+    let settings: Vec<(bool, &TlsVerify, Option<&String>)> = wanted
+        .iter()
+        .map(|w| match &w.dep.kind {
+            Kind::Oci {
+                insecure,
+                tls_verify,
+                media_type,
+                ..
+            } => (*insecure, tls_verify, media_type.as_ref()),
+            _ => unreachable!(),
+        })
+        .collect();
+    let (insecure, tls_verify, _) = settings[0];
+    if settings
+        .iter()
+        .any(|(i, t, _)| *i != insecure || *t != tls_verify)
+    {
+        return all_failed(
+            wanted,
+            format!(
+                "Dependency {source}: multiple dependencies share the same source but declare conflicting connection settings. All dependencies for the same source must use identical insecure and tls_verify settings."
+            ),
+        );
+    }
+    // Union of the media type filters: any destination wanting everything wins.
+    let mut allowed: Option<Vec<String>> = Some(vec![]);
+    for (_, _, mt) in &settings {
+        match (mt, &mut allowed) {
+            (None, _) => allowed = None,
+            (Some(mt), Some(list)) if !list.contains(mt) => list.push((*mt).clone()),
+            _ => {}
+        }
+    }
+    let credentials = match (std::env::var("OCI_USERNAME"), std::env::var("OCI_PASSWORD")) {
+        (Ok(u), Ok(p)) if !u.is_empty() && !p.is_empty() => Some((u, p)),
+        _ => None,
+    };
+    let target_dir = save_dir.join(format!("oci_{}", hash8(source)));
+    let _ = std::fs::remove_dir_all(&target_dir);
+    if let Err(e) = oci::pull(
+        source,
+        &target_dir,
+        &oci::PullOptions {
+            insecure,
+            tls_verify,
+            allowed_media_types: allowed.as_deref(),
+            credentials,
+        },
+    ) {
+        return all_failed(
+            wanted,
+            format!(
+                "Dependency {source}: fetching unsuccessful
+{e}"
+            ),
+        );
+    }
+    if let Err(e) = extract_tar_blobs(&target_dir) {
+        return all_failed(
+            wanted,
+            format!(
+                "Dependency {source}: failed to extract tar blobs from pulled artifact
+{e}"
+            ),
+        );
+    }
+    wanted
+        .iter()
+        .map(|w| {
+            let Kind::Oci { subpath, .. } = &w.dep.kind else {
+                unreachable!()
+            };
+            let src = match subpath {
+                Some(sub) => {
+                    let full = oci::safe_join(&target_dir, sub).ok_or_else(|| {
+                        format!(
+                            "Dependency {source}: subpath '{sub}' resolves outside the artifact directory"
+                        )
+                    })?;
+                    if !full.is_dir() {
+                        return Err(format!(
+                            "Dependency {source}: subpath '{sub}' not found in pulled artifact"
+                        ));
+                    }
+                    full
+                }
+                None => target_dir.clone(),
+            };
+            let dest = &w.dep.dest;
+            if w.force {
+                copy_tree(&src, dest)
+            } else {
+                safe_copy_tree(&src, dest)
+            }
+            .map_err(|e| format!("Dependency {source}: cannot copy to {}: {e}", dest.display()))?;
+            // An artifact pushed from a parent directory lands one level deep.
+            let mut warnings = vec![];
+            if subpath.is_none()
+                && let Ok(rd) = std::fs::read_dir(dest)
+            {
+                let children: Vec<PathBuf> = rd
+                    .filter_map(|e| e.ok().map(|e| e.path()))
+                    .filter(|p| !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.')))
+                    .collect();
+                let mut dirs: Vec<String> = children
+                    .iter()
+                    .filter(|p| p.is_dir())
+                    .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                    .collect();
+                dirs.sort();
+                if !dirs.is_empty() && !children.iter().any(|p| p.is_file()) {
+                    warnings.push(format!(
+                        "Dependency {source}: output_path '{}' contains only subdirectories: [{}]. The artifact may have been pushed with nested paths; set 'subpath' to the directory that contains your content (e.g. subpath: {})",
+                        dest.display(),
+                        dirs.join(", "),
+                        dirs[0]
+                    ));
+                }
+            }
+            Ok(warnings)
+        })
+        .collect()
+}
+
+/// kapitan `_extract_tar_blobs`: oras saves each layer as a file; layers
+/// that are tar archives (gzipped or not) are extracted into `dir` and
+/// the archive removed, so the tree matches what was pushed.
+fn extract_tar_blobs(dir: &Path) -> Result<(), String> {
+    let mut files = Vec::new();
+    collect_files(dir, &mut files);
+    for file in files {
+        let bytes =
+            std::fs::read(&file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
+        let Some(tar) = tar_bytes(&bytes) else {
+            continue;
+        };
+        let mut archive = tar::Archive::new(&tar[..]);
+        archive.set_overwrite(true);
+        std::fs::remove_file(&file)
+            .map_err(|e| format!("cannot remove {}: {e}", file.display()))?;
+        // A blob titled `a/b` leaves `a/` behind; drop such empty directories.
+        let mut parent = file.parent();
+        while let Some(p) = parent
+            && p != dir
+            && std::fs::remove_dir(p).is_ok()
+        {
+            parent = p.parent();
+        }
+        archive
+            .unpack(dir)
+            .map_err(|e| format!("cannot extract {}: {e}", file.display()))?;
+    }
+    Ok(())
+}
+
+fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.filter_map(|e| e.ok()) {
+        let p = entry.path();
+        if p.is_dir() {
+            collect_files(&p, out);
+        } else {
+            out.push(p);
+        }
+    }
+}
+
+/// The uncompressed bytes when `bytes` is a tar archive, gzipped or plain
+/// (`tarfile.is_tarfile` accepts both).
+fn tar_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
+    let plain: Vec<u8> = if bytes.starts_with(&[0x1f, 0x8b]) {
+        let mut out = Vec::new();
+        flate2::read::GzDecoder::new(bytes)
+            .read_to_end(&mut out)
+            .ok()?;
+        out
+    } else {
+        bytes.to_vec()
+    };
+    let is_tar = plain.len() >= 512
+        && (plain[257..262] == *b"ustar"
+            || tar::Archive::new(&plain[..])
+                .entries()
+                .ok()?
+                .next()?
+                .is_ok());
+    is_tar.then_some(plain)
 }
 
 /// kapitan `safe_copy_tree`: copy `src` into `dst` without overwriting any
@@ -892,7 +1120,29 @@ mod tests {
                 helm_path: None
             }
         );
-        assert_eq!(deps[3].kind, Kind::Oci);
+        assert_eq!(
+            deps[3].kind,
+            Kind::Oci {
+                subpath: None,
+                media_type: None,
+                insecure: false,
+                tls_verify: TlsVerify::Bool(true)
+            }
+        );
+        assert!(
+            dependencies(
+                "t",
+                &json!([{"type": "oci", "source": "oci://ghcr.io/a/b", "output_path": "o"}]),
+                root
+            )
+            .unwrap_err()
+            .contains("Remove the 'oci://' prefix")
+        );
+        assert!(
+            dependencies("t", &json!([{"type": "oci", "source": "ghcr.io/a/b", "output_path": "o", "media_type": "tar"}]), root)
+                .unwrap_err()
+                .contains("not a valid MIME type")
+        );
         assert!(dependencies("t", &json!(null), root).unwrap().is_empty());
         assert!(
             dependencies(
@@ -1256,5 +1506,146 @@ mod tests {
         let out = fetch(deps, &opts(&root, true, true));
         assert!(matches!(out[0].status, FetchStatus::Fetched { .. }));
         assert_eq!(read(&dir.join("calls")).lines().count(), 3);
+    }
+
+    /// A tiny registry on localhost: token challenge on the first request,
+    /// then a manifest with a tar.gz layer and a plain file layer.
+    fn serve_registry() -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let tgz = tar_gz(&[("gen/main.py", "def main(): pass\n")]);
+        let readme = b"# art\n".to_vec();
+        let d = |b: &[u8]| format!("sha256:{}", hex::encode(Sha256::digest(b)));
+        let manifest = serde_json::to_vec(&json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "layers": [
+                {"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", "digest": d(&tgz), "size": tgz.len(),
+                 "annotations": {"org.opencontainers.image.title": "system/generators"}},
+                {"mediaType": "text/markdown", "digest": d(&readme), "size": readme.len(),
+                 "annotations": {"org.opencontainers.image.title": "README.md"}},
+            ]
+        }))
+        .unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { break };
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 1024];
+                while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let Ok(n) = s.read(&mut chunk) else { break };
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                }
+                let req = String::from_utf8_lossy(&buf).to_string();
+                let path = req.split_whitespace().nth(1).unwrap_or("").to_string();
+                let authed = req
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer tok-1");
+                let (status, ct, body): (&str, &str, Vec<u8>) = if path.starts_with("/token?") {
+                    assert!(path.contains("scope=repository:org/art:pull"), "{path}");
+                    (
+                        "200 OK",
+                        "application/json",
+                        br#"{"token": "tok-1"}"#.to_vec(),
+                    )
+                } else if !authed {
+                    let hdr = format!(
+                        "HTTP/1.1 401 Unauthorized\r\nWww-Authenticate: Bearer realm=\"http://{addr}/token\",service=\"reg\",scope=\"repository:org/art:pull\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    s.write_all(hdr.as_bytes()).unwrap();
+                    continue;
+                } else if path == "/v2/org/art/manifests/v1" {
+                    (
+                        "200 OK",
+                        "application/vnd.oci.image.manifest.v1+json",
+                        manifest.clone(),
+                    )
+                } else if path == format!("/v2/org/art/blobs/{}", d(&tgz)) {
+                    ("200 OK", "application/octet-stream", tgz.clone())
+                } else if path == format!("/v2/org/art/blobs/{}", d(&readme)) {
+                    ("200 OK", "application/octet-stream", readme.clone())
+                } else {
+                    ("404 Not Found", "text/plain", b"no".to_vec())
+                };
+                let head = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                s.write_all(head.as_bytes()).unwrap();
+                s.write_all(&body).unwrap();
+            }
+        });
+        addr.to_string()
+    }
+
+    #[test]
+    fn oci_dependency_pulls_extracts_and_copies() {
+        let dir = tmp("oci");
+        let root = dir.join("repo");
+        std::fs::create_dir_all(&root).unwrap();
+        let reg = serve_registry();
+        let source = format!("{reg}/org/art:v1");
+        let deps = dependencies(
+            "t",
+            &json!([
+                {"type": "oci", "source": source, "output_path": "vendor/art", "insecure": true},
+                {"type": "oci", "source": source, "output_path": "vendor/gen", "insecure": true, "subpath": "gen",
+                 "media_type": "application/vnd.oci.image.layer.v1.tar+gzip"},
+                {"type": "oci", "source": source, "output_path": "vendor/bad", "insecure": true, "subpath": "../x"},
+                {"type": "oci", "source": source, "output_path": "vendor/none", "insecure": true, "subpath": "nope"},
+            ]),
+            &root,
+        )
+        .unwrap();
+        let out = fetch(deps, &opts(&root, true, false));
+        assert_eq!(out.len(), 4);
+        let by_path = |p: &str| out.iter().find(|o| o.output_path == p).unwrap();
+        assert!(!by_path("vendor/art").failed(), "{out:?}");
+        // The tar.gz layer was extracted into the artifact root and its blob removed.
+        assert_eq!(
+            read(&root.join("vendor/art/gen/main.py")),
+            "def main(): pass\n"
+        );
+        assert!(!root.join("vendor/art/system").exists());
+        assert_eq!(read(&root.join("vendor/art/README.md")), "# art\n");
+        assert!(
+            by_path("vendor/art").warnings.is_empty(),
+            "{:?}",
+            by_path("vendor/art").warnings
+        );
+        assert_eq!(read(&root.join("vendor/gen/main.py")), "def main(): pass\n");
+        assert!(
+            matches!(&by_path("vendor/bad").status, FetchStatus::Failed { error } if error.contains("resolves outside"))
+        );
+        assert!(
+            matches!(&by_path("vendor/none").status, FetchStatus::Failed { error } if error.contains("not found in pulled artifact"))
+        );
+
+        // Conflicting connection settings for one source are refused.
+        let deps = dependencies(
+            "t",
+            &json!([
+                {"type": "oci", "source": source, "output_path": "vendor/a", "insecure": true},
+                {"type": "oci", "source": source, "output_path": "vendor/b", "insecure": false},
+            ]),
+            &root,
+        )
+        .unwrap();
+        let out = fetch(deps, &opts(&root, true, false));
+        assert!(out.iter().all(|o| matches!(&o.status, FetchStatus::Failed { error } if error.contains("conflicting connection settings"))));
+
+        // A nested-only tree without subpath is reported.
+        let deps = dependencies(
+            "t",
+            &json!([{"type": "oci", "source": source, "output_path": "vendor/only", "insecure": true,
+                     "media_type": "application/vnd.oci.image.layer.v1.tar+gzip"}]),
+            &root,
+        )
+        .unwrap();
+        let out = fetch(deps, &opts(&root, true, false));
+        assert!(out[0].warnings[0].contains("subpath: gen"), "{out:?}");
     }
 }
