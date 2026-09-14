@@ -187,14 +187,19 @@ impl KadetPool {
                         }
                     }
                 }
-                reads.globals.extend(
-                    resp.get("globals")
-                        .and_then(Json::as_array)
-                        .into_iter()
-                        .flatten()
-                        .filter_map(Json::as_str)
-                        .map(str::to_string),
-                );
+                for (key, into) in [
+                    ("globals", &mut reads.globals),
+                    ("doc_reads", &mut reads.doc_keys),
+                ] {
+                    into.extend(
+                        resp.get(key)
+                            .and_then(Json::as_array)
+                            .into_iter()
+                            .flatten()
+                            .filter_map(Json::as_str)
+                            .map(str::to_string),
+                    );
+                }
                 Ok(resp.get("output").cloned().unwrap_or(Json::Null))
             }
             Err(WorkerError::Failed { error, traceback }) => {

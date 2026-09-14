@@ -208,9 +208,14 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
                     } else {
                         String::new()
                     };
+                    let reused = match o.reused_items {
+                        0 => String::new(),
+                        1 => ", 1 kadet item reused".to_string(),
+                        n => format!(", {n} kadet items reused"),
+                    };
                     let _ = writeln!(
                         err,
-                        "compiled {} ({:.2}s){why}",
+                        "compiled {} ({:.2}s{reused}){why}",
                         o.target,
                         *ms as f64 / 1000.0
                     );

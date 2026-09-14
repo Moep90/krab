@@ -187,6 +187,18 @@ only when, one of these changed since its last compile:
 Everything is stored in `compiled/.kapitan-manifest.json`. `--explain` and
 `--dry-run` print the reason per target.
 
+Within a stale target, kadet items are reused rather than evaluated when
+their own inputs did not change. The evaluator hands a component its target
+document through a recording view: each `parameters.<key>` it reads is
+noted (iteration, Box methods and writes count as reading all of it), the
+way `inventory_global()` records other targets. The manifest keeps, per
+kadet item, the digest of the item definition, the digests of the document
+parts it read, its file and target dependencies and the files it wrote. When
+all of those still match, the previous output files are copied into the new
+compile tree; `compiled ... (0.14s, 2 kadet items reused)` says so. On
+grid, a change to a parameter no generator reads recompiles a chart-heavy
+cluster target in 0.14 s instead of 10 s. `--force` disables reuse.
+
 Execution: stale targets are compiled on a thread pool (one per CPU), each
 into a private temporary tree that then replaces `compiled/<target path>`
 while leaving nested targets' directories alone. Full runs remove output

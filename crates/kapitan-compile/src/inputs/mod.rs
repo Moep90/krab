@@ -63,6 +63,9 @@ pub struct Reads {
     pub dirs: Vec<PathBuf>,
     /// Other targets read through the global inventory (`*` = all).
     pub globals: Vec<String>,
+    /// Parts of the target's own document a kadet component read
+    /// (`parameters.<key>`, a top-level key, or `*`).
+    pub doc_keys: Vec<String>,
 }
 
 impl Reads {
@@ -76,6 +79,7 @@ impl Reads {
         self.files.extend(other.files);
         self.dirs.extend(other.dirs);
         self.globals.extend(other.globals);
+        self.doc_keys.extend(other.doc_keys);
     }
 }
 
