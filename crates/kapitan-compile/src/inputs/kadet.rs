@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use parking_lot::Mutex;
 use serde_json::{Value as Json, json};
 
-use super::Reads;
+use super::{Reads, helm};
 use crate::python::PythonCmd;
 use crate::worker::{Worker, WorkerError};
 
@@ -36,6 +36,8 @@ pub struct KadetPool {
     python: PythonCmd,
     script: PathBuf,
     init: Json,
+    /// The evaluator's working directory (the repository root).
+    cwd: PathBuf,
     idle: Mutex<Vec<Worker>>,
 }
 
@@ -44,6 +46,11 @@ impl KadetPool {
         Ok(KadetPool {
             python,
             script: materialize_kadet_runner()?,
+            cwd: init
+                .get("cwd")
+                .and_then(Json::as_str)
+                .map(PathBuf::from)
+                .unwrap_or_default(),
             init,
             idle: Mutex::new(Vec::new()),
         })
@@ -81,7 +88,22 @@ impl KadetPool {
             "compile_path": compile_path,
             "temp_dir": temp_dir,
         });
-        let result = worker.call(req);
+        // Helm renders the component asks for along the way.
+        let mut helm_reads = Reads::default();
+        let result = worker.call_with(req, |r| match r.get("op").and_then(Json::as_str) {
+            Some("helm") => match serde_json::from_value::<helm::Request>(r.clone())
+                .map_err(|e| format!("bad helm request: {e}"))
+                .and_then(|q| helm::render(&q, &self.cwd, &mut helm_reads))
+            {
+                Ok(mut v) => {
+                    v["ok"] = json!(true);
+                    v
+                }
+                Err(e) => json!({ "ok": false, "error": e }),
+            },
+            other => json!({ "ok": false, "error": format!("unsupported host request {other:?}") }),
+        });
+        reads.extend(helm_reads);
         match result {
             Ok(resp) => {
                 self.give_back(worker);

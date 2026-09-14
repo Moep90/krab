@@ -10,6 +10,9 @@ Protocol: newline-delimited JSON on stdin/stdout.
   {"op": "init", "cwd": ..., "inventory_file": ..., "search_paths": [...], "flags": [...]}
   {"op": "eval", "target": ..., "input_path": ..., "input_params": {...}, "compile_path": ...}
   {"op": "exit"}
+While an eval runs the evaluator may ask the host for things the same way
+(a line with an ``op`` and an ``id`` on stdout, the answer on stdin):
+  {"op": "helm", "chart_dir": ..., "helm_params": {...}, "helm_values_file": ..., "parse": bool}
 """
 
 import builtins
@@ -20,7 +23,7 @@ import os
 import sys
 import traceback
 
-PROTOCOL = 2
+PROTOCOL = 3
 
 
 class InventoryClient:
@@ -119,6 +122,70 @@ class LazyDocs(dict):
 def respond(obj):
     sys.__stdout__.write(json.dumps(obj, default=str) + "\n")
     sys.__stdout__.flush()
+
+
+class HostError(Exception):
+    """The host refused or failed a request."""
+
+
+HOST_IDS = iter(range(1, sys.maxsize))
+
+
+def host_call(op, params):
+    """Ask the host (the compiler reading our stdout) for something in the
+    middle of an evaluation; it answers on our stdin."""
+    respond({"op": op, "id": next(HOST_IDS), **params})
+    line = sys.__stdin__.readline()
+    if not line:
+        raise RuntimeError("host closed the connection")
+    resp = json.loads(line)
+    if not resp.get("ok"):
+        raise HostError(resp.get("error") or f"host request {op!r} failed")
+    return resp
+
+
+def install_helm_bridge():
+    """kapitan's `HelmChart` and `render_chart` ask the host to run helm: it
+    hashes and records the chart files as dependencies, parses the output
+    natively and caches renders by content across compiles."""
+    import kapitan.inputs.helm as helm_input
+    from kapitan.errors import HelmTemplateError
+
+    original_render_chart = helm_input.render_chart
+
+    def render(chart_dir, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags, parse):
+        return host_call(
+            "helm",
+            {
+                "chart_dir": chart_dir,
+                "helm_path": helm_path,
+                "helm_params": dict(helm_params or {}),
+                "helm_values_file": helm_values_file,
+                "helm_values_files": list(helm_values_files or []),
+                "helm_flags": dict(helm_flags) if helm_flags is not None else None,
+                "parse": parse,
+            },
+        )
+
+    def render_chart(chart_dir, output_path, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags=None):
+        if output_path != "-":
+            return original_render_chart(
+                chart_dir, output_path, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags
+            )
+        try:
+            return render(chart_dir, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags, False)["output"], ""
+        except HostError as e:
+            return "", str(e)
+
+    def load_chart(self):
+        helm_values_file = helm_input.write_helm_values_file(self.helm_values) if self.helm_values else None
+        try:
+            return render(self.chart_dir, self.helm_path, self.helm_params, helm_values_file, None, None, True)["docs"]
+        except HostError as e:
+            raise HelmTemplateError(str(e)) from None
+
+    helm_input.render_chart = render_chart
+    helm_input.HelmChart.load_chart = load_chart
 
 
 class Recorder:
@@ -343,9 +410,8 @@ def op_init(req):
         with open(req["inventory_file"]) as fp:
             docs = json.load(fp)
     args = build_parser().parse_args(["compile", *req.get("flags", [])])
-    # kapitan's helm render cache stays on (chart-heavy generators depend on
-    # it); its kadet output cache is disabled below because a hit would hide
-    # the files a component reads.
+    # kapitan's kadet output cache is disabled below because a hit would hide
+    # the files a component reads; helm renders go through the host instead.
     cached.args = args
     cached.inv = FakeInventory(docs)
     cached.global_inv = RecordingGlobal(docs, RECORDER)
@@ -353,6 +419,7 @@ def op_init(req):
     ref_controller = RefController(args.refs_path, embed_refs=args.embed_refs)
     cached.ref_controller_obj = ref_controller
     cached.revealer_obj = Revealer(ref_controller)
+    install_helm_bridge()
 
     import kadet
     import kapitan.inputs.kadet as kadet_input
@@ -491,7 +558,10 @@ def op_eval(req):
 
 def main():
     sys.stdout = sys.stderr  # user code prints must not corrupt the protocol
-    for line in sys.__stdin__:
+    while True:
+        line = sys.__stdin__.readline()
+        if not line:
+            return
         line = line.strip()
         if not line:
             continue
