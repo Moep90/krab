@@ -9,6 +9,7 @@
 pub mod digest;
 pub mod docs;
 pub mod engine;
+pub mod fetch;
 pub mod inputs;
 pub mod manifest;
 pub mod native;
@@ -22,6 +23,7 @@ pub use docs::{DocProvider, MapDocs, SharedDocs};
 pub use engine::{
     Backend, CompileOptions, DocSource, Event, Outcome, Report, Selection, Status, compile,
 };
+pub use fetch::{Dependency, FetchOutcome, FetchStatus};
 pub use manifest::{Manifest, TargetRecord};
 pub use native::NativeOptions;
 pub use plan::TargetPlan;

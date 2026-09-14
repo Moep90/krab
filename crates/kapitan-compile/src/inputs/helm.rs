@@ -131,7 +131,7 @@ pub fn template_args(req: &Request) -> Result<Vec<String>, String> {
     Ok(args)
 }
 
-fn helm_binary(helm_path: Option<&str>) -> String {
+pub(crate) fn helm_binary(helm_path: Option<&str>) -> String {
     helm_path
         .map(str::to_string)
         .or_else(|| std::env::var("KAPITAN_HELM_PATH").ok())
@@ -221,7 +221,7 @@ fn wait_with_timeout(mut child: Child, timeout: Duration) -> std::io::Result<Cap
     })
 }
 
-fn run_helm(binary: &str, args: &[String], cwd: &Path) -> Result<String, String> {
+pub(crate) fn run_helm(binary: &str, args: &[String], cwd: &Path) -> Result<String, String> {
     let timeout = std::env::var("KAPITAN_HELM_TIMEOUT")
         .ok()
         .and_then(|t| t.parse().ok())

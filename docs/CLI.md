@@ -93,7 +93,10 @@ Compile the targets whose inputs changed.
 | `-l, --labels k=v ...` | targets whose labels match |
 | `--force` | recompile even when nothing changed |
 | `--dry-run` | print which targets would compile and why, compile nothing |
-| `--explain` | compile, and print per target why it was compiled or skipped |
+| `--explain` | compile, and print per target why it was compiled or skipped (and per dependency why it was or was not fetched) |
+| `--fetch` | fetch `parameters.kapitan.dependencies` (git, http/https, helm) whose output path is missing before compiling (default: `compile.fetch` from `.kapitan`) |
+| `--no-fetch` | do not fetch even when `.kapitan` says `fetch: true` |
+| `--force-fetch` | fetch every dependency again and overwrite what exists (default: `compile.force-fetch` from `.kapitan`) |
 | `-p, --parallelism <N>` | worker processes (default: number of CPUs) |
 | `--output-path <DIR>` | where `compiled/` lives (default: `compile.output-path` from `.kapitan`, else `.`) |
 | `--reveal` | reveal refs instead of embedding them (Python backend only, for now) |
@@ -108,8 +111,26 @@ the output tree digest. A full run (no `-t`/`-l`) also removes output
 directories that belong to no target. Reasons printed by `--explain` and
 `--dry-run` name the specific changed path or target.
 
+Dependencies (`parameters.kapitan.dependencies`) are fetched before
+staleness is decided, so the fetched files count as inputs like any other
+read. `type: git` clones with `git` and copies the repository or its
+`subdir` at `ref` (the remote's default branch when unset; `submodules:
+true` initialises submodules); `type: http`/`https` downloads the file and
+saves it, or with `unpack: true` extracts a tar, tar.gz/tgz or zip archive
+into `output_path`; `type: helm` runs `helm pull --untar` for `chart_name`
+at `version` from `source` (a repository URL or `oci://` reference) and
+keeps versioned charts under `$XDG_CACHE_HOME/kapitan/charts` so a chart
+seen once is never pulled again. `output_path` is relative to
+`--output-path`. As in kapitan, nothing that exists is overwritten unless
+forced; unlike kapitan, a dependency whose output path already exists is
+not fetched at all, so a repository with everything in place compiles
+offline. Without `--fetch` only items marked `force_fetch: true` are
+fetched (and overwritten). `--dry-run` lists what would be fetched.
+`type: oci` (oras artifacts) is not supported natively yet.
+
 `.kapitan` keys used: `compile.search-paths`, `compile.output-path`,
-`compile.indent`, `inventory.multiline-string-style`.
+`compile.indent`, `compile.fetch`, `compile.force-fetch`,
+`inventory.multiline-string-style`.
 
 ## `kapitan server`
 
@@ -176,7 +197,7 @@ itself uses:
 | `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout |
 | `inventory-backend` | `global` | informational; only `omegaconf` semantics are implemented |
 | `indent` | `inventory` | YAML indentation for `kapitan inventory` |
-| `search-paths`, `output-path`, `indent` | `compile` | as for kapitan compile |
+| `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for kapitan compile |
 | `multiline-string-style` | `inventory` | multiline string style for compiled YAML |
 
 ## JSON output
@@ -191,5 +212,7 @@ itself uses:
   line. A diagnostic is
   `{severity, code, message, target, path, labels: [{location: {file, line, col}, text}], help}`.
 * `compile --json`: one report with `outcomes` (per target: name, status,
-  reason, warnings), `removed` output directories, `elapsed_ms`, the
-  manifest path and the engine identity.
+  reason, warnings), `fetched` dependencies (type, source, output path,
+  declaring target, status `fetched`/`would_fetch`/`skipped`/`failed`,
+  reason), `removed` output directories, `elapsed_ms`, the manifest path
+  and the engine identity.

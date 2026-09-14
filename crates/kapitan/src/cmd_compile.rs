@@ -7,9 +7,10 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use clap::Args;
+use kapitan_compile::fetch::DEPENDENCIES_PATH;
 use kapitan_compile::{
-    Backend, CompileOptions, DocProvider, DocSource, Event, NativeOptions, PythonCmd, Selection,
-    Status,
+    Backend, CompileOptions, DocProvider, DocSource, Event, FetchStatus, NativeOptions, PythonCmd,
+    Selection, Status,
 };
 use kapitan_inventory::emit::MultilineStyle;
 use kapitan_server::protocol::{TargetParams, TargetResult, TargetsResult};
@@ -38,6 +39,20 @@ pub struct CompileArgs {
     /// Explain why each target is compiled or skipped
     #[arg(long)]
     explain: bool,
+
+    /// Fetch `parameters.kapitan.dependencies` (git, http, helm) whose
+    /// output path is missing (default: `compile.fetch` from .kapitan)
+    #[arg(long, overrides_with = "no_fetch")]
+    fetch: bool,
+
+    /// Do not fetch dependencies even if .kapitan says `fetch: true`
+    #[arg(long)]
+    no_fetch: bool,
+
+    /// Fetch every dependency again, overwriting what exists
+    /// (default: `compile.force-fetch` from .kapitan)
+    #[arg(long)]
+    force_fetch: bool,
 
     /// Worker processes (default: number of CPUs)
     #[arg(short = 'p', long)]
@@ -163,13 +178,22 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         }),
         force: args.force,
         dry_run: args.dry_run,
+        fetch: if args.no_fetch {
+            false
+        } else {
+            args.fetch || app.dot.compile_bool("fetch").unwrap_or(false)
+        },
+        force_fetch: args.force_fetch || app.dot.compile_bool("force-fetch").unwrap_or(false),
         backend: match args.backend {
             BackendArg::Native => Backend::Native,
             BackendArg::Python => Backend::Python,
         },
         native,
     };
-    let source = AppDocs { app };
+    let source = AppDocs {
+        app,
+        rendered: parking_lot::Mutex::new(None),
+    };
 
     let json = app.json;
     let explain = args.explain || args.dry_run;
@@ -234,6 +258,30 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
             Event::Removed(p) => {
                 let _ = writeln!(err, "removed stale output {}", p.display());
             }
+            Event::Fetched(f) => {
+                let what = format!("{} {} -> {}", f.kind, f.source, f.output_path);
+                let why = if explain {
+                    format!("  [{}]", f.reason)
+                } else {
+                    String::new()
+                };
+                match &f.status {
+                    FetchStatus::Fetched { ms } => {
+                        let _ = writeln!(err, "fetched {what} ({:.2}s){why}", *ms as f64 / 1000.0);
+                    }
+                    FetchStatus::WouldFetch => {
+                        let _ = writeln!(err, "would fetch {what}  [{}]", f.reason);
+                    }
+                    FetchStatus::Skipped => {
+                        if explain {
+                            let _ = writeln!(err, "not fetched {what}  [{}]", f.reason);
+                        }
+                    }
+                    FetchStatus::Failed { error } => {
+                        let _ = writeln!(err, "FAILED fetching {what}: {error}");
+                    }
+                }
+            }
         }
     };
 
@@ -258,8 +306,18 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         } else {
             String::new()
         };
+        let fetched = report
+            .fetched
+            .iter()
+            .filter(|f| matches!(f.status, FetchStatus::Fetched { .. }))
+            .count();
+        let fetched_txt = if fetched > 0 {
+            format!("{fetched} fetched, ")
+        } else {
+            String::new()
+        };
         eprintln!(
-            "{} compiled, {} up to date{failed_txt} in {:.2}s (total {:.2}s)",
+            "{fetched_txt}{} compiled, {} up to date{failed_txt} in {:.2}s (total {:.2}s)",
             report.compiled(),
             report.up_to_date(),
             report.elapsed_ms as f64 / 1000.0,
@@ -278,6 +336,8 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
 /// Documents from the inventory server when it is available, else rendered locally.
 struct AppDocs<'a> {
     app: &'a App,
+    /// Every document of a local render (`digests` renders everything anyway).
+    rendered: parking_lot::Mutex<Option<BTreeMap<String, Value>>>,
 }
 
 /// On-demand document access handed to generators and templates.
@@ -407,6 +467,13 @@ impl DocSource for AppDocs<'_> {
                 report.errors.len()
             ));
         }
+        *self.rendered.lock() = Some(
+            report
+                .targets
+                .iter()
+                .map(|(n, t)| (n.clone(), t.to_document().value.to_json()))
+                .collect(),
+        );
         Ok(report
             .targets
             .iter()
@@ -414,7 +481,39 @@ impl DocSource for AppDocs<'_> {
             .collect())
     }
 
+    fn dependencies(&self, names: &[String]) -> Result<BTreeMap<String, Value>, String> {
+        if let Some(mut c) = self.app.client() {
+            let mut out = BTreeMap::new();
+            for name in names {
+                match c.call::<_, TargetResult>(
+                    "inventory.target",
+                    TargetParams {
+                        name: name.clone(),
+                        path: Some(DEPENDENCIES_PATH.to_string()),
+                    },
+                ) {
+                    Ok(r) if !r.document.is_null() => {
+                        out.insert(name.clone(), r.document);
+                    }
+                    // The server answers an RPC error when the path does not exist.
+                    Ok(_) | Err(kapitan_server::ClientError::Rpc(_)) => {}
+                    Err(e) => return Err(e.to_string()),
+                }
+            }
+            return Ok(out);
+        }
+        Ok(kapitan_compile::engine::declared_dependencies(
+            self.docs(names)?,
+        ))
+    }
+
     fn docs(&self, names: &[String]) -> Result<BTreeMap<String, Value>, String> {
+        if let Some(rendered) = self.rendered.lock().as_ref() {
+            return Ok(names
+                .iter()
+                .filter_map(|n| rendered.get(n).map(|d| (n.clone(), d.clone())))
+                .collect());
+        }
         if let Some(mut c) = self.app.client() {
             let mut out = BTreeMap::new();
             for name in names {
@@ -453,6 +552,9 @@ impl DocSource for AppDocs<'_> {
     }
 
     fn all_docs(&self) -> Result<BTreeMap<String, Value>, String> {
+        if let Some(rendered) = self.rendered.lock().as_ref() {
+            return Ok(rendered.clone());
+        }
         let docs = self.app.all_documents(&[]).map_err(|e| match e {
             Failure::Message(m) => m,
             Failure::Diagnostics(ds, _) => ds
