@@ -7,7 +7,7 @@ in Rust. Every file, directory listing, module and global-inventory target
 the component read is reported so the compile can be skipped next time.
 
 Protocol: newline-delimited JSON on stdin/stdout.
-  {"op": "init", "cwd": ..., "inventory_file": ..., "search_paths": [...], "flags": [...]}
+  {"op": "init", "cwd": ..., "inventory_file": ..., "search_paths": [...], "flags": [...], "args": {...}?}
   {"op": "eval", "target": ..., "input_path": ..., "input_params": {...}, "compile_path": ...}
   {"op": "exit"}
 While an eval runs the evaluator may ask the host for things the same way
@@ -15,6 +15,7 @@ While an eval runs the evaluator may ask the host for things the same way
   {"op": "helm", "chart_dir": ..., "helm_params": {...}, "helm_values_file": ..., "parse": bool}
 """
 
+import argparse
 import builtins
 import inspect
 import io
@@ -142,6 +143,21 @@ def host_call(op, params):
     if not resp.get("ok"):
         raise HostError(resp.get("error") or f"host request {op!r} failed")
     return resp
+
+
+def compile_args(req):
+    """kapitan's `compile` arguments (`cached.args`): what kapitan and user
+    code such as kgenlib read at evaluation time. Parsing them needs
+    kapitan.cli, 2 s of imports per process (jsonschema's URI grammars), so
+    the host passes the values the first evaluator produced to the others
+    and remembers them across compiles; the reply carries them when we had
+    to parse."""
+    if req.get("args") is not None:
+        return argparse.Namespace(**req["args"]), None
+    from kapitan.cli import build_parser
+
+    args = build_parser().parse_args(["compile", *req.get("flags", [])])
+    return args, {k: v for k, v in vars(args).items() if k != "func"}
 
 
 def install_helm_bridge():
@@ -400,7 +416,6 @@ def op_init(req):
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr, format="%(levelname)s %(name)s: %(message)s")
 
     from kapitan import cached
-    from kapitan.cli import build_parser
     from kapitan.refs.base import RefController, Revealer
     from kapitan.version import VERSION
 
@@ -409,7 +424,7 @@ def op_init(req):
     else:
         with open(req["inventory_file"]) as fp:
             docs = json.load(fp)
-    args = build_parser().parse_args(["compile", *req.get("flags", [])])
+    args, parsed_args = compile_args(req)
     # kapitan's kadet output cache is disabled below because a hit would hide
     # the files a component reads; helm renders go through the host instead.
     cached.args = args
@@ -518,7 +533,13 @@ def op_init(req):
     kadet_input.load_from_search_paths = load_from_search_paths
     STATE["search_paths"] = [os.path.abspath(p) for p in req.get("search_paths", [])]
     STATE["kadet_input"] = kadet_input
-    return {"ok": True, "kapitan_version": VERSION, "python": sys.version.split()[0], "protocol": PROTOCOL}
+    return {
+        "ok": True,
+        "kapitan_version": VERSION,
+        "python": sys.version.split()[0],
+        "protocol": PROTOCOL,
+        "args": parsed_args,
+    }
 
 
 def op_eval(req):
