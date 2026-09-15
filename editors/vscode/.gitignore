@@ -1,2 +1,4 @@
 node_modules/
 *.vsix
+# copied from the repository root by `npm run package`
+LICENSE

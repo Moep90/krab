@@ -7,6 +7,11 @@ Nothing here changes your inventory; the only files krab writes are under
 
 ## 1. Install
 
+Download the archive for your platform from the
+[releases page](https://github.com/kapicorp/krab/releases) (Linux x86_64
+and aarch64, macOS Intel and Apple silicon) and put the `kapitan` binary it
+contains on your `PATH`, or build from source with Rust 1.85 or newer:
+
 ```sh
 git clone https://github.com/kapicorp/krab.git
 cd krab
@@ -14,7 +19,7 @@ cargo build --release
 install -m 755 target/release/kapitan ~/.local/bin/kapitan2
 ```
 
-Rust 1.85 or newer is required. The examples below use `kapitan2` as the
+The examples below use `kapitan2` as the
 binary name so that the Python `kapitan` stays available for comparison and
 for the input types that are not native yet. Name it `kapitan` once you no
 longer need both.
@@ -170,7 +175,8 @@ incremental bookkeeping, or use the Python `kapitan` for those targets.
 so hover, definitions and diagnostics reflect the current render rather than
 a guess from the open file.
 
-VS Code: build and install the extension in `editors/vscode` (its README has
+VS Code: install the `kapitan-vscode-*.vsix` attached to the release with
+`code --install-extension`, or build it in `editors/vscode` (its README has
 the three commands), then set `kapitan.path` to `kapitan2` if the binary is
 not called `kapitan`. It activates in any workspace containing a `.kapitan`
 file, including one level down (a `grid/` or `kapitan/` subdirectory).

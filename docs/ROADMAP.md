@@ -147,11 +147,14 @@ Integrate
 - [ ] Publish the crates (`kapitan-inventory` as the library entry point,
       with a documented API and examples for rendering, explaining and
       watching), and a Python binding via PyO3 for kadet users.
-- [ ] Release binaries (Linux, macOS), Homebrew/`cargo binstall`, and the
-      `kapitan2` -> `kapitan` switch-over plan.
-- [ ] CI for this repo: fixture tests run anywhere; the corpus test needs
-      the grid inventory and the reference PEX, so run it as a nightly
-      parity job from the platform repo.
+- [x] Release binaries (Linux, macOS) and the VS Code extension attached to
+      every tagged release (`.github/workflows/release.yml`).
+- [ ] Homebrew/`cargo binstall`, and the `kapitan2` -> `kapitan`
+      switch-over plan.
+- [x] CI for this repo: fmt, clippy, the fixture tests and the extension
+      package on every pull request (`.github/workflows/ci.yml`).
+- [ ] Nightly parity job: the corpus test needs the grid inventory and the
+      reference PEX, so run it from the platform repo.
 - [ ] Track upstream kapitan releases for behaviour changes (omegaconf
       fork, pydantic model defaults).
 
