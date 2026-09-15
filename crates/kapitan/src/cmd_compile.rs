@@ -62,9 +62,15 @@ pub struct CompileArgs {
     #[arg(long)]
     output_path: Option<PathBuf>,
 
-    /// Reveal refs in the output instead of embedding them
+    /// Reveal refs in the output instead of compiling them
+    /// (default: `compile.reveal` from .kapitan)
     #[arg(long)]
     reveal: bool,
+
+    /// Embed the ref files in the output instead of writing hashed tags
+    /// (default: `compile.embed-refs` from .kapitan)
+    #[arg(long)]
+    embed_refs: bool,
 
     /// Python with kapitan installed used to run kadet/jinja2/helm inputs
     /// (default: $KAPITAN_PYTHON, a kapitan PEX on PATH, or python3)
@@ -117,8 +123,12 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
     let python = PythonCmd::detect(args.python.as_deref()).map_err(Failure::Message)?;
 
     let mut flags = args.flags.clone();
-    if args.reveal {
+    let reveal = args.reveal || app.dot.compile_bool("reveal").unwrap_or(false);
+    if reveal {
         flags.push("--reveal".into());
+    }
+    if args.embed_refs {
+        flags.push("--embed-refs".into());
     }
 
     let labels: Vec<(String, String)> = args
@@ -155,8 +165,8 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         repo_root: repo_root.clone(),
         search_paths: search_paths.clone(),
         refs_path,
-        embed_refs: app.dot.compile_bool("embed-refs").unwrap_or(false),
-        reveal: args.reveal,
+        embed_refs: args.embed_refs || app.dot.compile_bool("embed-refs").unwrap_or(false),
+        reveal,
         indent: app.dot.compile_int("indent").unwrap_or(2).max(0) as usize,
         use_rapidyaml: app.dot.compile_bool("yaml-use-rapidyaml").unwrap_or(false),
         null_as_empty: app

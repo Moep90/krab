@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use kapitan_inventory::Value;
 use kapitan_inventory::emit::MultilineStyle;
@@ -18,7 +19,7 @@ use crate::manifest::ItemRecord;
 use crate::output::{OutputType, Writer, WriterOptions};
 use crate::plan::TargetPlan;
 use crate::python::PythonCmd;
-use crate::refs::RefController;
+use crate::refs::{RefController, TargetSecrets};
 
 #[derive(Clone, Debug)]
 pub struct NativeOptions {
@@ -67,7 +68,7 @@ struct ItemRecords {
 
 pub struct NativeCompiler {
     pub opts: NativeOptions,
-    refs: RefController,
+    refs: Arc<RefController>,
     kadet: KadetPool,
     docs: SharedDocs,
 }
@@ -91,7 +92,7 @@ impl NativeCompiler {
             "search_paths": opts.search_paths,
             "flags": flags,
         });
-        let refs = RefController::new(opts.refs_path.clone(), opts.embed_refs);
+        let refs = Arc::new(RefController::new(opts.refs_path.clone(), opts.embed_refs));
         let kadet = KadetPool::new(python, init)?;
         Ok(NativeCompiler {
             opts,
@@ -107,11 +108,6 @@ impl NativeCompiler {
         temp_dir: &Path,
         items: &ItemContext,
     ) -> Result<CompileOutcome, String> {
-        if self.opts.reveal {
-            return Err(
-                "--reveal is not supported by the native compiler yet; use --backend python".into(),
-            );
-        }
         let mut reads = Reads::default();
         let mut warnings = Vec::new();
         let mut records = ItemRecords {
@@ -130,8 +126,10 @@ impl NativeCompiler {
                 use_rapidyaml: self.opts.use_rapidyaml,
                 null_as_empty: self.opts.null_as_empty,
                 multiline,
+                reveal: self.opts.reveal,
             },
             refs: &self.refs,
+            target: TargetSecrets::from_document(&plan.name, &plan.doc),
         };
         let compile_root = temp_dir.join("compiled");
         for raw in &plan.compile {
@@ -241,6 +239,7 @@ impl NativeCompiler {
                     input_params: &with_compile_path(&item.input_params, target_compile_path),
                     search_paths: &search_paths,
                     reveal: self.opts.reveal,
+                    refs: self.refs.clone(),
                 };
                 let strip = item
                     .raw
@@ -263,10 +262,7 @@ impl NativeCompiler {
                         if let Some(parent) = path.parent() {
                             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                         }
-                        let content = self
-                            .refs
-                            .compile_str(&rendered.content, reads)
-                            .map_err(|e| e.to_string())?;
+                        let content = writer.refs_str(&rendered.content, reads)?;
                         std::fs::write(&path, content)
                             .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
                         #[cfg(unix)]
