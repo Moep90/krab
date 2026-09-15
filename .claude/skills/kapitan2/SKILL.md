@@ -83,7 +83,18 @@ kapitan2 compile -t a.b -t c.d      # selected targets
 kapitan2 compile -l type=terraform
 kapitan2 compile --force            # everything, regardless
 kapitan2 compile --backend python   # kapitan's own Python input types in a worker (slow, complete)
+kapitan2 compile --fetch            # first fetch parameters.kapitan.dependencies whose output is missing
+kapitan2 compile --force-fetch      # refetch every dependency, overwriting (updates generators, charts)
+kapitan2 compile --no-fetch         # ignore `fetch: true` in .kapitan
 ```
+
+Dependencies (git, http(s), helm, oci) are fetched natively before
+staleness is decided. grid has `fetch: true` in `.kapitan`, so a missing
+chart directory (`system/sources/charts/<name>/<version>` after a version
+bump) or generator checkout is fetched on the next compile; whatever exists
+is left alone. `--dry-run` shows `would fetch ...`, `--explain` shows
+`not fetched ... [already present]`. Versioned charts are cached under
+`~/.cache/kapitan/charts`.
 
 Staleness comes from `compiled/.kapitan-manifest.json`: per target, the
 rendered document digest, every file the inputs read (templates, helm chart
@@ -95,9 +106,10 @@ currently untracked in git; do not commit it unless asked.
 
 Native today: `jinja2`, `kadet` (Python evaluates the component, Rust does
 the rest), `copy`, `remove`, `external`; output types yaml/json/plain, refs
-embedded. **Not yet native**: helm, jsonnet, kustomize, cuelang inputs, toml
-output, `--reveal`, creating missing refs (`||random`), dependency fetching.
-For those use `--backend python` or the reference `kapitan`.
+embedded; dependency fetching (git, http, helm, oci). **Not yet native**:
+helm, jsonnet, kustomize, cuelang inputs, toml output, `--reveal`, creating
+missing refs (`||random`). For those use `--backend python` or the reference
+`kapitan`.
 
 ## Parity check (after any engine change)
 
