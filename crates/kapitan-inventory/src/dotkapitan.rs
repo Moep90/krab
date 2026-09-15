@@ -18,6 +18,8 @@ pub struct DotKapitan {
     pub compile: Map,
     /// The raw `inventory:` section.
     pub inventory: Map,
+    /// The raw `refs:` section.
+    pub refs: Map,
 }
 
 impl DotKapitan {
@@ -38,6 +40,11 @@ impl DotKapitan {
                 .unwrap_or_default(),
             inventory: node
                 .get("inventory")
+                .and_then(Node::as_map)
+                .cloned()
+                .unwrap_or_default(),
+            refs: node
+                .get("refs")
                 .and_then(Node::as_map)
                 .cloned()
                 .unwrap_or_default(),
@@ -102,6 +109,14 @@ impl DotKapitan {
 
     pub fn inventory_str(&self, key: &str) -> Option<String> {
         self.inventory
+            .get(key)
+            .and_then(|n| n.as_str())
+            .map(str::to_string)
+    }
+
+    /// A string from the refs section (`refs-path`).
+    pub fn refs_str(&self, key: &str) -> Option<String> {
+        self.refs
             .get(key)
             .and_then(|n| n.as_str())
             .map(str::to_string)

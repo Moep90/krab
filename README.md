@@ -19,9 +19,10 @@ the Python implementation and produces the same output, byte for byte:
 
 Status: alpha. The inventory, the daemon, the language server and the
 native compile path for `jinja2`, `kadet`, `copy`, `remove` and `external`
-inputs are in place and verified against a production inventory. Not native
-yet: `jsonnet`, `helm` (as a direct input type), `kustomize`, `cuelang`,
-`toml` output and `--reveal`; see [Compatibility](#compatibility).
+inputs are in place and verified against a production inventory, as are
+references (`?{gkms:...}` and friends: compile, create, reveal). Not native
+yet: `jsonnet`, `helm` (as a direct input type), `kustomize`, `cuelang` and
+`toml` output; see [Compatibility](#compatibility).
 
 ## Install
 
@@ -144,6 +145,16 @@ Input types, ref embedding, pruning and the YAML/JSON writers are native.
 `--backend python` runs kapitan's own Python input types instead, for
 comparison or for input types that are not native yet.
 
+References are native too. Compile turns `?{type:path}` tags into kapitan's
+hashed or embedded form, creates refs that do not exist yet from their
+functions (`?{gkms:targets/x/token||random:str}`, `||rsa`,
+`||reveal:path|publickey`, ...) with the target's `parameters.kapitan.secrets`,
+and `--reveal` decrypts them into the output. `kapitan refs` writes, reveals,
+updates and validates ref files. Backends: `plain`, `base64`, `env`, `gkms`
+(Cloud KMS REST API with application-default credentials), `gpg` (the `gpg`
+binary), `vaultkv` and `vaulttransit` (Vault's HTTP API); `awskms` and
+`azkms` go through the `aws` and `az` command line clients.
+
 ## Compatibility
 
 Rendering and compiled output are verified byte for byte against kapitan
@@ -154,8 +165,8 @@ Deliberate differences: class cycles are reported instead of recursing
 forever; unknown YAML tags are errors; timestamps stay strings. Not
 implemented yet: `jsonnet`, `helm` (as a direct input type; charts rendered
 by kgenlib inside kadet work), `kustomize` and `cuelang` inputs, `toml`
-output, `--reveal`, creating missing refs (`||random:str`), Python-defined
-jinja2 filters other than the common ones, and the `write` resolver. [docs/DESIGN.md](docs/DESIGN.md) lists the semantics in
+output, Python-defined jinja2 filters other than the common ones, and the
+`write` resolver. [docs/DESIGN.md](docs/DESIGN.md) lists the semantics in
 detail.
 
 ## Writing a resolver
