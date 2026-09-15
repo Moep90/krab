@@ -18,7 +18,7 @@ use crate::inputs::kadet::kadet_runner_digest;
 use crate::manifest::{ItemRecord, MANIFEST_FILE, MANIFEST_VERSION, Manifest, TargetRecord};
 use crate::native::{ItemContext, NativeCompiler, NativeOptions};
 use crate::plan::TargetPlan;
-use crate::python::{PythonCmd, materialize_runner, runner_digest};
+use crate::python::{PythonCmd, PythonProbe, materialize_runner, runner_digest};
 use crate::worker::{Worker, WorkerError};
 
 /// How targets are compiled.

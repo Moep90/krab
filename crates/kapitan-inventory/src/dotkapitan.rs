@@ -7,12 +7,61 @@ use crate::source::SourceId;
 use crate::value::{Map, Node, Value};
 use crate::yaml::parse_document;
 
+/// The `inventory.python-resolvers` section: a user `resolvers.py` run in a
+/// Python worker (see `resolvers::python`). Either a path, `false`, or a map:
+///
+/// ```yaml
+/// inventory:
+///   python-resolvers:
+///     file: system/omegaconf/resolvers/resolvers.py   # default: the reference's discovery
+///     python: /opt/venv/bin/python                     # default: $KAPITAN_PYTHON, a kapitan PEX, python3
+///     prefer-native: true                              # keep native resolvers over same-named Python ones
+///     workers: 4
+///     enabled: true
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PythonResolverSettings {
+    pub enabled: Option<bool>,
+    pub file: Option<PathBuf>,
+    pub python: Option<String>,
+    pub prefer_native: Option<bool>,
+    pub workers: Option<usize>,
+}
+
+impl PythonResolverSettings {
+    fn from_node(node: &Node) -> PythonResolverSettings {
+        let mut s = PythonResolverSettings::default();
+        match &node.value {
+            Value::Str(path) => s.file = Some(PathBuf::from(path)),
+            Value::Bool(b) => s.enabled = Some(*b),
+            Value::Map(m) => {
+                let str_of = |k: &str| m.get(k).and_then(|n| n.as_str()).map(str::to_string);
+                let bool_of = |k: &str| match m.get(k).map(|n| &n.value) {
+                    Some(Value::Bool(b)) => Some(*b),
+                    _ => None,
+                };
+                s.file = str_of("file").or_else(|| str_of("path")).map(PathBuf::from);
+                s.python = str_of("python");
+                s.enabled = bool_of("enabled");
+                s.prefer_native = bool_of("prefer-native");
+                s.workers = match m.get("workers").map(|n| &n.value) {
+                    Some(Value::Int(i)) if *i > 0 => Some(*i as usize),
+                    _ => None,
+                };
+            }
+            _ => {}
+        }
+        s
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct DotKapitan {
     pub inventory_path: Option<PathBuf>,
     pub compose_target_name: Option<bool>,
     pub inventory_backend: Option<String>,
     pub indent: Option<usize>,
+    pub python_resolvers: PythonResolverSettings,
     pub file: Option<PathBuf>,
     /// The raw `compile:` section, keys as written (`search-paths`, `output-path`, ...).
     pub compile: Map,
@@ -69,6 +118,9 @@ impl DotKapitan {
         }
         if let Some(Value::Int(i)) = get(&["inventory"], "indent") {
             cfg.indent = Some(i.max(1) as usize);
+        }
+        if let Some(n) = cfg.inventory.get("python-resolvers") {
+            cfg.python_resolvers = PythonResolverSettings::from_node(n);
         }
         Ok(cfg)
     }
@@ -146,6 +198,47 @@ mod tests {
         assert_eq!(
             dot.inventory_str("multiline-string-style").as_deref(),
             Some("literal")
+        );
+        assert_eq!(dot.python_resolvers, PythonResolverSettings::default());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reads_python_resolvers_section() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-py-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".kapitan"),
+            "inventory:\n  python-resolvers:\n    file: system/resolvers.py\n    python: /opt/venv/bin/python\n    prefer-native: true\n    workers: 2\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        assert_eq!(
+            dot.python_resolvers,
+            PythonResolverSettings {
+                enabled: None,
+                file: Some(PathBuf::from("system/resolvers.py")),
+                python: Some("/opt/venv/bin/python".into()),
+                prefer_native: Some(true),
+                workers: Some(2),
+            }
+        );
+        std::fs::write(
+            dir.join(".kapitan"),
+            "inventory:\n  python-resolvers: false\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        assert_eq!(dot.python_resolvers.enabled, Some(false));
+        std::fs::write(
+            dir.join(".kapitan"),
+            "inventory:\n  python-resolvers: lib/resolvers.py\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        assert_eq!(
+            dot.python_resolvers.file,
+            Some(PathBuf::from("lib/resolvers.py"))
         );
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -48,7 +48,7 @@ impl Server {
         listener.set_nonblocking(true)?;
         tracing::info!(socket = %self.cfg.socket.display(), "listening");
         loop {
-            if self.shutdown.load(Ordering::SeqCst) {
+            if self.shutdown.load(Ordering::SeqCst) || self.state.should_stop() {
                 break;
             }
             if self.state.idle_for() > self.cfg.idle_timeout {
@@ -121,7 +121,7 @@ impl Server {
             writer.write_all(&out)?;
             writer.flush()?;
             self.state.touch();
-            if self.shutdown.load(Ordering::SeqCst) {
+            if self.shutdown.load(Ordering::SeqCst) || self.state.should_stop() {
                 return Ok(());
             }
         }

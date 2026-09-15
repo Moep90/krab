@@ -10,7 +10,7 @@ use clap::Args;
 use kapitan_compile::fetch::DEPENDENCIES_PATH;
 use kapitan_compile::{
     Backend, CompileOptions, DocProvider, DocSource, Event, FetchStatus, NativeOptions, PythonCmd,
-    Selection, Status,
+    PythonProbe, Selection, Status,
 };
 use kapitan_inventory::emit::MultilineStyle;
 use kapitan_server::protocol::{TargetParams, TargetResult, TargetsResult};
