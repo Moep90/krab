@@ -12,10 +12,11 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::digest::{Digests, digest_str};
+use crate::fetch::{self, FetchOptions, FetchOutcome};
 use crate::inputs::Reads;
 use crate::inputs::kadet::kadet_runner_digest;
-use crate::manifest::{MANIFEST_FILE, MANIFEST_VERSION, Manifest, TargetRecord};
-use crate::native::{NativeCompiler, NativeOptions};
+use crate::manifest::{ItemRecord, MANIFEST_FILE, MANIFEST_VERSION, Manifest, TargetRecord};
+use crate::native::{ItemContext, NativeCompiler, NativeOptions};
 use crate::plan::TargetPlan;
 use crate::python::{PythonCmd, materialize_runner, runner_digest};
 use crate::worker::{Worker, WorkerError};
@@ -42,8 +43,13 @@ pub struct CompileOptions {
     pub parallelism: usize,
     /// Recompile everything regardless of the manifest.
     pub force: bool,
-    /// Only report what would be compiled.
+    /// Only report what would be compiled (and fetched).
     pub dry_run: bool,
+    /// Fetch every `parameters.kapitan.dependencies` item whose output is
+    /// missing (`--fetch`); without it only items with `force_fetch: true`.
+    pub fetch: bool,
+    /// Fetch every dependency and overwrite what exists (`--force-fetch`).
+    pub force_fetch: bool,
     pub backend: Backend,
     /// Settings for the native backend.
     pub native: NativeOptions,
@@ -109,11 +115,21 @@ pub struct Outcome {
     pub reason: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
+    /// kadet items whose previous output was reused instead of evaluated.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub reused_items: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Report {
     pub outcomes: Vec<Outcome>,
+    /// Dependencies fetched (or that would be) before compiling.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fetched: Vec<FetchOutcome>,
     pub removed: Vec<PathBuf>,
     pub elapsed_ms: u64,
     pub manifest: PathBuf,
@@ -150,6 +166,8 @@ pub enum Event<'a> {
     Started(&'a str),
     Finished(&'a Outcome),
     Removed(&'a Path),
+    /// A dependency was fetched, skipped or failed (before `Planned`).
+    Fetched(&'a FetchOutcome),
 }
 
 /// Where rendered target documents come from (the inventory server or a
@@ -161,6 +179,11 @@ pub trait DocSource: Sync {
     fn docs(&self, names: &[String]) -> Result<BTreeMap<String, Value>, String>;
     /// Rendered documents of every target (workers need the global inventory).
     fn all_docs(&self) -> Result<BTreeMap<String, Value>, String>;
+    /// `parameters.kapitan.dependencies` of the named targets; targets
+    /// without any are left out.
+    fn dependencies(&self, names: &[String]) -> Result<BTreeMap<String, Value>, String> {
+        Ok(declared_dependencies(self.docs(names)?))
+    }
     /// On-demand access to documents for generators and templates.
     fn provider(&self) -> crate::docs::SharedDocs;
 }
@@ -225,6 +248,9 @@ pub fn compile(
         return Err("no matching targets".into());
     }
 
+    // 0. Dependencies, before staleness is decided: the fetched files are inputs.
+    let fetched = fetch_dependencies(source, &candidates, opts, on_event)?;
+
     // 1. Staleness, in parallel, from digests and the manifest alone.
     let decisions: Vec<(String, Option<String>)> = candidates
         .par_iter()
@@ -260,6 +286,7 @@ pub fn compile(
                 status: Status::UpToDate,
                 reason: "up to date".into(),
                 warnings: vec![],
+                reused_items: 0,
             }),
             Some(r) => stale_names.push((name, r)),
         }
@@ -280,11 +307,13 @@ pub fn compile(
                 status: Status::WouldCompile,
                 reason,
                 warnings: vec![],
+                reused_items: 0,
             });
         }
         outcomes.sort_by(|a, b| a.target.cmp(&b.target));
         return Ok(Report {
             outcomes,
+            fetched,
             removed: vec![],
             elapsed_ms: start.elapsed().as_millis() as u64,
             manifest: manifest_path,
@@ -359,6 +388,8 @@ pub fn compile(
 
         manifest.engine = engine.clone();
         manifest.version = MANIFEST_VERSION;
+        // Item reuse checks files against what the last compile saw, like `why_stale`.
+        let files_before = manifest.files.clone();
         let manifest = Arc::new(Mutex::new(manifest));
         let queue: Arc<Mutex<VecDeque<(TargetPlan, String)>>> =
             Arc::new(Mutex::new(stale.into_iter().collect()));
@@ -374,6 +405,8 @@ pub fn compile(
             config_digest: &config_digest,
             target_paths: &target_paths,
             manifest_path: &manifest_path,
+            files_before: &files_before,
+            digests: &digests,
         };
 
         std::thread::scope(|scope| {
@@ -426,11 +459,65 @@ pub fn compile(
     outcomes.sort_by(|a, b| a.target.cmp(&b.target));
     Ok(Report {
         outcomes,
+        fetched,
         removed,
         elapsed_ms: start.elapsed().as_millis() as u64,
         manifest: manifest_path,
         engine,
     })
+}
+
+/// `parameters.kapitan.dependencies` of each document that has one.
+pub fn declared_dependencies(docs: BTreeMap<String, Value>) -> BTreeMap<String, Value> {
+    docs.into_iter()
+        .filter_map(|(n, d)| {
+            d.pointer("/parameters/kapitan/dependencies")
+                .filter(|v| !v.is_null())
+                .cloned()
+                .map(|v| (n, v))
+        })
+        .collect()
+}
+
+/// Fetch the dependencies the candidate targets declare. Every declared
+/// item is considered with `--fetch`/`--force-fetch`; otherwise only items
+/// marked `force_fetch: true`. A failed fetch aborts the compile.
+fn fetch_dependencies(
+    source: &dyn DocSource,
+    candidates: &[String],
+    opts: &CompileOptions,
+    on_event: &(dyn Fn(Event) + Sync),
+) -> Result<Vec<FetchOutcome>, String> {
+    let declared = source.dependencies(candidates)?;
+    let mut deps = Vec::new();
+    for (name, value) in &declared {
+        deps.extend(fetch::dependencies(name, value, &opts.output_path)?);
+    }
+    if deps.is_empty() {
+        return Ok(vec![]);
+    }
+    let fetched = fetch::fetch(
+        deps,
+        &FetchOptions {
+            repo_root: &opts.repo_root,
+            fetch_all: opts.fetch || opts.force_fetch,
+            force: opts.force_fetch,
+            dry_run: opts.dry_run,
+            parallelism: opts.parallelism,
+            cache_dir: crate::python::cache_dir(),
+        },
+    );
+    for f in &fetched {
+        on_event(Event::Fetched(f));
+    }
+    let failed = fetched.iter().filter(|f| f.failed()).count();
+    if failed > 0 {
+        return Err(format!(
+            "{failed} dependenc{} failed to fetch",
+            if failed == 1 { "y" } else { "ies" }
+        ));
+    }
+    Ok(fetched)
 }
 
 struct Ctx<'a> {
@@ -444,6 +531,8 @@ struct Ctx<'a> {
     config_digest: &'a str,
     target_paths: &'a BTreeSet<String>,
     manifest_path: &'a Path,
+    files_before: &'a BTreeMap<String, String>,
+    digests: &'a Digests,
 }
 
 fn run_one(
@@ -460,9 +549,37 @@ fn run_one(
         let temp_dir = ctx.temp_root.join(&plan.name);
         let _ = std::fs::remove_dir_all(&temp_dir);
         let temp_target = temp_dir.join("compiled").join(&plan.target_path);
-        let outcome = match native.compile_target(plan, &temp_dir) {
+        // Items of the last compile can be reused only if the same compiler
+        // with the same settings produced them, and never under --force.
+        let previous: Vec<ItemRecord> = manifest
+            .lock()
+            .targets
+            .get(&plan.name)
+            .filter(|r| {
+                !ctx.opts.force && r.engine == ctx.engine && r.config_digest == ctx.config_digest
+            })
+            .map(|r| r.items.clone())
+            .unwrap_or_default();
+        let items = ItemContext {
+            previous: &previous,
+            files: ctx.files_before,
+            all_digests: ctx.all_digests,
+            everything_digest: ctx.everything_digest,
+            compiled_dir: ctx.compiled_dir,
+            digests: ctx.digests,
+            repo_root: &ctx.opts.repo_root,
+        };
+        let outcome = match native.compile_target(plan, &temp_dir, &items) {
             Ok(out) => {
-                match install_and_record(plan, out.reads, &temp_target, ctx, manifest, started) {
+                match install_and_record(
+                    plan,
+                    out.reads,
+                    out.items,
+                    &temp_target,
+                    ctx,
+                    manifest,
+                    started,
+                ) {
                     Ok(()) => Outcome {
                         target: plan.name.clone(),
                         status: Status::Compiled {
@@ -470,6 +587,7 @@ fn run_one(
                         },
                         reason,
                         warnings: out.warnings,
+                        reused_items: out.reused,
                     },
                     Err(e) => Outcome {
                         target: plan.name.clone(),
@@ -479,6 +597,7 @@ fn run_one(
                         },
                         reason,
                         warnings: out.warnings,
+                        reused_items: 0,
                     },
                 }
             }
@@ -490,6 +609,7 @@ fn run_one(
                 },
                 reason,
                 warnings: vec![],
+                reused_items: 0,
             },
         };
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -510,6 +630,7 @@ fn run_one(
                         },
                         reason,
                         warnings: vec![],
+                        reused_items: 0,
                     };
                 }
             }
@@ -542,6 +663,7 @@ fn run_one(
                 let installed = install_and_record(
                     plan,
                     reads_from_response(&resp),
+                    vec![],
                     &temp_target,
                     ctx,
                     manifest,
@@ -557,6 +679,7 @@ fn run_one(
                             },
                             reason,
                             warnings,
+                            reused_items: 0,
                         };
                     }
                     Err(e) => {
@@ -568,6 +691,7 @@ fn run_one(
                             },
                             reason,
                             warnings,
+                            reused_items: 0,
                         };
                     }
                 }
@@ -578,6 +702,7 @@ fn run_one(
                     status: Status::Failed { error, traceback },
                     reason,
                     warnings: vec![],
+                    reused_items: 0,
                 };
             }
             Err(e) => {
@@ -592,6 +717,7 @@ fn run_one(
                         },
                         reason,
                         warnings: vec![],
+                        reused_items: 0,
                     };
                 }
             }
@@ -631,9 +757,11 @@ fn reads_from_response(resp: &Value) -> Reads {
     reads
 }
 
+#[allow(clippy::too_many_arguments)]
 fn install_and_record(
     plan: &TargetPlan,
     reads: Reads,
+    items: Vec<ItemRecord>,
     temp_target: &Path,
     ctx: &Ctx,
     manifest: &Mutex<Manifest>,
@@ -687,6 +815,7 @@ fn install_and_record(
             .map(|d| d.as_secs())
             .unwrap_or(0),
         duration_ms: started.elapsed().as_millis() as u64,
+        items,
     };
     let mut m = manifest.lock();
     m.files.extend(deps);

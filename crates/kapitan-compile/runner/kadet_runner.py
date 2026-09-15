@@ -7,12 +7,17 @@ in Rust. Every file, directory listing, module and global-inventory target
 the component read is reported so the compile can be skipped next time.
 
 Protocol: newline-delimited JSON on stdin/stdout.
-  {"op": "init", "cwd": ..., "inventory_file": ..., "search_paths": [...], "flags": [...]}
+  {"op": "init", "cwd": ..., "inventory_file": ..., "search_paths": [...], "flags": [...], "args": {...}?}
   {"op": "eval", "target": ..., "input_path": ..., "input_params": {...}, "compile_path": ...}
   {"op": "exit"}
+While an eval runs the evaluator may ask the host for things the same way
+(a line with an ``op`` and an ``id`` on stdout, the answer on stdin):
+  {"op": "helm", "chart_dir": ..., "helm_params": {...}, "helm_values_file": ..., "parse": bool}
 """
 
+import argparse
 import builtins
+import copy
 import inspect
 import io
 import json
@@ -20,7 +25,7 @@ import os
 import sys
 import traceback
 
-PROTOCOL = 2
+PROTOCOL = 3
 
 
 class InventoryClient:
@@ -121,6 +126,85 @@ def respond(obj):
     sys.__stdout__.flush()
 
 
+class HostError(Exception):
+    """The host refused or failed a request."""
+
+
+HOST_IDS = iter(range(1, sys.maxsize))
+
+
+def host_call(op, params):
+    """Ask the host (the compiler reading our stdout) for something in the
+    middle of an evaluation; it answers on our stdin."""
+    respond({"op": op, "id": next(HOST_IDS), **params})
+    line = sys.__stdin__.readline()
+    if not line:
+        raise RuntimeError("host closed the connection")
+    resp = json.loads(line)
+    if not resp.get("ok"):
+        raise HostError(resp.get("error") or f"host request {op!r} failed")
+    return resp
+
+
+def compile_args(req):
+    """kapitan's `compile` arguments (`cached.args`): what kapitan and user
+    code such as kgenlib read at evaluation time. Parsing them needs
+    kapitan.cli, 2 s of imports per process (jsonschema's URI grammars), so
+    the host passes the values the first evaluator produced to the others
+    and remembers them across compiles; the reply carries them when we had
+    to parse."""
+    if req.get("args") is not None:
+        return argparse.Namespace(**req["args"]), None
+    from kapitan.cli import build_parser
+
+    args = build_parser().parse_args(["compile", *req.get("flags", [])])
+    return args, {k: v for k, v in vars(args).items() if k != "func"}
+
+
+def install_helm_bridge():
+    """kapitan's `HelmChart` and `render_chart` ask the host to run helm: it
+    hashes and records the chart files as dependencies, parses the output
+    natively and caches renders by content across compiles."""
+    import kapitan.inputs.helm as helm_input
+    from kapitan.errors import HelmTemplateError
+
+    original_render_chart = helm_input.render_chart
+
+    def render(chart_dir, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags, parse):
+        return host_call(
+            "helm",
+            {
+                "chart_dir": chart_dir,
+                "helm_path": helm_path,
+                "helm_params": dict(helm_params or {}),
+                "helm_values_file": helm_values_file,
+                "helm_values_files": list(helm_values_files or []),
+                "helm_flags": dict(helm_flags) if helm_flags is not None else None,
+                "parse": parse,
+            },
+        )
+
+    def render_chart(chart_dir, output_path, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags=None):
+        if output_path != "-":
+            return original_render_chart(
+                chart_dir, output_path, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags
+            )
+        try:
+            return render(chart_dir, helm_path, helm_params, helm_values_file, helm_values_files, helm_flags, False)["output"], ""
+        except HostError as e:
+            return "", str(e)
+
+    def load_chart(self):
+        helm_values_file = helm_input.write_helm_values_file(self.helm_values) if self.helm_values else None
+        try:
+            return render(self.chart_dir, self.helm_path, self.helm_params, helm_values_file, None, None, True)["docs"]
+        except HostError as e:
+            raise HelmTemplateError(str(e)) from None
+
+    helm_input.render_chart = render_chart
+    helm_input.HelmChart.load_chart = load_chart
+
+
 class Recorder:
     def __init__(self, root):
         self.root = os.path.realpath(root) + os.sep
@@ -128,7 +212,7 @@ class Recorder:
         self.reset()
 
     def reset(self):
-        self.files, self.dirs, self.globals = set(), set(), set()
+        self.files, self.dirs, self.globals, self.doc_reads = set(), set(), set(), set()
 
     def _real(self, path):
         try:
@@ -148,6 +232,14 @@ class Recorder:
     def global_target(self, key):
         if self.active:
             self.globals.add(key if isinstance(key, str) else "*")
+        if key == STATE.get("target"):
+            self.doc_read("*")
+
+    def doc_read(self, key):
+        """A part of the target's own document was read: `parameters.<key>`,
+        another top-level key, or `*` for all of it."""
+        if self.active:
+            self.doc_reads.add(key)
 
     def modules(self):
         out = set()
@@ -159,6 +251,160 @@ class Recorder:
 
 
 RECORDER = None
+STATE = {}
+
+
+def own_doc(name):
+    """`name` is the target being evaluated: whatever is read of its document
+    through this path is not tracked by key, so it counts as all of it."""
+    if RECORDER and name == STATE.get("target"):
+        RECORDER.doc_read("*")
+
+
+class RecordingParams:
+    """A target's `parameters` as a component sees them: the underlying
+    kadet.Dict, with every top-level key read noted so the compile knows
+    which parts of the document the component depends on. Anything that is
+    not a plain key read (iteration, Box methods, writes) counts as all."""
+
+    __slots__ = ("_box",)
+
+    def __init__(self, box):
+        object.__setattr__(self, "_box", box)
+
+    def _key(self, key):
+        RECORDER.doc_read(f"parameters.{key}" if isinstance(key, str) else "*")
+
+    def __getitem__(self, key):
+        self._key(key)
+        return self._box[key]
+
+    def get(self, key, default=None):
+        self._key(key)
+        return self._box.get(key, default)
+
+    def __contains__(self, key):
+        self._key(key)
+        return key in self._box
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if hasattr(type(self._box), name):
+            RECORDER.doc_read("*")
+        else:
+            self._key(name)
+        return getattr(self._box, name)
+
+    def __setattr__(self, name, value):
+        RECORDER.doc_read("*")
+        setattr(self._box, name, value)
+
+    def __setitem__(self, key, value):
+        RECORDER.doc_read("*")
+        self._box[key] = value
+
+    def __delitem__(self, key):
+        RECORDER.doc_read("*")
+        del self._box[key]
+
+    def __iter__(self):
+        RECORDER.doc_read("*")
+        return iter(self._box)
+
+    def __len__(self):
+        RECORDER.doc_read("*")
+        return len(self._box)
+
+    def __bool__(self):
+        RECORDER.doc_read("*")
+        return bool(self._box)
+
+    def __eq__(self, other):
+        RECORDER.doc_read("*")
+        return self._box == other
+
+    def __repr__(self):
+        RECORDER.doc_read("*")
+        return repr(self._box)
+
+    def __deepcopy__(self, memo):
+        RECORDER.doc_read("*")
+        return copy.deepcopy(self._box, memo)
+
+    def __copy__(self):
+        RECORDER.doc_read("*")
+        return copy.copy(self._box)
+
+
+class RecordingTarget:
+    """The document of the target being evaluated, as `inventory()` returns
+    it: `parameters` comes back as a RecordingParams, other top-level keys
+    are noted by name, anything else counts as reading the whole document."""
+
+    __slots__ = ("_box",)
+
+    def __init__(self, box):
+        object.__setattr__(self, "_box", box)
+
+    def _read(self, key, value):
+        if key == "parameters":
+            return RecordingParams(value())
+        RECORDER.doc_read(key if isinstance(key, str) else "*")
+        return value()
+
+    def __getitem__(self, key):
+        return self._read(key, lambda: self._box[key])
+
+    def get(self, key, default=None):
+        return self._read(key, lambda: self._box.get(key, default))
+
+    def __contains__(self, key):
+        RECORDER.doc_read(key if isinstance(key, str) else "*")
+        return key in self._box
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if hasattr(type(self._box), name):
+            RECORDER.doc_read("*")
+            return getattr(self._box, name)
+        return self._read(name, lambda: getattr(self._box, name))
+
+    def __setattr__(self, name, value):
+        RECORDER.doc_read("*")
+        setattr(self._box, name, value)
+
+    def __setitem__(self, key, value):
+        RECORDER.doc_read("*")
+        self._box[key] = value
+
+    def __iter__(self):
+        RECORDER.doc_read("*")
+        return iter(self._box)
+
+    def __len__(self):
+        RECORDER.doc_read("*")
+        return len(self._box)
+
+    def __bool__(self):
+        return True
+
+    def __eq__(self, other):
+        RECORDER.doc_read("*")
+        return self._box == other
+
+    def __repr__(self):
+        RECORDER.doc_read("*")
+        return repr(self._box)
+
+    def __deepcopy__(self, memo):
+        RECORDER.doc_read("*")
+        return copy.deepcopy(self._box, memo)
+
+    def __copy__(self):
+        RECORDER.doc_read("*")
+        return copy.copy(self._box)
 
 
 def install_hooks(recorder):
@@ -230,6 +476,7 @@ class FakeInventory:
         self._docs = docs
 
     def __getitem__(self, name):
+        own_doc(name)
         return self._docs[name]
 
     def __contains__(self, name):
@@ -240,28 +487,37 @@ class FakeInventory:
 
     @property
     def inventory(self):
+        own_doc(STATE.get("target"))
         return self._docs
 
     @property
     def targets(self):
+        own_doc(STATE.get("target"))
         return {n: FakeTarget(n, d) for n, d in self._docs.items()}
 
     def get_target(self, name, *a, **kw):
+        own_doc(name)
         doc = self._docs.get(name)
         return FakeTarget(name, doc) if doc is not None else None
 
     def get_targets(self, names=None, *a, **kw):
         if names:
+            for n in names:
+                own_doc(n)
             return {n: FakeTarget(n, self._docs[n]) for n in names if n in self._docs}
         return self.targets
 
     def get_parameters(self, names, *a, **kw):
         if isinstance(names, str):
+            own_doc(names)
             return (self._docs.get(names) or {}).get("parameters")
+        for n in names:
+            own_doc(n)
         return {n: {"parameters": (self._docs.get(n) or {}).get("parameters")} for n in names}
 
     @property
     def topics(self):
+        own_doc(STATE.get("target"))
         topics = {}
         for name, doc in self._docs.items():
             kap = (doc.get("parameters") or {}).get("kapitan") or {}
@@ -272,6 +528,8 @@ class FakeInventory:
         return {n: {"parameters": {"targets": t}} for n, t in topics.items()}
 
     def consumed_topics(self, target):
+        if target == STATE.get("target"):
+            RECORDER.doc_read("parameters.kapitan")
         kap = ((self._docs.get(target) or {}).get("parameters") or {}).get("kapitan") or {}
         return {n for n, v in (kap.get("topics") or {}).items() if isinstance(v, dict) and v.get("consume") is True}
 
@@ -318,7 +576,6 @@ class RecordingGlobal(dict):
         return self._docs.items()
 
 
-STATE = {}
 
 
 def op_init(req):
@@ -333,7 +590,6 @@ def op_init(req):
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr, format="%(levelname)s %(name)s: %(message)s")
 
     from kapitan import cached
-    from kapitan.cli import build_parser
     from kapitan.refs.base import RefController, Revealer
     from kapitan.version import VERSION
 
@@ -342,10 +598,9 @@ def op_init(req):
     else:
         with open(req["inventory_file"]) as fp:
             docs = json.load(fp)
-    args = build_parser().parse_args(["compile", *req.get("flags", [])])
-    # kapitan's helm render cache stays on (chart-heavy generators depend on
-    # it); its kadet output cache is disabled below because a hit would hide
-    # the files a component reads.
+    args, parsed_args = compile_args(req)
+    # kapitan's kadet output cache is disabled below because a hit would hide
+    # the files a component reads; helm renders go through the host instead.
     cached.args = args
     cached.inv = FakeInventory(docs)
     cached.global_inv = RecordingGlobal(docs, RECORDER)
@@ -353,6 +608,7 @@ def op_init(req):
     ref_controller = RefController(args.refs_path, embed_refs=args.embed_refs)
     cached.ref_controller_obj = ref_controller
     cached.revealer_obj = Revealer(ref_controller)
+    install_helm_bridge()
 
     import kadet
     import kapitan.inputs.kadet as kadet_input
@@ -374,14 +630,20 @@ def op_init(req):
                 self._boxes[name] = kadet.Dict(self._source[name], default_box=self._lazy)
             return self._boxes[name]
 
+        def _target(self, name):
+            box = self._box(name)
+            return RecordingTarget(box) if name == STATE.get("target") else box
+
         def __getitem__(self, name):
-            RECORDER.global_target(name)
-            return self._box(name)
+            if name != STATE.get("target"):
+                RECORDER.global_target(name)
+            return self._target(name)
 
         def get(self, name, default=None):
-            RECORDER.global_target(name)
+            if name != STATE.get("target"):
+                RECORDER.global_target(name)
             try:
-                return self._box(name)
+                return self._target(name)
             except KeyError:
                 return default
 
@@ -403,14 +665,17 @@ def op_init(req):
 
         def values(self):
             RECORDER.global_target("*")
+            RECORDER.doc_read("*")
             return [self._box(n) for n, _ in self._source.items()]
 
         def items(self):
             RECORDER.global_target("*")
+            RECORDER.doc_read("*")
             return [(n, self._box(n)) for n, _ in self._source.items()]
 
         def to_dict(self):
             RECORDER.global_target("*")
+            RECORDER.doc_read("*")
             return {n: d for n, d in self._source.items()}
 
         def __getattr__(self, name):
@@ -451,7 +716,13 @@ def op_init(req):
     kadet_input.load_from_search_paths = load_from_search_paths
     STATE["search_paths"] = [os.path.abspath(p) for p in req.get("search_paths", [])]
     STATE["kadet_input"] = kadet_input
-    return {"ok": True, "kapitan_version": VERSION, "python": sys.version.split()[0], "protocol": PROTOCOL}
+    return {
+        "ok": True,
+        "kapitan_version": VERSION,
+        "python": sys.version.split()[0],
+        "protocol": PROTOCOL,
+        "args": parsed_args,
+    }
 
 
 def op_eval(req):
@@ -464,6 +735,7 @@ def op_eval(req):
     input_params.setdefault("compile_path", req["compile_path"])
     RECORDER.reset()
     RECORDER.active = True
+    STATE["target"] = target
     token = current_target.set(target)
     try:
         kadet_input.search_paths.set(STATE["search_paths"] + [req["temp_dir"]])
@@ -481,17 +753,22 @@ def op_eval(req):
             "files": sorted(RECORDER.files | RECORDER.modules()),
             "dirs": sorted(RECORDER.dirs),
             "globals": sorted(RECORDER.globals),
+            "doc_reads": sorted(RECORDER.doc_reads),
         }
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": f"Could not load Kadet module: {os.path.basename(input_path)}: {e}", "traceback": traceback.format_exc()}
     finally:
         RECORDER.active = False
+        STATE.pop("target", None)
         current_target.reset(token)
 
 
 def main():
     sys.stdout = sys.stderr  # user code prints must not corrupt the protocol
-    for line in sys.__stdin__:
+    while True:
+        line = sys.__stdin__.readline()
+        if not line:
+            return
         line = line.strip()
         if not line:
             continue

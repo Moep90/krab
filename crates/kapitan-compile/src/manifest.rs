@@ -43,6 +43,27 @@ pub struct TargetRecord {
     pub output_digest: String,
     pub compiled_at: u64,
     pub duration_ms: u64,
+    /// The kadet items in compile order, so their output can be reused when
+    /// the document changed elsewhere.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ItemRecord>,
+}
+
+/// One kadet compile item: enough to tell whether its previous output is
+/// still valid without evaluating the component again.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ItemRecord {
+    /// Digest of the item as written in the inventory (paths, params, output settings).
+    pub item_digest: String,
+    /// Parts of the target document the component read (`parameters.<key>`,
+    /// another top-level key, or `*` for the whole document), with digests.
+    pub doc_reads: BTreeMap<String, String>,
+    /// Paths it read, relative to the repository root (keys into `Manifest::files`).
+    pub deps: Vec<String>,
+    /// Other targets it read (`*` = all), with their document digests.
+    pub globals: BTreeMap<String, String>,
+    /// Files it wrote, relative to `compiled/`, with their fingerprints.
+    pub outputs: BTreeMap<String, String>,
 }
 
 impl Manifest {
