@@ -7,6 +7,7 @@ use std::time::Duration;
 use kapitan_inventory::dotkapitan::DotKapitan;
 use kapitan_inventory::emit::yaml::{DumpOptions, dump_yaml};
 use kapitan_inventory::error::Diagnostic;
+use kapitan_inventory::resolvers::python::{PythonConfig, PythonResolvers};
 use kapitan_inventory::{Inventory, InventoryConfig, Map, Node, Registry, Value};
 use kapitan_server::protocol::AllResult;
 use kapitan_server::{Client, ClientError, Connector};
@@ -87,7 +88,19 @@ impl App {
         let mut cfg = InventoryConfig::new(inventory_path.clone());
         cfg.compose_target_name = dot.compose_target_name.unwrap_or(true);
         cfg.normalize = !raw;
-        let inv = Inventory::new(cfg, Arc::new(Registry::with_builtins()));
+        let mut registry = Registry::with_builtins();
+        if let Some(python) = PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {
+            let resolvers = PythonResolvers::new(python);
+            PythonResolvers::install(&resolvers, &mut registry).map_err(|e| {
+                Failure::Diagnostics(
+                    vec![Diagnostic::error("inventory::python_resolvers", e).with_help(
+                        "fix the file, point `inventory.python-resolvers.file` in `.kapitan` elsewhere, or set `inventory.python-resolvers: false`",
+                    )],
+                    json,
+                )
+            })?;
+        }
+        let inv = Inventory::new(cfg, Arc::new(registry));
         let connector = (!no_daemon && !raw).then(|| Connector {
             inventory_root: inventory_path.clone(),
             exe: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("kapitan")),

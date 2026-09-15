@@ -1,0 +1,8 @@
+classes:
+  - common
+
+parameters:
+  broken: ${oc.env:KRAB_TEST_UNSET_VARIABLE_XYZ}
+  # The Python function selects a subtree whose own resolution fails; the
+  # evaluator's diagnostic must come through, not a Python traceback.
+  y: ${dump:broken}

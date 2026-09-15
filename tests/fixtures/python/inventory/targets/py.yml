@@ -1,0 +1,24 @@
+# Exercises the Python resolver bridge; expected values were produced by
+# OmegaConf itself with tests/fixtures/python/resolvers.py registered.
+classes:
+  - common
+
+parameters:
+  nums: [1, 2, 3]
+  cfg:
+    a: 1
+    b: ${..name}
+  up: ${upper:${name}}
+  sum: ${add:1,2,3}
+  padded: ${pad:${name}}
+  padded2: ${pad:${name},10,-}
+  sib:
+    x: 42
+    y: ${sibling:x}
+  root_b: ${rootpath:cfg.b}
+  where: ${whoami:}
+  dumped: ${dump:cfg}
+  n: ${count:${nums}}
+  types: ${kind:1}-${kind:1.5}-${kind:true}-${kind:null}-${kind:abc}
+  dflt: ${missing:nope.x}
+  none: ${rootpath:nope}
