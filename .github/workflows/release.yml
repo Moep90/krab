@@ -13,6 +13,7 @@ name: Release
 on:
   push:
     tags: ['v*']
+    branches: [feat/ci]  # TEMPORARY: verify the build matrix before merge
   workflow_dispatch:
 
 permissions:
