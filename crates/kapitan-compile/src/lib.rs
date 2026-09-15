@@ -28,4 +28,4 @@ pub use fetch::{Dependency, FetchOutcome, FetchStatus};
 pub use manifest::{Manifest, TargetRecord};
 pub use native::NativeOptions;
 pub use plan::TargetPlan;
-pub use python::PythonCmd;
+pub use python::{PythonCmd, PythonProbe};

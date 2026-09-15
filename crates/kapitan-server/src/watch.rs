@@ -40,7 +40,10 @@ pub fn start(root: &Path, state: Arc<State>) -> notify::Result<Handle> {
                 for path in &event.paths {
                     // Existing non-inventory files (editor swap files, READMEs) are
                     // noise; directories and vanished paths may hide relevant files.
-                    if path.is_file() && !State::is_inventory_file(path) {
+                    if path.is_file()
+                        && !State::is_inventory_file(path)
+                        && !cb_state.is_registry_source(path)
+                    {
                         continue;
                     }
                     if !changed.contains(path) {
@@ -63,6 +66,20 @@ pub fn start(root: &Path, state: Arc<State>) -> notify::Result<Handle> {
         },
     )?;
     debouncer.watch(root, RecursiveMode::Recursive)?;
+    // Files the resolver registry was built from (a `resolvers.py`) may live
+    // outside the inventory; watch their directories so a change restarts us.
+    for dir in state
+        .inv
+        .registry
+        .sources()
+        .iter()
+        .filter_map(|f| f.parent())
+        .filter(|d| !d.starts_with(root))
+    {
+        if let Err(e) = debouncer.watch(dir, RecursiveMode::NonRecursive) {
+            tracing::warn!("cannot watch {}: {e}", dir.display());
+        }
+    }
     let handle = Arc::new(Mutex::new(debouncer));
 
     // Symlinked files live elsewhere; watch their real directories too.

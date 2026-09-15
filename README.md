@@ -191,6 +191,37 @@ whole tree (`ctx.select("a.b")` returns fully resolved values) and warnings.
 The `oc.*`, kapitan and contributed resolver sets in
 `crates/kapitan-inventory/src/resolvers/` are the reference for the API.
 
+## Python resolvers
+
+Kapitan's omegaconf backend let a repository add resolvers in Python: a
+`resolvers.py` whose `pass_resolvers()` returns `{name: function}`. krab runs
+the same file, found where the reference looked for it
+(`<inventory-path>/resolvers.py`, then
+`system/omegaconf/resolvers/resolvers.py`), in a pool of Python workers and
+registers each function as a resolver. Arguments arrive as Python values;
+`_root_`, `_parent_` and `_node_` are passed when the signature names them,
+and `OmegaConf.select(_root_, key)` / `OmegaConf.to_container(..., resolve=True)`
+work on them: lookups go through krab's evaluator, so Python sees fully
+resolved values. The `omegaconf` package is used when installed and stood in
+for otherwise.
+
+As in the reference, a Python function replaces a native resolver of the same
+name. Settings, all optional, in `.kapitan`:
+
+```yaml
+inventory:
+  python-resolvers:
+    file: system/omegaconf/resolvers/resolvers.py  # explicit path; `python-resolvers: false` disables
+    python: /opt/venv/bin/python                    # default: $KAPITAN_PYTHON, a kapitan PEX on PATH, python3
+    prefer-native: true                             # keep krab's Rust resolvers for names both define
+    workers: 4                                      # concurrent Python processes (default: CPUs, at most 8)
+```
+
+What the file defines is cached by content digest, so no Python process
+starts until one of its resolvers is called. The daemon restarts when the
+file, or a project module it imports, changes. Every call is a JSON round
+trip to a worker; port a resolver to Rust when that shows in a profile.
+
 ## License
 
 Apache-2.0, like upstream Kapitan. See [LICENSE](LICENSE).

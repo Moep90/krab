@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 use serde_json::{Value as Json, json};
 
 use super::{Reads, helm};
-use crate::python::PythonCmd;
+use crate::python::{PythonCmd, PythonProbe};
 use crate::worker::{Worker, WorkerError};
 
 pub const KADET_RUNNER_SOURCE: &str = include_str!("../../runner/kadet_runner.py");
