@@ -99,7 +99,8 @@ Compile the targets whose inputs changed.
 | `--force-fetch` | fetch every dependency again and overwrite what exists (default: `compile.force-fetch` from `.kapitan`) |
 | `-p, --parallelism <N>` | worker processes (default: number of CPUs) |
 | `--output-path <DIR>` | where `compiled/` lives (default: `compile.output-path` from `.kapitan`, else `.`) |
-| `--reveal` | reveal refs instead of embedding them (Python backend only, for now) |
+| `--reveal` | reveal refs in the output instead of compiling them (default: `compile.reveal` from `.kapitan`) |
+| `--embed-refs` | embed the ref files' contents in the output instead of writing hashed tags (default: `compile.embed-refs` from `.kapitan`) |
 | `--python <PATH>` | Python used to evaluate kadet components (and, with `--backend python`, everything). Default: `$KAPITAN_PYTHON`, else a kapitan PEX on `PATH`, else `python3` |
 | `--flag <FLAG>` | extra flag passed through to kapitan's compile in the Python backend (e.g. `--indent 4`) |
 | `--backend native\|python` | `native` (default): input types run in Rust, Python only evaluates kadet `main()`. `python`: kapitan's own input types in worker processes |
@@ -134,9 +135,55 @@ keeps only matching layers, `insecure: true` uses plain http, `tls_verify`
 is a boolean or a CA bundle path, and credentials come from `OCI_USERNAME`
 / `OCI_PASSWORD`.
 
+References in the output are compiled the way kapitan does: an existing ref
+becomes `?{type:path:hash}` (or its embedded payload with `--embed-refs`),
+`plain` refs are inlined, and a missing ref whose tag carries functions
+(`?{gkms:targets/x/token||random:str}`) is created under the refs path with
+the target's `parameters.kapitan.secrets` (KMS key, GPG recipients, Vault
+settings). Created ref files are recorded as reads, so they enter the
+manifest. `--reveal` decrypts refs into the output instead, and makes the
+`reveal_maybe` jinja2 filter reveal.
+
 `.kapitan` keys used: `compile.search-paths`, `compile.output-path`,
-`compile.indent`, `compile.fetch`, `compile.force-fetch`,
-`inventory.multiline-string-style`.
+`compile.indent`, `compile.fetch`, `compile.force-fetch`, `compile.refs-path`,
+`compile.embed-refs`, `compile.reveal`, `inventory.multiline-string-style`.
+
+## `kapitan refs`
+
+Write, reveal, update and validate references (`?{type:path}` tags), with
+kapitan's flags. Ref files live under `--refs-path` (default: `refs.refs-path`
+from `.kapitan`, else `./refs`). Types: `plain`, `base64`, `env`, `gkms`,
+`gpg`, `awskms`, `azkms`, `vaultkv`, `vaulttransit`.
+
+| flag | meaning |
+|---|---|
+| `-w, --write <type:path>` | write a ref from `--file` (`-` reads stdin); `--base64` encodes the content first, `--binary` accepts non-text content |
+| `-r, --reveal` | reveal the tags in `--file` (a file, or a directory whose YAML files are concatenated; `-` reads stdin), the ref in `--ref-file`, or the string given as `--tag` |
+| `--update <type:path>` | re-encrypt a ref for new `--recipients` (gpg) or a new `--key` (gkms, awskms, azkms) |
+| `--update-targets` | re-encrypt every ref under `<refs-path>/<target>/...` with what that target's `parameters.kapitan.secrets` declares |
+| `--validate-targets` | report refs whose recipients or key differ from their target's; exit code 1 when any do |
+| `-t, --target-name <T>` | take recipients, keys and Vault settings from that target's `parameters.kapitan.secrets` |
+| `-R, --recipients <R>...` | GPG recipients (names or fingerprints) |
+| `-K, --key <KEY>` | KMS key |
+| `--vault-auth`, `--vault-mount`, `--vault-path`, `--vault-key` | Vault settings for `vaultkv`/`vaulttransit` writes |
+| `--refs-path <DIR>` | where ref files live |
+
+```sh
+kapitan refs --write gkms:targets/prod/db-password -f password.txt -t prod
+kapitan refs --reveal -f compiled/prod/manifests/secret.yml
+kapitan refs --reveal --tag '?{gkms:targets/prod/db-password}'
+kapitan refs --validate-targets
+```
+
+Credentials: `gkms` uses application-default credentials
+(`GOOGLE_APPLICATION_CREDENTIALS`, the gcloud ADC file, the GCE metadata
+server, or `gcloud auth application-default print-access-token`); `gpg` runs
+the `gpg` binary against the current keyring; Vault reads `VAULT_ADDR`,
+`VAULT_TOKEN` (or `~/.vault-token`), `VAULT_USERNAME`/`VAULT_PASSWORD`,
+`VAULT_ROLE_ID`/`VAULT_SECRET_ID` and the `VAULT_*` TLS variables, unless
+the inventory's `vault_params` set them; `awskms` and `azkms` call the `aws`
+and `az` command line clients. `env` refs read `KAPITAN_VAR_<name>` at
+reveal time and fall back to the stored value.
 
 ## `kapitan server`
 
@@ -204,6 +251,8 @@ itself uses:
 | `inventory-backend` | `global` | informational; only `omegaconf` semantics are implemented |
 | `indent` | `inventory` | YAML indentation for `kapitan inventory` |
 | `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for kapitan compile |
+| `refs-path`, `embed-refs`, `reveal` | `compile` | where ref files live, embed them, reveal them |
+| `refs-path` | `refs` | where `kapitan refs` looks for ref files |
 | `multiline-string-style` | `inventory` | multiline string style for compiled YAML |
 
 ## JSON output

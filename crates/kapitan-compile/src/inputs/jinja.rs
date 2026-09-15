@@ -13,6 +13,7 @@ use minijinja::value::{Enumerator, Object, ObjectRepr, Value as JValue, ValueKin
 use minijinja::{AutoEscape, Environment, Error, ErrorKind, UndefinedBehavior};
 
 use crate::docs::SharedDocs;
+use crate::refs::RefController;
 use serde_json::Value as Json;
 use std::error::Error as _;
 
@@ -33,6 +34,8 @@ pub struct JinjaContext<'a> {
     pub input_params: &'a Json,
     pub search_paths: &'a [PathBuf],
     pub reveal: bool,
+    /// Refs, for the `reveal_maybe` filter.
+    pub refs: Arc<RefController>,
 }
 
 /// `inventory_global` as seen by templates: a mapping whose entries are
@@ -142,6 +145,8 @@ fn render_file(path: &Path, ctx: &JinjaContext, reads: &mut Reads) -> Result<Str
     let mut loader_paths = vec![dir];
     loader_paths.extend(ctx.search_paths.iter().cloned());
     let loaded_files = Arc::new(parking_lot::Mutex::new(Vec::<PathBuf>::new()));
+    // Ref files the `reveal_maybe` filter reads.
+    let ref_reads = Arc::new(parking_lot::Mutex::new(Reads::default()));
 
     let mut env = Environment::new();
     // Jinja2 does not escape by default; minijinja would JSON-escape .yaml/.json templates.
@@ -164,7 +169,7 @@ fn render_file(path: &Path, ctx: &JinjaContext, reads: &mut Reads) -> Result<Str
         Ok(None)
     });
     env.set_formatter(python_formatter);
-    register_filters(&mut env, ctx.reveal);
+    register_filters(&mut env, ctx.reveal, ctx.refs.clone(), ref_reads.clone());
 
     let template_name = path.file_name().unwrap().to_string_lossy().to_string();
     env.add_template_owned(template_name.clone(), source)
@@ -206,6 +211,7 @@ fn render_file(path: &Path, ctx: &JinjaContext, reads: &mut Reads) -> Result<Str
     for f in loaded_files.lock().drain(..) {
         reads.file(&f);
     }
+    reads.extend(std::mem::take(&mut *ref_reads.lock()));
     reads.globals.extend(global.accessed.lock().drain(..));
     Ok(rendered)
 }
@@ -254,7 +260,12 @@ fn to_value(v: &JValue) -> Result<Value, Error> {
         .map_err(|e| Error::new(ErrorKind::InvalidOperation, e.to_string()))
 }
 
-fn register_filters(env: &mut Environment<'_>, reveal: bool) {
+fn register_filters(
+    env: &mut Environment<'_>,
+    reveal: bool,
+    refs: Arc<RefController>,
+    ref_reads: Arc<parking_lot::Mutex<Reads>>,
+) {
     env.add_filter("sha256", |s: String| {
         hex::encode(<sha2::Sha256 as sha2::Digest>::digest(s.as_bytes()))
     });
@@ -353,10 +364,9 @@ fn register_filters(env: &mut Environment<'_>, reveal: bool) {
     );
     env.add_filter("reveal_maybe", move |s: String| -> Result<String, Error> {
         if reveal {
-            return Err(Error::new(
-                ErrorKind::InvalidOperation,
-                "reveal_maybe with --reveal is not supported by the native compiler yet",
-            ));
+            return refs
+                .reveal_str(&s, &mut ref_reads.lock())
+                .map_err(|e| Error::new(ErrorKind::InvalidOperation, e.to_string()));
         }
         Ok(s)
     });
