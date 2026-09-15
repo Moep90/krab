@@ -141,7 +141,11 @@ A target is recompiled when its rendered document changed, when any file the
 previous compile read changed (templates, kadet modules and their imports,
 copied files, refs, helm charts), when another target it read through the
 global inventory changed, when the compiler changed, or when the output on
-disk was touched. Everything else is skipped. The bookkeeping lives in
+disk was touched. Everything else is skipped. Inside a recompiled target,
+a kadet component is only re-run when something it read changed: the parts
+of the target document it looked at, its files, or the other targets it
+read. Otherwise its previous output is reused, and the compile line says
+how many items were (`2 kadet items reused`). The bookkeeping lives in
 `compiled/.kapitan-manifest.json`; delete it (or pass `--force`) to start
 from scratch. Whether to commit it is your call: committed, it makes CI
 compiles incremental too.
@@ -209,8 +213,9 @@ daemon, so they are always current).
 Every command accepts `--json`. Tables become arrays of objects, rendered
 targets become JSON documents, diagnostics become one JSON object per line. Combined with `explain`, `deps`, `check --json` and
 `compile --dry-run --json` this gives a script or an LLM agent the same
-picture a person gets from the editor. `docs/ROADMAP.md` lists what is
-planned in that direction.
+picture a person gets from the editor. The `area: llm` issues on the
+project board (linked from `docs/ROADMAP.md`) list what is planned in that
+direction.
 
 ## Where next
 

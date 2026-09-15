@@ -111,4 +111,6 @@ publishing anything.
 
 `README.md` is the overview, `docs/GETTING-STARTED.md` the walkthrough,
 `docs/CLI.md` the flag reference (keep it in sync with `--help`),
-`docs/DESIGN.md` the semantics, `docs/ROADMAP.md` the open work.
+`docs/DESIGN.md` the semantics. Open work is tracked as issues on the
+krab roadmap project board (https://github.com/orgs/kapicorp/projects/5);
+`docs/ROADMAP.md` points there.
