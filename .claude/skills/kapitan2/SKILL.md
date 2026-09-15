@@ -11,7 +11,8 @@ compiled output as kapitan 0.36.3, only faster and with provenance. Run it
 from the directory holding `.kapitan` (in the platform repo: `grid`).
 
 - Source: this repository (cargo workspace). Design in
-  `docs/DESIGN.md`, open work in `docs/ROADMAP.md`.
+  `docs/DESIGN.md`, open work on the GitHub project board (linked from
+  `docs/ROADMAP.md`).
 - Binary: `~/.local/bin/kapitan2` is a symlink to
   `target/release/kapitan` in this repository. Rebuilding replaces it.
 - Reference: `/usr/local/bin/kapitan` is the Python kapitan (a PEX). Keep
