@@ -67,6 +67,33 @@ python3 scripts/lsp-smoke-live.py path/to/inventory/repo
 The VS Code extension lives in `editors/vscode`; its README explains how to
 package and install it.
 
+## CI and releases
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`:
+`cargo fmt --check`, `cargo clippy --all-targets` and `cargo test` with
+warnings denied, and `npm run package` in `editors/vscode` (the `.vsix` is
+kept as a workflow artifact). The corpus test does not run there; it needs
+a real inventory and the reference implementation.
+
+To release, bump `version` in the workspace `Cargo.toml` (and the extension's
+`package.json` when it changed), merge, then tag `main`:
+
+```sh
+git tag v2.0.0-alpha.2
+git push origin v2.0.0-alpha.2
+```
+
+`.github/workflows/release.yml` refuses a tag that does not match the
+workspace version, builds `kapitan` for Linux x86_64 and aarch64 (on
+Ubuntu 22.04, so glibc 2.35 or newer) and for macOS Intel and Apple silicon,
+packages the extension, and creates the GitHub release with generated notes,
+the four `kapitan-<version>-<target>.tar.gz` archives, the `.vsix` and a
+`SHA256SUMS` file. A tag with a pre-release suffix (`-alpha.1`) becomes a
+pre-release. If the release already exists (created from the GitHub UI, for
+example) the assets are uploaded to it instead. Running the workflow by hand
+from the Actions tab builds the same artifacts from any branch without
+publishing anything.
+
 ## Layout and conventions
 
 * `kapitan-inventory` is the library entry point and must stay free of
