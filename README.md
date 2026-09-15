@@ -88,7 +88,7 @@ target names.
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | installing, the daemon, inspecting an inventory, compiling, editor setup |
 | [docs/CLI.md](docs/CLI.md) | every command and flag, environment variables, `.kapitan` keys |
 | [docs/DESIGN.md](docs/DESIGN.md) | the data model, the exact merge and interpolation semantics, provenance, the server protocol, how compile decides what is stale |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | what is left and what is planned |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | current status and a pointer to the project board where planned work is tracked |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | building, testing, checking parity against the reference implementation |
 | [editors/vscode/README.md](editors/vscode/README.md) | the VS Code extension |
 
@@ -154,9 +154,8 @@ Deliberate differences: class cycles are reported instead of recursing
 forever; unknown YAML tags are errors; timestamps stay strings. Not
 implemented yet: `jsonnet`, `helm` (as a direct input type; charts rendered
 by kgenlib inside kadet work), `kustomize` and `cuelang` inputs, `toml`
-output, `--reveal`, creating missing refs (`||random:str`), dependency
-fetching, Python-defined jinja2 filters other than the common ones, and the
-`write` resolver. [docs/DESIGN.md](docs/DESIGN.md) lists the semantics in
+output, `--reveal`, creating missing refs (`||random:str`), Python-defined
+jinja2 filters other than the common ones, and the `write` resolver. [docs/DESIGN.md](docs/DESIGN.md) lists the semantics in
 detail.
 
 ## Writing a resolver

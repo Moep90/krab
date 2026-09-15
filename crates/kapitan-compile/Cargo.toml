@@ -22,3 +22,7 @@ base64 = { workspace = true }
 glob = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip"] }
+flate2 = "1.1.10"
+tar = "0.4.46"
+zip = { version = "7", default-features = false, features = ["deflate"] }

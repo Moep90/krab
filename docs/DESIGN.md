@@ -187,6 +187,18 @@ only when, one of these changed since its last compile:
 Everything is stored in `compiled/.kapitan-manifest.json`. `--explain` and
 `--dry-run` print the reason per target.
 
+Within a stale target, kadet items are reused rather than evaluated when
+their own inputs did not change. The evaluator hands a component its target
+document through a recording view: each `parameters.<key>` it reads is
+noted (iteration, Box methods and writes count as reading all of it), the
+way `inventory_global()` records other targets. The manifest keeps, per
+kadet item, the digest of the item definition, the digests of the document
+parts it read, its file and target dependencies and the files it wrote. When
+all of those still match, the previous output files are copied into the new
+compile tree; `compiled ... (0.14s, 2 kadet items reused)` says so. On
+grid, a change to a parameter no generator reads recompiles a chart-heavy
+cluster target in 0.14 s instead of 10 s. `--force` disables reuse.
+
 Execution: stale targets are compiled on a thread pool (one per CPU), each
 into a private temporary tree that then replaces `compiled/<target path>`
 while leaving nested targets' directories alone. Full runs remove output
@@ -203,9 +215,16 @@ directories that belong to no target.
   and calls `main()`; its output comes back as JSON. It records files read,
   directories listed, modules imported and targets read from the global
   inventory. With an inventory server running it fetches targets over the
-  socket on demand; without one it loads a snapshot file. kapitan's helm
-  render cache stays on (chart-heavy generators need it); its kadet output
-  cache is off because a hit would hide what a component reads.
+  socket on demand; without one it loads a snapshot file. `HelmChart`
+  renders inside a component go through the host: mid-evaluation the runner
+  sends a `helm` request on its stdout (`worker.rs` answers host requests
+  between the eval request and its reply) and `inputs/helm.rs` builds the
+  `helm template` arguments the way kapitan's `render_chart` does, hashes
+  the chart directory so every chart file becomes a dependency of the
+  target, runs helm, caches the output by content under
+  `$XDG_CACHE_HOME/kapitan/helm-render` and parses it with the inventory's
+  loader. kapitan's kadet output cache is off because a hit would hide what
+  a component reads.
 * Output: `prune_empty`, output-type resolution, ref embedding
   (`?{type:base64(json(ref)):embedded}`) or hashing, then rapidyaml-compatible
   YAML (`emit/ryml.rs`, verified byte for byte on ~7000 compiled files),
@@ -213,9 +232,49 @@ directories that belong to no target.
   Multiline strings default to double quotes, matching a quirk of the
   reference where the compile flag is shadowed by the inventory one.
 
+### Dependency fetching (`kapitan-compile/src/fetch.rs`)
+
+`parameters.kapitan.dependencies` is fetched before staleness is decided,
+so the files it produces are ordinary inputs: the inputs that read them
+record them and the manifest tracks them. The daemon is asked for just that
+path of each candidate target. Items are deduplicated by source and
+destination across targets, grouped by source (git, http) or chart
+identity (helm), and the groups fetched in parallel; each source is
+fetched once per run into a temporary directory and copied to every
+destination. `git` and `helm` are driven as subprocesses (the reference
+does the same through GitPython and `helm pull`); http(s) uses `ureq`,
+with tar, gzip and zip unpacking by content type or magic bytes, as
+kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
+`safe_copy_tree` (never overwrite, skip dot-entries) or, when forced,
+`copy_tree` (overwrite everything). Versioned helm charts are cached under
+`$XDG_CACHE_HOME/kapitan/charts` because a published chart version is
+immutable; `--force-fetch` pulls again.
+
+`type: oci` (`oci.rs`) speaks the registry distribution API the way oras
+does: the manifest (an index is followed to its first manifest) lists the
+layers, each is downloaded to the path in its
+`org.opencontainers.image.title` annotation (the digest when there is
+none), verified against its `sha256` digest, and, as in kapitan's
+`_extract_tar_blobs`, layers that are tar archives (gzipped or not) are
+extracted into the artifact root and removed. Authentication answers one
+`WWW-Authenticate` challenge: a bearer token from the realm (Docker Hub,
+ghcr.io, Artifact Registry) with `OCI_USERNAME` / `OCI_PASSWORD` as basic
+credentials when set, or basic authentication directly. `insecure` selects
+plain http and `tls_verify` disables verification or names a CA bundle
+(parsed with ureq's PEM reader). Conflicting connection settings for one
+source are an error and `media_type` filters are unioned, as in the
+reference.
+
+Two deliberate differences from the reference: a dependency whose output
+path already exists is not fetched (kapitan re-clones every git source and
+adds files that happen to be missing), which keeps `fetch: true`
+repositories offline once populated; and `force_fetch: true` on an item
+forces that item even when `--fetch` is given (kapitan only honours it
+when neither flag is set).
+
 Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
-output, `--reveal`, creating missing refs (`||random:str`), dependency
-fetching. `--backend python` runs kapitan's Python input types instead.
+output, `--reveal`, creating missing refs (`||random:str`). `--backend
+python` runs kapitan's Python input types instead.
 
 ## Testing
 
