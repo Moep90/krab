@@ -22,6 +22,7 @@ pub mod inventory;
 pub mod merge;
 pub mod model;
 pub mod pyfmt;
+pub mod python;
 pub mod resolvers;
 
 pub use inventory::{

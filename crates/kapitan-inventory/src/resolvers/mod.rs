@@ -3,13 +3,16 @@
 //! A resolver is any `Fn(&mut Ctx, &[Value]) -> Result<Value, ResolverError>`.
 //! Register your own with [`Registry::register`]; the built-in sets live in
 //! [`oc`] (OmegaConf's `oc.*`), [`builtin`] (kapitan's) and [`contrib`]
-//! (general purpose helpers contributed by users).
+//! (general purpose helpers contributed by users). Functions from a user's
+//! `resolvers.py` are bridged by [`python`].
 
 pub mod builtin;
 pub mod contrib;
 pub mod oc;
+pub mod python;
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::error::{Diagnostic, Error};
@@ -51,6 +54,10 @@ pub type ResolverFn = dyn Fn(&mut Ctx, &[Value]) -> ResolverResult + Send + Sync
 #[derive(Clone, Default)]
 pub struct Registry {
     map: BTreeMap<String, Arc<ResolverFn>>,
+    /// Files the registry was built from (a `resolvers.py` and what it
+    /// imports); when one changes the registry must be rebuilt, so the
+    /// daemon restarts.
+    sources: Vec<PathBuf>,
 }
 
 impl Registry {
@@ -76,8 +83,27 @@ impl Registry {
         self.map.insert(name.to_string(), Arc::new(f));
     }
 
-    pub fn get(&self, name: &str) -> Option<&Arc<ResolverFn>> {
-        self.map.get(name)
+    pub fn register_arc(&mut self, name: &str, f: Arc<ResolverFn>) {
+        self.map.insert(name.to_string(), f);
+    }
+
+    pub fn add_source(&mut self, path: PathBuf) {
+        if !self.sources.contains(&path) {
+            self.sources.push(path);
+        }
+    }
+
+    /// Files whose change invalidates this registry.
+    pub fn sources(&self) -> &[PathBuf] {
+        &self.sources
+    }
+
+    pub fn is_source(&self, path: &Path) -> bool {
+        self.sources.iter().any(|s| s == path)
+    }
+
+    pub fn get(&self, name: &str) -> Option<Arc<ResolverFn>> {
+        self.map.get(name).cloned()
     }
 
     pub fn contains(&self, name: &str) -> bool {

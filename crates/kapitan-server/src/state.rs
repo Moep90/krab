@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use kapitan_inventory::{Diagnostic, Inventory, RenderedTarget, TargetSpec};
@@ -18,6 +19,9 @@ pub struct State {
     changed_lock: Mutex<()>,
     pub started: Instant,
     pub last_request: Mutex<Instant>,
+    /// Set when the server must exit and be started afresh (a file the
+    /// resolver registry was built from changed).
+    pub stop: AtomicBool,
 }
 
 #[derive(Default)]
@@ -51,7 +55,17 @@ impl State {
             changed_lock: Mutex::new(()),
             started: Instant::now(),
             last_request: Mutex::new(Instant::now()),
+            stop: AtomicBool::new(false),
         }
+    }
+
+    /// A file the resolver registry was built from (a `resolvers.py`).
+    pub fn is_registry_source(&self, path: &Path) -> bool {
+        self.inv.registry.is_source(path)
+    }
+
+    pub fn should_stop(&self) -> bool {
+        self.stop.load(Ordering::SeqCst)
     }
 
     pub fn read(&self) -> parking_lot::RwLockReadGuard<'_, Inner> {
@@ -87,6 +101,12 @@ impl State {
     /// Files changed on disk (created, modified, renamed or removed): drop the
     /// caches that depend on them and re-render exactly the affected targets.
     pub fn apply_changes(&self, changed: Vec<PathBuf>) -> ChangeSummary {
+        if let Some(source) = changed.iter().find(|p| self.is_registry_source(p)) {
+            // The registry (Python resolvers) is fixed for the life of the
+            // process; the next client request starts a fresh server.
+            tracing::info!(file = %source.display(), "resolver source changed, restarting");
+            self.stop.store(true, Ordering::SeqCst);
+        }
         let changed = self.expand_aliases(changed);
         self.inv.invalidate_dependents(&changed);
         for dir in changed.iter().filter(|p| !p.is_file()) {

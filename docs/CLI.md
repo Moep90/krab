@@ -146,7 +146,8 @@ manifest. `--reveal` decrypts refs into the output instead, and makes the
 
 `.kapitan` keys used: `compile.search-paths`, `compile.output-path`,
 `compile.indent`, `compile.fetch`, `compile.force-fetch`, `compile.refs-path`,
-`compile.embed-refs`, `compile.reveal`, `inventory.multiline-string-style`.
+`compile.embed-refs`, `compile.reveal`, `inventory.multiline-string-style`,
+`inventory.python-resolvers`.
 
 ## `kapitan refs`
 

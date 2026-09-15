@@ -97,6 +97,24 @@ Three sets ship: `oc.*`, kapitan's built-ins (`key`, `parentkey`, `escape`,
 Boolean resolvers use Python truthiness on purpose (`${if:nonempty,…}` is
 true); a stricter mode is a planned opt-in.
 
+A fourth set comes from the user's `resolvers.py` (`resolvers/python.rs`,
+`runner/resolver_runner.py`), the file kapitan's omegaconf backend imported.
+It runs in Python workers speaking newline-delimited JSON (`python.rs`, shared
+with the compile runners). Each `pass_resolvers()` entry is registered as a
+resolver that ships its arguments as JSON and, while the function runs,
+answers `_root_` / `_parent_` lookups by calling `Ctx::select` on the
+evaluator: Python sees fully resolved values, and a nested resolution failure
+surfaces as the evaluator's own diagnostic rather than a traceback. The worker
+patches `OmegaConf.select` / `to_container` / `is_config` to accept those
+proxies, or installs a stand-in `omegaconf` module when the package is
+missing. The import result (names, special arguments, project modules loaded)
+is cached by file digest under `~/.cache/kapitan/resolvers`, so workers start
+on first use only (at most `workers`, default CPUs capped at 8). Python wins
+over same-named native resolvers unless `prefer-native` is set, because the
+native `contrib` set is a port of one such file and cannot follow its edits.
+The registry records the files it depends on; the daemon exits when one
+changes and the next request starts a fresh one.
+
 `write` (mutating the tree from a resolver) is not supported and reports why.
 
 ## Kapitan model (`model.rs`)

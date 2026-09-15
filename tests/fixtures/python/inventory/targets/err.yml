@@ -1,0 +1,5 @@
+classes:
+  - common
+
+parameters:
+  x: ${fail:boom}
