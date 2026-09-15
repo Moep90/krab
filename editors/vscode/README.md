@@ -11,14 +11,26 @@ folder containing `.kapitan` (or a first-level subdirectory such as `grid/`).
 The language server talks to the kapitan inventory daemon, which it starts if
 needed, so results are always the daemon's current render.
 
-## Build and install
+## Install
+
+Every [krab release](https://github.com/kapicorp/krab/releases) attaches the
+packaged extension:
+
+```sh
+code --install-extension kapitan-vscode-0.1.0.vsix
+```
+
+## Build
 
 ```sh
 cd editors/vscode
 npm install
-npx vsce package          # produces kapitan-0.1.0.vsix
-code --install-extension kapitan-0.1.0.vsix
+npm run package           # produces kapitan-vscode-0.1.0.vsix
+code --install-extension kapitan-vscode-0.1.0.vsix
 ```
+
+CI packages the extension on every pull request (the `kapitan-vscode`
+workflow artifact) and the release workflow attaches it to the release.
 
 Set `kapitan.path` if the binary is not on `PATH` (for example `kapitan2`
 while both implementations are installed).

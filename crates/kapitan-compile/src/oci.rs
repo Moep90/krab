@@ -128,7 +128,7 @@ pub fn pull(source: &str, outdir: &Path, opts: &PullOptions) -> Result<Vec<Pulle
             .unwrap_or("")
             .to_string();
         if let Some(allowed) = opts.allowed_media_types
-            && !allowed.iter().any(|a| *a == media_type)
+            && !allowed.contains(&media_type)
         {
             continue;
         }

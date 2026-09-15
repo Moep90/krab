@@ -26,13 +26,24 @@ yet: `jsonnet`, `helm` (as a direct input type), `kustomize`, `cuelang` and
 
 ## Install
 
-Requires Rust 1.85 or newer (edition 2024).
+Every [release](https://github.com/kapicorp/krab/releases) ships the binary
+for Linux (x86_64 and aarch64, glibc 2.35 or newer) and macOS (Intel and
+Apple silicon), a `SHA256SUMS` file, and the VS Code extension as a `.vsix`:
+
+```sh
+version=2.0.0-alpha.1 target=x86_64-unknown-linux-gnu    # or aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
+curl -LO https://github.com/kapicorp/krab/releases/download/v$version/kapitan-$version-$target.tar.gz
+tar xzf kapitan-$version-$target.tar.gz
+install -m 755 kapitan-$version-$target/kapitan ~/.local/bin/kapitan2   # any name you like
+```
+
+Or build from source with Rust 1.85 or newer (edition 2024):
 
 ```sh
 git clone https://github.com/kapicorp/krab.git
 cd krab
 cargo build --release
-install -m 755 target/release/kapitan ~/.local/bin/kapitan2   # any name you like
+install -m 755 target/release/kapitan ~/.local/bin/kapitan2
 ```
 
 The binary is called `kapitan`. While you run both implementations side by
