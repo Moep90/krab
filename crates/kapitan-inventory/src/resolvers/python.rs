@@ -14,9 +14,11 @@
 //! `prefer_native` is set (the native `contrib` set is a port of one such
 //! file, and a port cannot follow the file's later edits).
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use parking_lot::{Condvar, Mutex};
 use serde::{Deserialize, Serialize};
@@ -29,6 +31,17 @@ use crate::python::{PythonCmd, Worker, WorkerError, cache_dir, materialize_scrip
 use crate::value::Value;
 
 pub const RUNNER_SOURCE: &str = include_str!("../../runner/resolver_runner.py");
+
+thread_local! {
+    /// Workers this thread holds while a Python resolver runs. A resolver's
+    /// `_root_` lookups evaluate interpolations that may call Python again;
+    /// such a nested call must never wait for the pool, or every render
+    /// thread ends up holding one worker while waiting for another.
+    static HELD: Cell<usize> = const { Cell::new(0) };
+}
+
+/// How long `acquire` waits for a busy pool before giving up.
+const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Debug)]
 pub struct PythonConfig {
@@ -270,12 +283,17 @@ impl PythonResolvers {
     }
 
     fn acquire(&self) -> Result<Worker, String> {
+        let nested = HELD.with(|h| h.get() > 0);
+        let deadline = Instant::now() + ACQUIRE_TIMEOUT;
         let mut pool = self.pool.lock();
         loop {
             if let Some(w) = pool.idle.pop() {
                 return Ok(w);
             }
-            if pool.live < self.cfg.max_workers {
+            // A nested call spawns past `max_workers`: the worker this thread
+            // already holds is blocked on this very call, so waiting for it
+            // (or for another thread in the same position) would never end.
+            if nested || pool.live < self.cfg.max_workers {
                 pool.live += 1;
                 drop(pool);
                 return match self.spawn() {
@@ -286,12 +304,29 @@ impl PythonResolvers {
                     }
                 };
             }
-            self.available.wait(&mut pool);
+            if self.available.wait_until(&mut pool, deadline).timed_out() {
+                return Err(format!(
+                    "no Python resolver worker became free in {}s ({} busy, `workers: {}`)",
+                    ACQUIRE_TIMEOUT.as_secs(),
+                    pool.live,
+                    self.cfg.max_workers
+                ));
+            }
         }
     }
 
     fn release(&self, worker: Worker) {
-        self.pool.lock().idle.push(worker);
+        let mut pool = self.pool.lock();
+        if pool.live > 2 * self.cfg.max_workers {
+            // Spawned for a nested call while the pool was already over its
+            // size; retire it rather than keep an idle process around.
+            pool.live -= 1;
+            drop(pool);
+            drop(worker);
+        } else {
+            pool.idle.push(worker);
+            drop(pool);
+        }
         self.available.notify_one();
     }
 
@@ -321,7 +356,9 @@ impl PythonResolvers {
             // The first evaluator error met while answering lookups; it is
             // the real failure when the Python side then gives up.
             let mut inner: Option<ResolverError> = None;
+            HELD.with(|h| h.set(h.get() + 1));
             let outcome = worker.call_with(req.clone(), |r| answer(ctx, r, &mut inner));
+            HELD.with(|h| h.set(h.get() - 1));
             match outcome {
                 Ok(msg) => {
                     self.release(worker);
