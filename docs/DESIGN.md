@@ -155,13 +155,16 @@ One daemon per inventory directory, started on demand by the CLI (or with
   every failed target, and picks up new or deleted target files. Atomic
   editor saves (write temp + rename) therefore cost one target render.
 * **Protocol**: JSON-RPC 2.0, newline delimited, over
-  `$XDG_RUNTIME_DIR/kapitan/<hash of inventory path>.sock` (see
-  `protocol.rs` for the method list). `inventory.wait` is a long poll on the
-  generation counter; `kapitan inventory watch` is a thin client of it.
+  `$XDG_RUNTIME_DIR/kapitan/<hash of inventory path>-<hash of build>.sock`
+  (see `protocol.rs` for the method list). `inventory.wait` is a long poll on
+  the generation counter; `kapitan inventory watch` is a thin client of it.
+  The socket is bound before the initial render; `inventory.*` requests wait
+  for the render, `server.*` ones answer at once (`ready: false`).
 * **Parity**: the CLI uses the server when it can and renders locally
   otherwise (`--no-daemon`, `--raw`, or a server that failed to start); the
-  same library code runs in both, so results are identical. A version
-  mismatch restarts the server transparently.
+  same library code runs in both, so results are identical. Each build owns
+  its socket, so two builds never fight over one daemon, and a client checks
+  the build of the server that answers after it started one.
 * **Secrets** are never revealed server-side; the inventory holds references
   only.
 

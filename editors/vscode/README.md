@@ -33,4 +33,12 @@ CI packages the extension on every pull request (the `kapitan-vscode`
 workflow artifact) and the release workflow attaches it to the release.
 
 Set `kapitan.path` if the binary is not on `PATH` (for example `kapitan2`
-while both implementations are installed).
+while both implementations are installed). Point it at the same binary your
+shell uses: each build keeps its own inventory daemon, so two builds mean two
+daemons rendering the same inventory. The default `kapitan` may resolve to
+the Python kapitan, which has no `lsp` command.
+
+If the inventory has Python resolvers, set `kapitan.python` to an interpreter
+that can import omegaconf (a venv or pixi environment python). The language
+server inherits the editor's environment, whose `python3` usually cannot, and
+the daemon it starts would fail to load `resolvers.py`.

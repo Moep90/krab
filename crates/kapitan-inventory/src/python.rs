@@ -7,6 +7,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
@@ -55,13 +56,15 @@ impl PythonCmd {
         })
     }
 
-    /// Interpreters to try, in order: `explicit`, else `$KAPITAN_PYTHON`; a
-    /// kapitan PEX on `$PATH` (run as an interpreter); then `python3`.
+    /// Interpreters to try, in order: `$KAPITAN_PYTHON` (the per-machine
+    /// override), else `explicit` (from the shared `.kapitan`); a kapitan PEX
+    /// on `$PATH` (run as an interpreter); then `python3`.
     pub fn candidates(explicit: Option<&str>) -> Vec<PythonCmd> {
         let mut candidates = Vec::new();
-        if let Some(spec) = explicit
-            .map(str::to_string)
-            .or_else(|| std::env::var("KAPITAN_PYTHON").ok())
+        if let Some(spec) = std::env::var("KAPITAN_PYTHON")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| explicit.map(str::to_string))
             && let Some(c) = PythonCmd::parse(&spec)
         {
             candidates.push(c);
@@ -86,6 +89,11 @@ impl PythonCmd {
     /// The first candidate, without probing it.
     pub fn preferred(explicit: Option<&str>) -> PythonCmd {
         Self::candidates(explicit).remove(0)
+    }
+
+    /// The program is a file here (absolute, or found on `PATH`).
+    pub fn exists(&self) -> bool {
+        which(&self.program).is_some_and(|p| p.is_file())
     }
 
     /// Cache key: the command plus the interpreter file's size and mtime.
@@ -289,6 +297,17 @@ impl Drop for Worker {
     fn drop(&mut self) {
         let _ = self.stdin.write_all(b"{\"op\":\"exit\",\"id\":0}\n");
         let _ = self.stdin.flush();
+        // A worker blocked mid-request never reads the exit op. Give it a
+        // moment, then kill it: a server that lost the socket race used to
+        // hang here forever, with its Python children.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            match self.child.try_wait() {
+                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+                _ => return,
+            }
+        }
+        let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }

@@ -30,13 +30,14 @@ pub struct Server {
 }
 
 impl Server {
-    /// Bind the socket (replacing a stale one) and serve until shutdown or idle.
-    pub fn serve(self: Arc<Self>) -> std::io::Result<()> {
+    /// Bind the socket, replacing a dead one; `AddrInUse` when a live server
+    /// holds it. Dead sockets other builds left for this inventory go too.
+    pub fn bind(&self) -> std::io::Result<UnixListener> {
         if let Some(parent) = self.cfg.socket.parent() {
             std::fs::create_dir_all(parent)?;
         }
         if self.cfg.socket.exists() {
-            if UnixStream::connect(&self.cfg.socket).is_ok() {
+            if socket_alive(&self.cfg.socket) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::AddrInUse,
                     "a server is already running",
@@ -44,9 +45,17 @@ impl Server {
             }
             std::fs::remove_file(&self.cfg.socket)?;
         }
+        for dead in crate::paths::sockets(&self.state.inv.cfg.root).1 {
+            let _ = std::fs::remove_file(dead);
+        }
         let listener = UnixListener::bind(&self.cfg.socket)?;
         listener.set_nonblocking(true)?;
         tracing::info!(socket = %self.cfg.socket.display(), "listening");
+        Ok(listener)
+    }
+
+    /// Accept connections until shutdown or idle.
+    pub fn serve_on(self: Arc<Self>, listener: UnixListener) -> std::io::Result<()> {
         loop {
             if self.shutdown.load(Ordering::SeqCst) || self.state.should_stop() {
                 break;
@@ -89,6 +98,10 @@ impl Server {
             self.state.touch();
             let response = match serde_json::from_str::<Request>(&line) {
                 Ok(req) => {
+                    // Everything but `server.*` needs the initial render.
+                    if !req.method.starts_with("server.") {
+                        self.state.wait_ready();
+                    }
                     let id = req.id;
                     match self.dispatch(&req) {
                         Ok(result) => Response {
@@ -343,6 +356,9 @@ impl Server {
             version: self.cfg.version.clone(),
             protocol: PROTOCOL_VERSION,
             pid: std::process::id(),
+            exe: std::env::current_exe().unwrap_or_default(),
+            ready: self.state.is_ready(),
+            resolvers: self.state.inv.registry.description().to_string(),
             inventory_path: self.state.inv.cfg.root.clone(),
             socket: self.cfg.socket.clone(),
             log: self.cfg.log.clone(),

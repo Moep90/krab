@@ -109,7 +109,7 @@ pub struct Connector {
 
 impl Connector {
     pub fn socket(&self) -> PathBuf {
-        paths::socket_path(&self.inventory_root)
+        paths::socket_path(&self.inventory_root, &self.version)
     }
 
     /// Connect to a compatible running server. `None` when there is none.
@@ -148,12 +148,28 @@ impl Connector {
             || crate::rpc::socket_alive(&socket),
             Duration::from_secs(10),
         ) {
+            let log = paths::log_path(&self.inventory_root);
             return Err(ClientError::Protocol(format!(
-                "server did not start; see {}",
-                paths::log_path(&self.inventory_root).display()
+                "server did not start; see {}{}",
+                log.display(),
+                log_tail(&log, 5)
             )));
         }
-        Client::connect(&socket).map_err(ClientError::Io)
+        let mut client = Client::connect(&socket)?;
+        // Whatever bound the socket answers here; make sure it is this build
+        // (another one racing to the same socket used to win silently).
+        let info = client.info()?;
+        if info.version != self.version || info.protocol != PROTOCOL_VERSION {
+            return Err(ClientError::Protocol(format!(
+                "socket {} is served by kapitan {} (pid {}, {}), not by this build ({})",
+                socket.display(),
+                info.version,
+                info.pid,
+                info.exe.display(),
+                self.version
+            )));
+        }
+        Ok(client)
     }
 
     /// Start a detached server process (its own session, stdio to the log file).
@@ -188,6 +204,17 @@ impl Connector {
         cmd.spawn()?;
         Ok(())
     }
+}
+
+/// The last `n` lines of the server log, each on its own indented line.
+fn log_tail(log: &Path, n: usize) -> String {
+    let text = std::fs::read_to_string(log).unwrap_or_default();
+    let lines: Vec<&str> = text.lines().collect();
+    lines
+        .iter()
+        .skip(lines.len().saturating_sub(n))
+        .map(|l| format!("\n  {l}"))
+        .collect()
 }
 
 fn wait_until(mut cond: impl FnMut() -> bool, timeout: Duration) -> bool {

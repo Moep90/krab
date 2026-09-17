@@ -212,7 +212,7 @@ name. Settings, all optional, in `.kapitan`:
 inventory:
   python-resolvers:
     file: system/omegaconf/resolvers/resolvers.py  # explicit path; `python-resolvers: false` disables
-    python: /opt/venv/bin/python                    # default: $KAPITAN_PYTHON, a kapitan PEX on PATH, python3
+    python: /opt/venv/bin/python                    # $KAPITAN_PYTHON overrides; default: a kapitan PEX on PATH, python3
     prefer-native: true                             # keep krab's Rust resolvers for names both define
     workers: 4                                      # concurrent Python processes (default: CPUs, at most 8)
 ```

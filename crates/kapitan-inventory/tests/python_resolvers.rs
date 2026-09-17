@@ -193,3 +193,55 @@ fn prefer_native_keeps_the_rust_resolver() {
     assert_eq!(render(true), "aXc");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A Python resolver whose `_root_` lookup evaluates another Python
+/// resolver needs a second worker while holding the first. With a pool of
+/// one that used to wait forever.
+#[test]
+fn nested_python_calls_do_not_deadlock() {
+    if !python_has(&[], "sys") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("krab-nested-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("inventory/targets")).unwrap();
+    std::fs::write(
+        dir.join("resolvers.py"),
+        "from omegaconf import OmegaConf\n\
+         def outer(key, _root_):\n    return OmegaConf.select(_root_, key)\n\
+         def inner(s):\n    return s.upper()\n\
+         def pass_resolvers():\n    return {'outer': outer, 'inner': inner}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("inventory/targets/t.yml"),
+        "parameters:\n  c: ${outer:b}\n  b: ${outer:z.a}\n  z:\n    a: ${inner:hello}\n",
+    )
+    .unwrap();
+    let settings = PythonResolverSettings {
+        file: Some(dir.join("resolvers.py")),
+        python: Some("python3".into()),
+        workers: Some(1),
+        ..Default::default()
+    };
+    let cfg = PythonConfig::discover(&dir, &dir, &settings).expect("configured");
+    let resolvers = PythonResolvers::new(cfg);
+    let mut registry = Registry::with_builtins();
+    PythonResolvers::install(&resolvers, &mut registry).unwrap_or_else(|e| panic!("install: {e}"));
+    let inv = Inventory::new(
+        InventoryConfig::new(dir.join("inventory")),
+        Arc::new(registry),
+    );
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let t = inv
+            .render_named("t")
+            .map(|t| at(&t.parameters, &["c"]).value.py_str());
+        let _ = tx.send(t);
+    });
+    let rendered = rx
+        .recv_timeout(std::time::Duration::from_secs(90))
+        .expect("render deadlocked on the nested Python call");
+    assert_eq!(rendered.unwrap_or_else(|e| panic!("{e}")), "HELLO");
+    let _ = std::fs::remove_dir_all(dir);
+}
