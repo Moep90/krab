@@ -22,6 +22,10 @@ pub struct State {
     /// Set when the server must exit and be started afresh (a file the
     /// resolver registry was built from changed).
     pub stop: AtomicBool,
+    /// Set once the initial render is done; requests wait for it.
+    ready: AtomicBool,
+    ready_cv: Condvar,
+    ready_lock: Mutex<()>,
 }
 
 #[derive(Default)]
@@ -56,6 +60,28 @@ impl State {
             started: Instant::now(),
             last_request: Mutex::new(Instant::now()),
             stop: AtomicBool::new(false),
+            ready: AtomicBool::new(false),
+            ready_cv: Condvar::new(),
+            ready_lock: Mutex::new(()),
+        }
+    }
+
+    /// The initial render is done; `inventory.*` requests may be answered.
+    pub fn set_ready(&self) {
+        let _guard = self.ready_lock.lock();
+        self.ready.store(true, Ordering::SeqCst);
+        self.ready_cv.notify_all();
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::SeqCst)
+    }
+
+    /// Block until the initial render is done.
+    pub fn wait_ready(&self) {
+        let mut guard = self.ready_lock.lock();
+        while !self.ready.load(Ordering::SeqCst) {
+            self.ready_cv.wait(&mut guard);
         }
     }
 

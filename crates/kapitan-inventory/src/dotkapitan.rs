@@ -14,7 +14,7 @@ use crate::yaml::parse_document;
 /// inventory:
 ///   python-resolvers:
 ///     file: system/omegaconf/resolvers/resolvers.py   # default: the reference's discovery
-///     python: /opt/venv/bin/python                     # default: $KAPITAN_PYTHON, a kapitan PEX, python3
+///     python: /opt/venv/bin/python                     # $KAPITAN_PYTHON overrides; default: a kapitan PEX, python3
 ///     prefer-native: true                              # keep native resolvers over same-named Python ones
 ///     workers: 4
 ///     enabled: true

@@ -89,16 +89,29 @@ impl App {
         cfg.compose_target_name = dot.compose_target_name.unwrap_or(true);
         cfg.normalize = !raw;
         let mut registry = Registry::with_builtins();
-        if let Some(python) = PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {
-            let resolvers = PythonResolvers::new(python);
-            PythonResolvers::install(&resolvers, &mut registry).map_err(|e| {
-                Failure::Diagnostics(
-                    vec![Diagnostic::error("inventory::python_resolvers", e).with_help(
-                        "fix the file, point `inventory.python-resolvers.file` in `.kapitan` elsewhere, or set `inventory.python-resolvers: false`",
-                    )],
-                    json,
-                )
-            })?;
+        match PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {
+            Some(python) => {
+                if !python.python.exists() {
+                    return Err(Failure::Diagnostics(
+                        vec![missing_python(&python.python.description, &dot)],
+                        json,
+                    ));
+                }
+                tracing::info!(file = %python.file.display(), python = %python.python.description, "Python resolvers configured");
+                let resolvers = PythonResolvers::new(python);
+                PythonResolvers::install(&resolvers, &mut registry).map_err(|e| {
+                    Failure::Diagnostics(
+                        vec![Diagnostic::error("inventory::python_resolvers", e).with_help(
+                            "fix the file, point `inventory.python-resolvers.file` in `.kapitan` elsewhere, or set `inventory.python-resolvers: false`",
+                        )],
+                        json,
+                    )
+                })?;
+            }
+            None if dot.python_resolvers.enabled == Some(false) => {
+                registry.set_description("Python resolvers disabled in .kapitan");
+            }
+            None => registry.set_description("no resolvers.py found, native resolvers only"),
         }
         let inv = Inventory::new(cfg, Arc::new(registry));
         let connector = (!no_daemon && !raw).then(|| Connector {
@@ -154,7 +167,10 @@ impl App {
         match connector.connect_or_spawn() {
             Ok(c) => Some(c),
             Err(e) => {
-                tracing::warn!("inventory server unavailable ({e}); rendering locally");
+                tracing::warn!(
+                    socket = %connector.socket().display(),
+                    "inventory server unavailable ({e}); rendering locally"
+                );
                 None
             }
         }
@@ -230,6 +246,29 @@ impl App {
             Format::Json => serde_json::to_string_pretty(node).unwrap(),
         }
     }
+}
+
+/// The configured interpreter is not an executable on this machine.
+fn missing_python(python: &str, dot: &DotKapitan) -> Diagnostic {
+    let (what, help) = if std::env::var_os("KAPITAN_PYTHON").is_some() {
+        (
+            format!("KAPITAN_PYTHON names `{python}`, which is not an executable here"),
+            "unset it, or point it at a Python that can import omegaconf",
+        )
+    } else if dot.python_resolvers.python.is_some() {
+        (
+            format!(
+                "`inventory.python-resolvers.python: {python}` in .kapitan is not an executable here"
+            ),
+            "install it, change the key, or override it for this machine with KAPITAN_PYTHON=/path/to/python",
+        )
+    } else {
+        (
+            format!("no Python interpreter found (`{python}`)"),
+            "install python3, or set KAPITAN_PYTHON=/path/to/python",
+        )
+    };
+    Diagnostic::error("inventory::python_resolvers", what).with_help(help)
 }
 
 pub fn flatten(node: &Node) -> Node {
