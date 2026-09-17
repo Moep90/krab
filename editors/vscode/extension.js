@@ -22,10 +22,15 @@ function kapitanRoot(folder) {
 async function startClient(root) {
   if (clients.has(root)) return;
   const config = vscode.workspace.getConfiguration("kapitan");
+  // The language server starts the inventory daemon with this environment,
+  // and the extension host's PATH rarely holds a Python with omegaconf.
+  const env = { ...process.env };
+  const python = config.get("python", "");
+  if (python) env.KAPITAN_PYTHON = python;
   const serverOptions = {
     command: config.get("path", "kapitan"),
     args: ["lsp"],
-    options: { cwd: root },
+    options: { cwd: root, env },
     transport: TransportKind.stdio,
   };
   const clientOptions = {

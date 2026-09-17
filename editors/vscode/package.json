@@ -17,7 +17,12 @@
         "kapitan.path": {
           "type": "string",
           "default": "kapitan",
-          "description": "Path to the kapitan binary (must support `kapitan lsp`)."
+          "description": "Path to the kapitan binary (must support `kapitan lsp`). Use the same binary as your shell: the daemon it starts serves both."
+        },
+        "kapitan.python": {
+          "type": "string",
+          "default": "",
+          "description": "Python interpreter for the inventory's Python resolvers (passed to the language server as KAPITAN_PYTHON). The editor's environment rarely has the right one on PATH."
         },
         "kapitan.trace.server": {
           "type": "string",
