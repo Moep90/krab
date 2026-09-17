@@ -13,8 +13,9 @@ cargo test --release
 
 Keep a symlink or copy of `target/release/kapitan` on your `PATH` under a
 second name (`kapitan2`) while the Python `kapitan` is installed too. A
-running daemon notices a rebuilt binary and restarts itself, so there is
-nothing to stop after `cargo build`.
+rebuilt binary uses a socket of its own, so there is nothing to stop after
+`cargo build`; the previous daemon idles out (or `kapitan server stop` stops
+every build's daemon for the inventory).
 
 ## Tests
 

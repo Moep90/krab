@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use kapitan_inventory::Diagnostic;
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
@@ -57,6 +57,12 @@ pub struct InfoResult {
     pub version: String,
     pub protocol: u32,
     pub pid: u32,
+    /// The binary running the server.
+    pub exe: PathBuf,
+    /// `false` while the initial render runs; `inventory.*` requests wait for it.
+    pub ready: bool,
+    /// Where the resolver registry came from (the native set, a `resolvers.py`).
+    pub resolvers: String,
     pub inventory_path: PathBuf,
     pub socket: PathBuf,
     pub log: Option<PathBuf>,
