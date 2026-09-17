@@ -828,7 +828,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "kapitan"
-version = "2.0.0-alpha.2"
+version = "2.0.0-alpha.3"
 dependencies = [
  "clap",
  "clap_complete",
@@ -847,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "kapitan-compile"
-version = "2.0.0-alpha.2"
+version = "2.0.0-alpha.3"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "kapitan-inventory"
-version = "2.0.0-alpha.2"
+version = "2.0.0-alpha.3"
 dependencies = [
  "blake3",
  "indexmap",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "kapitan-lsp"
-version = "2.0.0-alpha.2"
+version = "2.0.0-alpha.3"
 dependencies = [
  "crossbeam-channel",
  "kapitan-inventory",
@@ -908,7 +908,7 @@ dependencies = [
 
 [[package]]
 name = "kapitan-server"
-version = "2.0.0-alpha.2"
+version = "2.0.0-alpha.3"
 dependencies = [
  "blake3",
  "kapitan-inventory",
