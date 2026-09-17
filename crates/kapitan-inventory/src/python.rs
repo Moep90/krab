@@ -7,6 +7,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
@@ -289,6 +290,17 @@ impl Drop for Worker {
     fn drop(&mut self) {
         let _ = self.stdin.write_all(b"{\"op\":\"exit\",\"id\":0}\n");
         let _ = self.stdin.flush();
+        // A worker blocked mid-request never reads the exit op. Give it a
+        // moment, then kill it: a server that lost the socket race used to
+        // hang here forever, with its Python children.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            match self.child.try_wait() {
+                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+                _ => return,
+            }
+        }
+        let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
