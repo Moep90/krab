@@ -192,24 +192,35 @@ The daemon is started automatically by the commands above; these manage it.
 
 | command | meaning |
 |---|---|
-| `server status` | whether one is running for this inventory: version, pid, socket, log, targets rendered and failing, generation, uptime and idle timeout |
-| `server stop` | stop it |
+| `server status` | every server running for this inventory (any build): version, pid, binary, socket, log, resolver sources, whether it is still rendering, targets rendered and failing, generation, uptime and idle timeout. `--json` prints them as a list |
+| `server stop` | stop them all |
 | `server logs` | print its log file |
 | `server start` | start one detached (no-op when one runs) |
 | `server run [--idle-timeout <SECS>]` | run in the foreground; this is what `start` launches. Default idle timeout 1800 s |
 
-One daemon per inventory directory. Socket:
-`$XDG_RUNTIME_DIR/kapitan/<hash>.sock` (fallback `/tmp/kapitan-<uid>/`). Log:
-`$XDG_STATE_HOME/kapitan/server-<hash>.log` (fallback
-`~/.local/state/kapitan/`). The hash is of the canonical inventory path.
+One daemon per inventory directory and build. Socket:
+`$XDG_RUNTIME_DIR/kapitan/<inventory>-<build>.sock` (fallback
+`/tmp/kapitan-<uid>/`), where `<inventory>` hashes the canonical inventory
+path and `<build>` the binary's version, size and mtime. Two builds pointed
+at the same inventory (a shell's `kapitan` and an editor's `kapitan2`) each
+keep their own daemon rather than restart each other's; a rebuilt binary gets
+a fresh socket and the previous daemon idles out. Log, shared by all builds:
+`$XDG_STATE_HOME/kapitan/server-<inventory>.log` (fallback
+`~/.local/state/kapitan/`).
+
+The daemon binds its socket before the initial render and holds `inventory.*`
+requests until that render is done, so a client's first call waits on the
+socket rather than on a start-up timeout; `server status` says `starting`
+meanwhile. A second starter sees the socket at once and exits.
 
 The protocol is JSON-RPC 2.0, newline delimited: `server.info`,
 `server.shutdown`, `inventory.targets`, `inventory.target`, `inventory.all`,
 `inventory.classes`, `inventory.explain`, `inventory.deps`,
 `inventory.diagnostics` and `inventory.wait` (a long poll on the generation
 counter). Parameter and result shapes are in
-`crates/kapitan-server/src/protocol.rs`. A client whose version differs from
-the running daemon's restarts it transparently.
+`crates/kapitan-server/src/protocol.rs`. After starting a daemon the client
+checks that the server answering on its socket is the same build, and
+refuses to use one that is not.
 
 ## `kapitan lsp`
 
@@ -232,7 +243,7 @@ registers whatever name the command was invoked as, so an install like
 |---|---|
 | `KAPITAN_INVENTORY_PATH` | same as `--inventory-path` |
 | `KAPITAN_NO_DAEMON` | same as `--no-daemon` |
-| `KAPITAN_PYTHON` | same as `--python` |
+| `KAPITAN_PYTHON` | same as `--python` for compile; for Python resolvers it overrides `inventory.python-resolvers.python` in `.kapitan` (the per-machine override of a shared setting) |
 | `RUST_LOG` | log filter (`kapitan_server=debug`, ...) |
 | `XDG_RUNTIME_DIR`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` | where the socket, log and worker cache live |
 

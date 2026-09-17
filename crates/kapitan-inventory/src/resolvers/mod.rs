@@ -58,6 +58,9 @@ pub struct Registry {
     /// imports); when one changes the registry must be rebuilt, so the
     /// daemon restarts.
     sources: Vec<PathBuf>,
+    /// Where the non-native resolvers came from, for diagnostics
+    /// (`12 Python resolvers from resolvers.py via python3`).
+    description: String,
 }
 
 impl Registry {
@@ -112,6 +115,14 @@ impl Registry {
 
     pub fn names(&self) -> Vec<String> {
         self.map.keys().cloned().collect()
+    }
+
+    pub fn set_description(&mut self, description: impl Into<String>) {
+        self.description = description.into();
+    }
+
+    pub fn description(&self) -> &str {
+        &self.description
     }
 }
 
