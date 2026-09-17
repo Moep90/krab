@@ -56,13 +56,15 @@ impl PythonCmd {
         })
     }
 
-    /// Interpreters to try, in order: `explicit`, else `$KAPITAN_PYTHON`; a
-    /// kapitan PEX on `$PATH` (run as an interpreter); then `python3`.
+    /// Interpreters to try, in order: `$KAPITAN_PYTHON` (the per-machine
+    /// override), else `explicit` (from the shared `.kapitan`); a kapitan PEX
+    /// on `$PATH` (run as an interpreter); then `python3`.
     pub fn candidates(explicit: Option<&str>) -> Vec<PythonCmd> {
         let mut candidates = Vec::new();
-        if let Some(spec) = explicit
-            .map(str::to_string)
-            .or_else(|| std::env::var("KAPITAN_PYTHON").ok())
+        if let Some(spec) = std::env::var("KAPITAN_PYTHON")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| explicit.map(str::to_string))
             && let Some(c) = PythonCmd::parse(&spec)
         {
             candidates.push(c);
@@ -87,6 +89,11 @@ impl PythonCmd {
     /// The first candidate, without probing it.
     pub fn preferred(explicit: Option<&str>) -> PythonCmd {
         Self::candidates(explicit).remove(0)
+    }
+
+    /// The program is a file here (absolute, or found on `PATH`).
+    pub fn exists(&self) -> bool {
+        which(&self.program).is_some_and(|p| p.is_file())
     }
 
     /// Cache key: the command plus the interpreter file's size and mtime.

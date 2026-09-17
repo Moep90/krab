@@ -143,16 +143,28 @@ impl PythonResolvers {
         for m in &loaded.modules {
             registry.add_source(m.clone());
         }
+        let mut kept_native = 0;
         for name in loaded.resolvers.keys() {
             if registry.contains(name) {
                 if this.cfg.prefer_native {
                     tracing::debug!(resolver = %name, "native resolver kept over the Python one");
+                    kept_native += 1;
                     continue;
                 }
                 tracing::debug!(resolver = %name, "Python resolver replaces the native one");
             }
             registry.register_arc(name, Self::resolver(this, name));
         }
+        let mut description = format!(
+            "{} Python resolvers from {} via {}",
+            loaded.resolvers.len() - kept_native,
+            this.cfg.file.display(),
+            this.cfg.python.description
+        );
+        if kept_native > 0 {
+            description.push_str(&format!(" ({kept_native} kept native)"));
+        }
+        registry.set_description(description);
         Ok(loaded)
     }
 

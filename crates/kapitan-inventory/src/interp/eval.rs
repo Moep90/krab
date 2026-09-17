@@ -338,10 +338,13 @@ impl<'a> Evaluator<'a> {
                             at,
                             origin,
                         )
-                        .with_help(format!(
-                            "known resolvers: {}",
-                            self.registry.names().join(", ")
-                        )));
+                        .with_help(match self.registry.description() {
+                            "" => format!("known resolvers: {}", self.registry.names().join(", ")),
+                            from => format!(
+                                "known resolvers: {}; {from}",
+                                self.registry.names().join(", ")
+                            ),
+                        }));
                 };
                 let mut ctx = Ctx {
                     ev: self,
