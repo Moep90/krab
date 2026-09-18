@@ -1,8 +1,8 @@
 //! Text rendering of an `Explanation` (the JSON form is the struct itself).
 
-use kapitan_inventory::Value;
-use kapitan_inventory::explain::{Explanation, HistoryEntry};
-use kapitan_inventory::source::Location;
+use krab_inventory::Value;
+use krab_inventory::explain::{Explanation, HistoryEntry};
+use krab_inventory::source::Location;
 
 fn short(v: &Value) -> String {
     let s = match v {

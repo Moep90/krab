@@ -1,0 +1,20 @@
+[package]
+name = "krab-server"
+description = "Kapitan inventory daemon: keeps the inventory in memory, watches files, serves JSON-RPC over a unix socket"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+krab-inventory = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+notify = { workspace = true }
+notify-debouncer-full = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+blake3 = { workspace = true }
+libc = { workspace = true }

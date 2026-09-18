@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use kapitan_inventory::error::{Diagnostic, Severity};
+use krab_inventory::error::{Diagnostic, Severity};
 use miette::{LabeledSpan, NamedSource, Report, SourceSpan};
 
 /// A diagnostic wrapped for miette: the first labelled location gets a

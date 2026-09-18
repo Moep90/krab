@@ -827,83 +827,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "kapitan-compile"
-version = "2.0.0-alpha.3"
-dependencies = [
- "base64 0.22.1",
- "blake3",
- "ed25519-dalek",
- "flate2",
- "glob",
- "hex",
- "kapitan-inventory",
- "minijinja",
- "parking_lot",
- "rand",
- "rayon",
- "regex",
- "rsa",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "thiserror",
- "tracing",
- "ureq",
- "zip",
-]
-
-[[package]]
-name = "kapitan-inventory"
-version = "2.0.0-alpha.3"
-dependencies = [
- "blake3",
- "indexmap",
- "md-5",
- "parking_lot",
- "rayon",
- "saphyr-parser",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "kapitan-lsp"
-version = "2.0.0-alpha.3"
-dependencies = [
- "crossbeam-channel",
- "kapitan-inventory",
- "kapitan-server",
- "lsp-server",
- "lsp-types",
- "parking_lot",
- "saphyr-parser",
- "serde",
- "serde_json",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "kapitan-server"
-version = "2.0.0-alpha.3"
-dependencies = [
- "blake3",
- "kapitan-inventory",
- "libc",
- "notify",
- "notify-debouncer-full",
- "parking_lot",
- "serde",
- "serde_json",
- "thiserror",
- "tracing",
-]
-
-[[package]]
 name = "kqueue"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -925,14 +848,14 @@ dependencies = [
 
 [[package]]
 name = "krab"
-version = "2.0.0-alpha.3"
+version = "2.0.0-alpha.4"
 dependencies = [
  "clap",
  "clap_complete",
- "kapitan-compile",
- "kapitan-inventory",
- "kapitan-lsp",
- "kapitan-server",
+ "krab-compile",
+ "krab-inventory",
+ "krab-lsp",
+ "krab-server",
  "libc",
  "miette",
  "parking_lot",
@@ -940,6 +863,83 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "krab-compile"
+version = "2.0.0-alpha.4"
+dependencies = [
+ "base64 0.22.1",
+ "blake3",
+ "ed25519-dalek",
+ "flate2",
+ "glob",
+ "hex",
+ "krab-inventory",
+ "minijinja",
+ "parking_lot",
+ "rand",
+ "rayon",
+ "regex",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "thiserror",
+ "tracing",
+ "ureq",
+ "zip",
+]
+
+[[package]]
+name = "krab-inventory"
+version = "2.0.0-alpha.4"
+dependencies = [
+ "blake3",
+ "indexmap",
+ "md-5",
+ "parking_lot",
+ "rayon",
+ "saphyr-parser",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "krab-lsp"
+version = "2.0.0-alpha.4"
+dependencies = [
+ "crossbeam-channel",
+ "krab-inventory",
+ "krab-server",
+ "lsp-server",
+ "lsp-types",
+ "parking_lot",
+ "saphyr-parser",
+ "serde",
+ "serde_json",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "krab-server"
+version = "2.0.0-alpha.4"
+dependencies = [
+ "blake3",
+ "krab-inventory",
+ "libc",
+ "notify",
+ "notify-debouncer-full",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

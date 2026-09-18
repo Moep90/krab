@@ -4,13 +4,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use kapitan_inventory::dotkapitan::DotKapitan;
-use kapitan_inventory::emit::yaml::{DumpOptions, dump_yaml};
-use kapitan_inventory::error::Diagnostic;
-use kapitan_inventory::resolvers::python::{PythonConfig, PythonResolvers};
-use kapitan_inventory::{Inventory, InventoryConfig, Map, Node, Registry, Value};
-use kapitan_server::protocol::AllResult;
-use kapitan_server::{Client, ClientError, Connector};
+use krab_inventory::dotkapitan::DotKapitan;
+use krab_inventory::emit::yaml::{DumpOptions, dump_yaml};
+use krab_inventory::error::Diagnostic;
+use krab_inventory::resolvers::python::{PythonConfig, PythonResolvers};
+use krab_inventory::{Inventory, InventoryConfig, Map, Node, Registry, Value};
+use krab_server::protocol::AllResult;
+use krab_server::{Client, ClientError, Connector};
 
 use crate::report;
 
@@ -131,7 +131,7 @@ impl App {
         })
     }
 
-    pub fn fail(&self, errors: Vec<kapitan_inventory::Error>) -> Failure {
+    pub fn fail(&self, errors: Vec<krab_inventory::Error>) -> Failure {
         Failure::Diagnostics(
             errors
                 .into_iter()
@@ -211,7 +211,7 @@ impl App {
                 let all: AllResult = c
                     .call(
                         "inventory.all",
-                        kapitan_server::protocol::TargetsParams {
+                        krab_server::protocol::TargetsParams {
                             labels: labels.to_vec(),
                         },
                     )
@@ -229,7 +229,7 @@ impl App {
                     return Err(self.fail(report.errors));
                 }
                 for (name, t) in &report.targets {
-                    if !labels.is_empty() && !kapitan_server::rpc::has_labels(t, labels) {
+                    if !labels.is_empty() && !krab_server::rpc::has_labels(t, labels) {
                         continue;
                     }
                     self.warn_all(&t.warnings);
@@ -250,9 +250,9 @@ impl App {
 
 /// The configured interpreter is not an executable on this machine.
 fn missing_python(python: &str, dot: &DotKapitan) -> Diagnostic {
-    let (what, help) = if std::env::var_os("KAPITAN_PYTHON").is_some() {
+    let (what, help) = if std::env::var_os("KRAB_PYTHON").is_some() {
         (
-            format!("KAPITAN_PYTHON names `{python}`, which is not an executable here"),
+            format!("KRAB_PYTHON names `{python}`, which is not an executable here"),
             "unset it, or point it at a Python that can import omegaconf",
         )
     } else if dot.python_resolvers.python.is_some() {
@@ -260,12 +260,12 @@ fn missing_python(python: &str, dot: &DotKapitan) -> Diagnostic {
             format!(
                 "`inventory.python-resolvers.python: {python}` in .kapitan is not an executable here"
             ),
-            "install it, change the key, or override it for this machine with KAPITAN_PYTHON=/path/to/python",
+            "install it, change the key, or override it for this machine with KRAB_PYTHON=/path/to/python",
         )
     } else {
         (
             format!("no Python interpreter found (`{python}`)"),
-            "install python3, or set KAPITAN_PYTHON=/path/to/python",
+            "install python3, or set KRAB_PYTHON=/path/to/python",
         )
     };
     Diagnostic::error("inventory::python_resolvers", what).with_help(help)

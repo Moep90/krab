@@ -3,11 +3,11 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
-use kapitan_inventory::error::Diagnostic;
-use kapitan_inventory::explain::Explanation;
-use kapitan_inventory::merge::get;
-use kapitan_inventory::{ClassUsage, KeyPath, Node, Value};
-use kapitan_server::protocol::*;
+use krab_inventory::error::Diagnostic;
+use krab_inventory::explain::Explanation;
+use krab_inventory::merge::get;
+use krab_inventory::{ClassUsage, KeyPath, Node, Value};
+use krab_server::protocol::*;
 
 use crate::app::{App, Failure, Format, flatten};
 use crate::completions::complete_target;
@@ -141,7 +141,7 @@ pub fn run(app: &App, args: InventoryArgs) -> Result<(), Failure> {
                         .inv
                         .render_named(&target)
                         .map_err(|e| app.fail(vec![e]))?;
-                    kapitan_inventory::explain::explain(&app.inv, &t, &path)
+                    krab_inventory::explain::explain(&app.inv, &t, &path)
                         .map_err(|e| app.fail(vec![e]))?
                 }
             };
@@ -233,7 +233,7 @@ fn show(app: &App, args: ShowArgs) -> Result<(), Failure> {
                 None => Node::synthetic(Value::Map(docs)),
                 Some(pattern) => {
                     let path = KeyPath::parse(pattern);
-                    let mut out = kapitan_inventory::Map::new();
+                    let mut out = krab_inventory::Map::new();
                     for (name, doc) in &docs {
                         if let Some(n) = get(doc, &path) {
                             out.insert(name.clone(), n.clone());
@@ -294,7 +294,7 @@ fn targets(app: &App, quiet: bool, labels: &[(String, String)]) -> Result<(), Fa
             let mut out: Vec<TargetSummary> = report
                 .targets
                 .values()
-                .filter(|t| kapitan_server::rpc::has_labels(t, labels))
+                .filter(|t| krab_server::rpc::has_labels(t, labels))
                 .map(|t| TargetSummary {
                     name: t.name.clone(),
                     path: t.path.clone(),
@@ -303,9 +303,9 @@ fn targets(app: &App, quiet: bool, labels: &[(String, String)]) -> Result<(), Fa
                     doc_digest: Some(t.doc_digest.clone()),
                     ok: true,
                     error: None,
-                    labels: kapitan_server::rpc::target_labels(t),
+                    labels: krab_server::rpc::target_labels(t),
                     classes: t.classes.len(),
-                    inputs: kapitan_server::rpc::target_inputs(t),
+                    inputs: krab_server::rpc::target_inputs(t),
                 })
                 .collect();
             if labels.is_empty() {

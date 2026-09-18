@@ -17,7 +17,7 @@ Every [krab release](https://github.com/kapicorp/krab/releases) attaches the
 packaged extension:
 
 ```sh
-code --install-extension kapitan-vscode-0.1.0.vsix
+code --install-extension krab-vscode-0.1.0.vsix
 ```
 
 ## Build
@@ -25,19 +25,19 @@ code --install-extension kapitan-vscode-0.1.0.vsix
 ```sh
 cd editors/vscode
 npm install
-npm run package           # produces kapitan-vscode-0.1.0.vsix
-code --install-extension kapitan-vscode-0.1.0.vsix
+npm run package           # produces krab-vscode-0.1.0.vsix
+code --install-extension krab-vscode-0.1.0.vsix
 ```
 
-CI packages the extension on every pull request (the `kapitan-vscode`
+CI packages the extension on every pull request (the `krab-vscode`
 workflow artifact) and the release workflow attaches it to the release.
 
-Set `kapitan.path` if `krab` is not on the extension host's `PATH`, or to
+Set `krab.path` if `krab` is not on the extension host's `PATH`, or to
 use a development build. Point it at the same binary your shell uses: each
 build keeps its own inventory daemon, so two builds mean two daemons
 rendering the same inventory.
 
-If the inventory has Python resolvers, set `kapitan.python` to an interpreter
+If the inventory has Python resolvers, set `krab.python` to an interpreter
 that can import omegaconf (a venv or pixi environment python). The language
 server inherits the editor's environment, whose `python3` usually cannot, and
 the daemon it starts would fail to load `resolvers.py`.

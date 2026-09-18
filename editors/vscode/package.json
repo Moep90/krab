@@ -1,7 +1,7 @@
 {
-  "name": "kapitan",
-  "displayName": "Kapitan",
-  "description": "Kapitan inventory support: live diagnostics, hover with resolved values and provenance, go to definition, completion",
+  "name": "krab",
+  "displayName": "krab",
+  "description": "krab (the Rust Kapitan): inventory support: live diagnostics, hover with resolved values and provenance, go to definition, completion",
   "version": "0.1.1",
   "publisher": "kapicorp",
   "license": "Apache-2.0",
@@ -12,31 +12,31 @@
   "main": "./extension.js",
   "contributes": {
     "configuration": {
-      "title": "Kapitan",
+      "title": "krab",
       "properties": {
-        "kapitan.path": {
+        "krab.path": {
           "type": "string",
           "default": "krab",
           "description": "Path to the krab binary (must support `krab lsp`). Use the same binary as your shell: the daemon it starts serves both."
         },
-        "kapitan.python": {
+        "krab.python": {
           "type": "string",
           "default": "",
-          "description": "Python interpreter for the inventory's Python resolvers (passed to the language server as KAPITAN_PYTHON). The editor's environment rarely has the right one on PATH."
+          "description": "Python interpreter for the inventory's Python resolvers (passed to the language server as KRAB_PYTHON). The editor's environment rarely has the right one on PATH."
         },
-        "kapitan.trace.server": {
+        "krab.trace.server": {
           "type": "string",
           "enum": ["off", "messages", "verbose"],
           "default": "off",
-          "description": "Trace LSP traffic in the Kapitan output channel."
+          "description": "Trace LSP traffic in the krab output channel."
         }
       }
     },
     "commands": [
-      { "command": "kapitan.restartServer", "title": "Kapitan: Restart Language Server" }
+      { "command": "krab.restartServer", "title": "krab: Restart Language Server" }
     ]
   },
   "dependencies": { "vscode-languageclient": "^9.0.1" },
   "devDependencies": { "@types/vscode": "^1.85.0", "@vscode/vsce": "^3.0.0" },
-  "scripts": { "package": "cp ../../LICENSE LICENSE && vsce package --out kapitan-vscode-$npm_package_version.vsix" }
+  "scripts": { "package": "cp ../../LICENSE LICENSE && vsce package --out krab-vscode-$npm_package_version.vsix" }
 }

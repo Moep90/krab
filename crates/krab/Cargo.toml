@@ -12,10 +12,10 @@ name = "krab"
 path = "src/main.rs"
 
 [dependencies]
-kapitan-inventory = { workspace = true }
-kapitan-server = { workspace = true }
-kapitan-compile = { workspace = true }
-kapitan-lsp = { workspace = true }
+krab-inventory = { workspace = true }
+krab-server = { workspace = true }
+krab-compile = { workspace = true }
+krab-lsp = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 miette = { workspace = true }
