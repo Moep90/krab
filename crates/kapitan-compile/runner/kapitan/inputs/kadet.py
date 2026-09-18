@@ -98,13 +98,25 @@ def load_from_search_paths(module_name):
             mod, spec = module_from_path(candidate, check_name=module_name)
             spec.loader.exec_module(mod)
         except (ModuleNotFoundError, FileNotFoundError) as e:
-            errors.append(f"{candidate}: {e}")
+            errors.append(f"{candidate}: {e}{missing_package_hint(e)}")
         else:
             return mod
     raise ModuleNotFoundError(
         f"Could not load module name {module_name} from search paths {paths}"
         + (": " + "; ".join(errors) if errors else "")
     )
+
+
+def missing_package_hint(exc):
+    """For a ModuleNotFoundError about a package (not a component or
+    library directory): where to declare it so krab installs it."""
+    name = getattr(exc, "name", None)
+    if isinstance(exc, ModuleNotFoundError) and name and not name.startswith(KADET_COMPONENT_MODULE_PREFIX):
+        return (
+            f" (a package the code imports; declare `{name.split('.')[0]}` under"
+            " `compile.python-requirements` in .kapitan and krab installs it)"
+        )
+    return ""
 
 
 def _to_dict(obj):

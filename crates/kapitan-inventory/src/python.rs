@@ -61,12 +61,7 @@ impl PythonCmd {
     /// on `$PATH` (run as an interpreter); then `python3`.
     pub fn candidates(explicit: Option<&str>) -> Vec<PythonCmd> {
         let mut candidates = Vec::new();
-        if let Some(spec) = std::env::var("KAPITAN_PYTHON")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .or_else(|| explicit.map(str::to_string))
-            && let Some(c) = PythonCmd::parse(&spec)
-        {
+        if let Some(c) = PythonCmd::explicit(explicit) {
             candidates.push(c);
         }
         if let Some(pex) = find_pex_on_path() {
@@ -84,6 +79,16 @@ impl PythonCmd {
             description: "python3".into(),
         });
         candidates
+    }
+
+    /// The interpreter the user named: `$KAPITAN_PYTHON` (the per-machine
+    /// override), else `explicit` (from the shared `.kapitan` or a flag).
+    pub fn explicit(explicit: Option<&str>) -> Option<PythonCmd> {
+        let spec = std::env::var("KAPITAN_PYTHON")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| explicit.map(str::to_string))?;
+        PythonCmd::parse(&spec)
     }
 
     /// The first candidate, without probing it.
@@ -143,7 +148,9 @@ pub fn cache_dir() -> PathBuf {
         .join("kapitan")
 }
 
-fn which(program: &Path) -> Option<PathBuf> {
+/// `program` as a file: as given when it has a directory, else the first
+/// match on `PATH`.
+pub fn which(program: &Path) -> Option<PathBuf> {
     if program.components().count() > 1 {
         return Some(program.to_path_buf());
     }
