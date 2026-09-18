@@ -1,0 +1,41 @@
+{
+  "app.web": {
+    "classes": [
+      "common"
+    ],
+    "parameters": {
+      "name": "web",
+      "replicas": 3,
+      "greeting": "hello",
+      "kapitan": {
+        "topics": {
+          "ports": {
+            "parameters": {
+              "http": 80
+            },
+            "consume": true
+          }
+        }
+      }
+    }
+  },
+  "app.api": {
+    "classes": [
+      "common"
+    ],
+    "parameters": {
+      "name": "api",
+      "replicas": 1,
+      "kapitan": {
+        "topics": {
+          "ports": {
+            "parameters": {
+              "http": 8080
+            }
+          }
+        }
+      },
+      "greeting": "hi"
+    }
+  }
+}
