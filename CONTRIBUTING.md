@@ -24,19 +24,19 @@ stops every build's daemon for the inventory).
   resolution, list merging, merge-time dereferencing, every shipped
   resolver, YAML 1.1 scalars and PyYAML emitter quirks;
   `tests/fixtures/expected/*.yaml` is what kapitan 0.36.3 prints for it, and
-  `crates/kapitan-inventory/tests/fixture.rs` compares byte for byte. Add a
+  `crates/krab-inventory/tests/fixture.rs` compares byte for byte. Add a
   case there for every engine behaviour you change or fix, then regenerate
   the expected output with the reference implementation
   (`tests/fixtures/README.md`).
-* `crates/kapitan-compile/tests/kadet_runner.rs` evaluates the component in
+* `crates/krab-compile/tests/kadet_runner.rs` evaluates the component in
   `tests/fixtures/kadet` through the kadet evaluator and its bundled
-  `kapitan` package (`crates/kapitan-compile/runner/kapitan`), checking the
+  `kapitan` package (`crates/krab-compile/runner/kapitan`), checking the
   output and the recorded dependencies. It needs a `python3` with `kadet`
   and `jinja2` importable and skips otherwise. Extend the fixture when you
   add to the package's API.
-* The corpus test (`crates/kapitan-inventory/tests/corpus.rs`) checks the
+* The corpus test (`crates/krab-inventory/tests/corpus.rs`) checks the
   emitters against a directory of compiled files written by the reference
-  implementation. It runs only when `KAPITAN_CORPUS` and `KAPITAN_COMPILED`
+  implementation. It runs only when `KRAB_CORPUS` and `KRAB_COMPILED`
   are set.
 
 ## Parity against the reference implementation
@@ -103,9 +103,9 @@ publishing anything.
 
 ## Layout and conventions
 
-* `kapitan-inventory` is the library entry point and must stay free of
+* `krab-inventory` is the library entry point and must stay free of
   daemon, compile and CLI concerns. Everything the CLI prints is computed
-  there or in `kapitan-compile`; the CLI only formats.
+  there or in `krab-compile`; the CLI only formats.
 * The daemon and the local path run the same library code. A feature that
   works only with (or only without) the daemon is a bug.
 * Every error is a `Diagnostic` with a code, a message, origins and a `help`

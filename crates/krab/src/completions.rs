@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
 use clap_complete::CompletionCandidate;
-use kapitan_inventory::dotkapitan::DotKapitan;
-use kapitan_inventory::{Inventory, InventoryConfig, Registry};
+use krab_inventory::dotkapitan::DotKapitan;
+use krab_inventory::{Inventory, InventoryConfig, Registry};
 
 #[derive(Clone, Copy, ValueEnum)]
 pub enum Shell {

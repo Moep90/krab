@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clap::Subcommand;
-use kapitan_inventory::Inventory;
-use kapitan_server::protocol::InfoResult;
-use kapitan_server::{Client, Connector};
+use krab_inventory::Inventory;
+use krab_server::protocol::InfoResult;
+use krab_server::{Client, Connector};
 
 use crate::app::{App, Failure, build_version};
 
@@ -33,11 +33,11 @@ pub enum ServerCommand {
 
 pub fn run(app: &App, command: ServerCommand) -> Result<(), Failure> {
     let inventory_path: PathBuf = app.inventory_path.clone();
-    let socket = kapitan_server::socket_for(&inventory_path, &build_version());
+    let socket = krab_server::socket_for(&inventory_path, &build_version());
     match command {
         ServerCommand::Run { idle_timeout } => {
             let inv = Inventory::new(app.inv.cfg.clone(), app.inv.registry.clone());
-            kapitan_server::run(inv, Duration::from_secs(idle_timeout), build_version())
+            krab_server::run(inv, Duration::from_secs(idle_timeout), build_version())
                 .map_err(Failure::from)
         }
         ServerCommand::Start => {
@@ -89,7 +89,7 @@ pub fn run(app: &App, command: ServerCommand) -> Result<(), Failure> {
             Ok(())
         }
         ServerCommand::Logs { lines } => {
-            let log = kapitan_server::paths::log_path(&inventory_path);
+            let log = krab_server::paths::log_path(&inventory_path);
             let text = std::fs::read_to_string(&log).unwrap_or_default();
             let all: Vec<&str> = text.lines().collect();
             for l in all.iter().skip(all.len().saturating_sub(lines)) {
@@ -102,7 +102,7 @@ pub fn run(app: &App, command: ServerCommand) -> Result<(), Failure> {
 
 /// Every server answering for this inventory, with the socket it answers on.
 fn live_servers(inventory_path: &Path) -> Vec<(PathBuf, InfoResult)> {
-    kapitan_server::paths::sockets(inventory_path)
+    krab_server::paths::sockets(inventory_path)
         .0
         .into_iter()
         .filter_map(|sock| {

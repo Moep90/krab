@@ -48,7 +48,7 @@ krab server stop
 ```
 
 Anything works without the daemon too: add `--no-daemon` or set
-`KAPITAN_NO_DAEMON=1` and the same code renders in-process. Output is
+`KRAB_NO_DAEMON=1` and the same code renders in-process. Output is
 identical either way, which is also how you check the daemon is fresh.
 
 ## 3. Look at the inventory
@@ -144,7 +144,7 @@ a kadet component is only re-run when something it read changed: the parts
 of the target document it looked at, its files, or the other targets it
 read. Otherwise its previous output is reused, and the compile line says
 how many items were (`2 kadet items reused`). The bookkeeping lives in
-`compiled/.kapitan-manifest.json`; delete it (or pass `--force`) to start
+`compiled/.krab-manifest.json`; delete it (or pass `--force`) to start
 from scratch. Whether to commit it is your call: committed, it makes CI
 compiles incremental too.
 
@@ -163,7 +163,7 @@ Python with `kadet` importable is needed to run them (plus `jinja2` for
 templates and whatever the components themselves import); the Python
 kapitan itself is not. krab builds that environment for you: declare the
 components' own packages in `.kapitan` and the first compile creates a venv
-under `~/.cache/kapitan/python/` (with `uv` when installed, else `python3
+under `~/.cache/krab/python/` (with `uv` when installed, else `python3
 -m venv` and pip) holding `kadet`, `jinja2` and them:
 
 ```yaml
@@ -175,9 +175,9 @@ compile:
 
 A changed list is a new environment; without the key it holds the baseline
 alone. To try another kadet, or your own checkout, without touching the
-shared file, set `KAPITAN_PYTHON_REQUIREMENTS` (one specifier per line, for
+shared file, set `KRAB_PYTHON_REQUIREMENTS` (one specifier per line, for
 example `kadet==0.3.1` or `-e /home/me/kadet`); a `kadet` named there or in
-`.kapitan` replaces krab's own entry. `--python` / `$KAPITAN_PYTHON` name
+`.kapitan` replaces krab's own entry. `--python` / `$KRAB_PYTHON` name
 an interpreter to use as it is instead (nothing is installed into it). Nothing else is tried: an installed
 Python kapitan plays no part in kadet evaluation. The component's
 `main()` runs in that Python with krab's own `kapitan` package on the path,

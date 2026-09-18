@@ -1,0 +1,31 @@
+[package]
+name = "krab-compile"
+description = "Kapitan compile engine: incremental, content-addressed compilation of targets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+krab-inventory = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+rayon = { workspace = true }
+minijinja = { workspace = true }
+regex = { workspace = true }
+base64 = { workspace = true }
+glob = { workspace = true }
+sha2 = { workspace = true, features = ["oid"] }
+hex = { workspace = true }
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
+flate2 = "1.1.10"
+tar = "0.4.46"
+zip = { version = "7", default-features = false, features = ["deflate"] }
+rand = "0.8"
+rsa = "0.9"
+ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8", "pem"] }

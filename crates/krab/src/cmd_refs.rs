@@ -5,16 +5,16 @@ use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
 use clap::Args;
-use kapitan_compile::inputs::Reads;
-use kapitan_compile::refs::{
+use krab_compile::inputs::Reads;
+use krab_compile::refs::{
     Ref, RefController, RefError, RefType, TargetSecrets, b64_encode, gpg, vault,
 };
-use kapitan_inventory::emit::dumps_pretty;
-use kapitan_inventory::emit::yaml::{DumpOptions, dump_yaml};
-use kapitan_inventory::source::SourceId;
-use kapitan_inventory::yaml::parse_documents;
-use kapitan_inventory::{Node, Value};
-use kapitan_server::protocol::{TargetParams, TargetResult, TargetsResult};
+use krab_inventory::emit::dumps_pretty;
+use krab_inventory::emit::yaml::{DumpOptions, dump_yaml};
+use krab_inventory::source::SourceId;
+use krab_inventory::yaml::parse_documents;
+use krab_inventory::{Node, Value};
+use krab_server::protocol::{TargetParams, TargetResult, TargetsResult};
 use serde_json::{Value as Json, json};
 
 use crate::app::{App, Failure};

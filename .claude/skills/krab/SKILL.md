@@ -94,14 +94,14 @@ the omegaconf backend did, configured in `.kapitan`:
 inventory:
   python-resolvers:
     file: system/omegaconf/resolvers/resolvers.py
-    python: /opt/venv/bin/python    # $KAPITAN_PYTHON overrides this; default: a kapitan PEX on PATH, python3
+    python: /opt/venv/bin/python    # $KRAB_PYTHON overrides this; default: a kapitan PEX on PATH, python3
     prefer-native: true             # keep krab's Rust ports for names both define (faster)
     workers: 4
 ```
 
-- `KAPITAN_PYTHON` is the per-machine override of the shared `python:` key.
+- `KRAB_PYTHON` is the per-machine override of the shared `python:` key.
   grid's `/opt/venv/bin/python` does not exist on coder boxes: set
-  `KAPITAN_PYTHON` (a venv or pixi python that imports omegaconf), or drop
+  `KRAB_PYTHON` (a venv or pixi python that imports omegaconf), or drop
   the key locally. A missing interpreter is diagnosed up front, naming the
   key.
 - Keep `prefer-native: true`. With `false`, `json`, `to_yaml`, `pluck` and
@@ -137,9 +137,9 @@ chart directory (`system/sources/charts/<name>/<version>` after a version
 bump) or generator checkout is fetched on the next compile; whatever exists
 is left alone. `--dry-run` shows `would fetch ...`, `--explain` shows
 `not fetched ... [already present]`. Versioned charts are cached under
-`~/.cache/kapitan/charts`.
+`~/.cache/krab/charts`.
 
-Staleness comes from `compiled/.kapitan-manifest.json`: per target, the
+Staleness comes from `compiled/.krab-manifest.json`: per target, the
 rendered document digest, every file the inputs read (templates, helm chart
 files, kadet modules and their imports, copied files, refs), the other
 targets read through the global inventory, and the output tree digest.
@@ -149,7 +149,7 @@ currently untracked in git; do not commit it unless asked.
 
 Native today: `jinja2`, `kadet` (Python evaluates the component against
 krab's own bundled `kapitan` package in a venv krab builds from
-`compile.python-requirements` in `.kapitan`, under `~/.cache/kapitan/python/`;
+`compile.python-requirements` in `.kapitan`, under `~/.cache/krab/python/`;
 Rust does the rest), `copy`, `remove`, `external`; output types yaml/json/plain; refs
 (embedding, reveal, creation from functions, `krab refs`); dependency
 fetching (git, http, helm, oci). **Not yet native**: `jsonnet`, `helm` as a
@@ -167,7 +167,7 @@ For the inventory alone: `krab inventory -t X` must match
 `krab inventory -t X` byte for byte. Fixture tests
 (`cargo test --release`) cover the engine without grid, including
 `resolvers.py` through the Python bridge; the corpus test needs
-`KAPITAN_CORPUS` and `KAPITAN_COMPILED` (see `docs/DESIGN.md`, Testing).
+`KRAB_CORPUS` and `KRAB_COMPILED` (see `docs/DESIGN.md`, Testing).
 
 Reference scripts run with `PEX_INTERPRETER=1 /usr/local/bin/kapitan script.py`
 from `grid`. `inventory/classes/clusters` is a nested git repo: revert test
@@ -184,10 +184,10 @@ krab server logs           # the log, shared by all builds
 krab server run            # foreground, for debugging (exits at once if this build's daemon runs)
 ```
 
-Socket `$XDG_RUNTIME_DIR/kapitan/<inventory>-<build>.sock` (fallback
-`/tmp/kapitan-<uid>/`), log `~/.local/state/kapitan/server-<inventory>.log`.
+Socket `$XDG_RUNTIME_DIR/krab/<inventory>-<build>.sock` (fallback
+`/tmp/krab-<uid>/`), log `~/.local/state/krab/server-<inventory>.log`.
 JSON-RPC 2.0, newline delimited; methods in
-`crates/kapitan-server/src/protocol.rs` (`server.info`, `inventory.targets`,
+`crates/krab-server/src/protocol.rs` (`server.info`, `inventory.targets`,
 `inventory.target`, `inventory.explain`, `inventory.deps`,
 `inventory.diagnostics`, `inventory.wait` long poll, ...). Use them directly
 from scripts when the CLI shape does not fit. `server.*` answer while the
@@ -210,7 +210,7 @@ overrides across the targets that include the file, go to definition,
 completion of classes and `${` paths, live diagnostics). The VS Code
 extension is `editors/vscode` (installed as `kapicorp.kapitan`). Point
 `kapitan.path` at the same binary the shell uses and set `kapitan.python`
-(passed on as `KAPITAN_PYTHON`) when the inventory has Python resolvers: the
+(passed on as `KRAB_PYTHON`) when the inventory has Python resolvers: the
 extension host's `python3` cannot import omegaconf. Smoke test without an
 editor (the scripts run `krab` from `PATH`):
 
@@ -238,12 +238,12 @@ To release: bump `version` in the workspace `Cargo.toml` (and
 `editors/vscode/package.json` when the extension changed), merge, tag `main`
 `vX.Y.Z-alpha.N` and push the tag; `release.yml` publishes the pre-release.
 
-Crates: `kapitan-inventory` (engine: loader, class resolution, OmegaConf
+Crates: `krab-inventory` (engine: loader, class resolution, OmegaConf
 merge and interpolation, resolvers, the Python resolver bridge, provenance,
-emitters), `kapitan-server` (daemon + client), `kapitan-compile` (manifest,
-native inputs, refs, Python runners), `kapitan-lsp`, `krab` (CLI). Native
+emitters), `krab-server` (daemon + client), `krab-compile` (manifest,
+native inputs, refs, Python runners), `krab-lsp`, `krab` (CLI). Native
 resolvers are Rust functions registered in
-`crates/kapitan-inventory/src/resolvers/`; the README shows how to add one.
+`crates/krab-inventory/src/resolvers/`; the README shows how to add one.
 `vendor/saphyr-parser` carries two PyYAML-compatibility patches.
 
 Gotchas: build failures leave the old binary in place, so confirm

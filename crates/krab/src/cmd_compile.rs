@@ -7,13 +7,13 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use clap::Args;
-use kapitan_compile::fetch::DEPENDENCIES_PATH;
-use kapitan_compile::{
+use krab_compile::fetch::DEPENDENCIES_PATH;
+use krab_compile::{
     Backend, CompileOptions, DocProvider, DocSource, Event, FetchStatus, NativeOptions, PythonCmd,
     PythonEnv, PythonProbe, Selection, Status,
 };
-use kapitan_inventory::emit::MultilineStyle;
-use kapitan_server::protocol::{TargetParams, TargetResult, TargetsResult};
+use krab_inventory::emit::MultilineStyle;
+use krab_server::protocol::{TargetParams, TargetResult, TargetsResult};
 
 use crate::app::{App, Failure};
 use crate::completions::complete_target;
@@ -75,7 +75,7 @@ pub struct CompileArgs {
     /// Python used to evaluate kadet components, as it is (with `--backend
     /// python`, one with kapitan installed). Default: the environment krab
     /// builds from `compile.python-requirements` in .kapitan
-    #[arg(long, env = "KAPITAN_PYTHON")]
+    #[arg(long, env = "KRAB_PYTHON")]
     python: Option<String>,
 
     /// Extra flags passed through to kapitan's compile (e.g. --indent 4)
@@ -173,7 +173,7 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
     let multiline = app
         .dot
         .inventory_str("multiline-string-style")
-        .and_then(|s| kapitan_compile::native::parse_style(&s))
+        .and_then(|s| krab_compile::native::parse_style(&s))
         .unwrap_or(MultilineStyle::DoubleQuotes);
     let native = NativeOptions {
         repo_root: repo_root.clone(),
@@ -310,8 +310,8 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         }
     };
 
-    let report = kapitan_compile::compile(&source, &selection, &opts, &progress)
-        .map_err(Failure::Message)?;
+    let report =
+        krab_compile::compile(&source, &selection, &opts, &progress).map_err(Failure::Message)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
@@ -368,19 +368,19 @@ struct AppDocs<'a> {
 /// On-demand document access handed to generators and templates.
 struct AppProvider {
     socket: Option<PathBuf>,
-    inv: kapitan_inventory::Inventory,
-    client: parking_lot::Mutex<Option<kapitan_server::Client>>,
+    inv: krab_inventory::Inventory,
+    client: parking_lot::Mutex<Option<krab_server::Client>>,
 }
 
 impl AppProvider {
     fn with_client<T>(
         &self,
-        f: impl FnOnce(&mut kapitan_server::Client) -> Result<T, kapitan_server::ClientError>,
+        f: impl FnOnce(&mut krab_server::Client) -> Result<T, krab_server::ClientError>,
     ) -> Option<T> {
         let socket = self.socket.as_ref()?;
         let mut guard = self.client.lock();
         if guard.is_none() {
-            *guard = kapitan_server::Client::connect(socket).ok();
+            *guard = krab_server::Client::connect(socket).ok();
         }
         let client = guard.as_mut()?;
         f(client).ok()
@@ -433,7 +433,7 @@ impl DocProvider for AppProvider {
         if self.socket.is_some() {
             return self
                 .with_client(|c| {
-                    c.call::<_, kapitan_server::protocol::AllResult>(
+                    c.call::<_, krab_server::protocol::AllResult>(
                         "inventory.all",
                         serde_json::Value::Null,
                     )
@@ -521,13 +521,13 @@ impl DocSource for AppDocs<'_> {
                         out.insert(name.clone(), r.document);
                     }
                     // The server answers an RPC error when the path does not exist.
-                    Ok(_) | Err(kapitan_server::ClientError::Rpc(_)) => {}
+                    Ok(_) | Err(krab_server::ClientError::Rpc(_)) => {}
                     Err(e) => return Err(e.to_string()),
                 }
             }
             return Ok(out);
         }
-        Ok(kapitan_compile::engine::declared_dependencies(
+        Ok(krab_compile::engine::declared_dependencies(
             self.docs(names)?,
         ))
     }
@@ -563,12 +563,12 @@ impl DocSource for AppDocs<'_> {
         Ok(out)
     }
 
-    fn provider(&self) -> kapitan_compile::SharedDocs {
+    fn provider(&self) -> krab_compile::SharedDocs {
         // A live server means documents can be fetched one at a time.
         let socket = self.app.client().map(|c| c.socket.clone());
         std::sync::Arc::new(AppProvider {
             socket,
-            inv: kapitan_inventory::Inventory::new(
+            inv: krab_inventory::Inventory::new(
                 self.app.inv.cfg.clone(),
                 self.app.inv.registry.clone(),
             ),

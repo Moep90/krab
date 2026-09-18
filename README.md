@@ -87,7 +87,7 @@ The first `krab inventory ...` starts a daemon for that inventory in the
 background. It renders every target once, watches the files, and re-renders
 only the affected targets when something changes, so every later command
 answers in milliseconds and always reflects the files on disk. Pass
-`--no-daemon` (or set `KAPITAN_NO_DAEMON=1`) to render locally instead;
+`--no-daemon` (or set `KRAB_NO_DAEMON=1`) to render locally instead;
 results are identical. `krab server status | stop | logs` manages it. Each
 build of krab keeps a daemon of its own, so a development build and the
 installed release never disturb each other.
@@ -111,10 +111,10 @@ target names.
 
 | path | what |
 |---|---|
-| `crates/kapitan-inventory` | the engine: YAML loading with source positions, class resolution, OmegaConf-compatible merge and `${...}` interpolation, resolver registry and the Python resolver bridge, provenance, PyYAML-compatible emitter |
-| `crates/kapitan-server` | the inventory daemon: watches files, re-renders exactly what changed, JSON-RPC over a unix socket; and the client with auto-spawn |
-| `crates/kapitan-compile` | incremental compile: native input types, dependency fetching (git, http, helm, oci), references and their backends, rapidyaml/PyYAML/JSON writers, staleness from a manifest; the kadet evaluator with its bundled `kapitan` package and the Python environment it runs in |
-| `crates/kapitan-lsp` | language server over the daemon: live diagnostics, hover with resolved values and provenance, go to definition, completion |
+| `crates/krab-inventory` | the engine: YAML loading with source positions, class resolution, OmegaConf-compatible merge and `${...}` interpolation, resolver registry and the Python resolver bridge, provenance, PyYAML-compatible emitter |
+| `crates/krab-server` | the inventory daemon: watches files, re-renders exactly what changed, JSON-RPC over a unix socket; and the client with auto-spawn |
+| `crates/krab-compile` | incremental compile: native input types, dependency fetching (git, http, helm, oci), references and their backends, rapidyaml/PyYAML/JSON writers, staleness from a manifest; the kadet evaluator with its bundled `kapitan` package and the Python environment it runs in |
+| `crates/krab-lsp` | language server over the daemon: live diagnostics, hover with resolved values and provenance, go to definition, completion |
 | `crates/krab` | the `krab` binary |
 | `editors/vscode` | VS Code extension that launches `krab lsp` |
 | `tests/fixtures` | a small inventory and the reference implementation's output for it; a kadet component exercising the bundled `kapitan` API |
@@ -140,7 +140,7 @@ the daemon, so everything it shows is the current render:
 `editors/vscode` holds a small extension that starts the server for any
 workspace folder containing `.kapitan`. It runs `krab` from `PATH`
 (`kapitan.path` points it elsewhere) and passes `kapitan.python` on as
-`KAPITAN_PYTHON` for inventories with Python resolvers.
+`KRAB_PYTHON` for inventories with Python resolvers.
 
 ## Compiling
 
@@ -150,7 +150,7 @@ changed: the rendered target document, every file and directory the previous
 compile read (generator modules, templates, refs, `kgenlib`, helm charts,
 ...), the inventory of other targets it consulted through
 `inventory_global()`, the compiler itself, and the compiled output on disk.
-What each compile read is recorded in `compiled/.kapitan-manifest.json`.
+What each compile read is recorded in `compiled/.krab-manifest.json`.
 `--explain` and `--dry-run` print the reason per target. Inside a recompiled
 target, a `kadet` component whose inputs did not change is not re-run; its
 previous output is reused.
@@ -160,8 +160,8 @@ Input types, ref embedding, pruning and the YAML/JSON writers are native.
 `kadet`, `jinja2` and whatever the components import. krab builds it:
 declare the components' packages under `compile.python-requirements` in
 `.kapitan` (pip specifiers or a requirements file) and the first compile
-creates a venv under `~/.cache/kapitan/python/` with `uv` or `python3 -m
-venv`. `$KAPITAN_PYTHON` names an interpreter to use as it is instead.
+creates a venv under `~/.cache/krab/python/` with `uv` or `python3 -m
+venv`. `$KRAB_PYTHON` names an interpreter to use as it is instead.
 The component's `kapitan.*` imports (`inventory()`,
 `inventory_global()`, `topics()`, `HelmChart`, `render_jinja2_file`,
 `prune_empty`, ...) are served by a small `kapitan` package that ships with
@@ -211,8 +211,8 @@ jinja2 filters other than the common ones, and the `write` resolver.
 Resolvers are plain Rust functions registered by name:
 
 ```rust
-use kapitan_inventory::resolvers::{Ctx, Registry, ResolverResult, arity, as_str};
-use kapitan_inventory::Value;
+use krab_inventory::resolvers::{Ctx, Registry, ResolverResult, arity, as_str};
+use krab_inventory::Value;
 
 fn shout(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("shout", args, 1, 1)?;
@@ -226,7 +226,7 @@ registry.register("shout", shout);
 `Ctx` gives access to the node being resolved (`ctx.at`, `ctx.key()`), the
 whole tree (`ctx.select("a.b")` returns fully resolved values) and warnings.
 The `oc.*`, kapitan and contributed resolver sets in
-`crates/kapitan-inventory/src/resolvers/` are the reference for the API.
+`crates/krab-inventory/src/resolvers/` are the reference for the API.
 
 ## Python resolvers
 
@@ -249,7 +249,7 @@ name. Settings, all optional, in `.kapitan`:
 inventory:
   python-resolvers:
     file: system/omegaconf/resolvers/resolvers.py  # explicit path; `python-resolvers: false` disables
-    python: /opt/venv/bin/python                    # $KAPITAN_PYTHON overrides; default: a kapitan PEX on PATH, python3
+    python: /opt/venv/bin/python                    # $KRAB_PYTHON overrides; default: a kapitan PEX on PATH, python3
     prefer-native: true                             # keep krab's Rust resolvers for names both define
     workers: 4                                      # concurrent Python processes (default: CPUs, at most 8)
 ```

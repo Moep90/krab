@@ -21,12 +21,12 @@ function kapitanRoot(folder) {
 
 async function startClient(root) {
   if (clients.has(root)) return;
-  const config = vscode.workspace.getConfiguration("kapitan");
+  const config = vscode.workspace.getConfiguration("krab");
   // The language server starts the inventory daemon with this environment,
   // and the extension host's PATH rarely holds a Python with omegaconf.
   const env = { ...process.env };
   const python = config.get("python", "");
-  if (python) env.KAPITAN_PYTHON = python;
+  if (python) env.KRAB_PYTHON = python;
   const serverOptions = {
     command: config.get("path", "krab"),
     args: ["lsp"],
@@ -40,7 +40,7 @@ async function startClient(root) {
     outputChannelName: `Kapitan (${path.basename(root)})`,
     workspaceFolder: vscode.workspace.getWorkspaceFolder(vscode.Uri.file(root)),
   };
-  const client = new LanguageClient("kapitan", "Kapitan", serverOptions, clientOptions);
+  const client = new LanguageClient("krab", "krab", serverOptions, clientOptions);
   clients.set(root, client);
   await client.start();
 }
@@ -58,7 +58,7 @@ async function startAll() {
 }
 
 exports.activate = async function activate(context) {
-  context.subscriptions.push(vscode.commands.registerCommand("kapitan.restartServer", async () => {
+  context.subscriptions.push(vscode.commands.registerCommand("krab.restartServer", async () => {
     await stopAll();
     await startAll();
   }));

@@ -21,7 +21,7 @@ use crate::app::{App, Failure};
 #[command(propagate_version = true)]
 struct Cli {
     /// Inventory directory (default: `inventory-path` from .kapitan, else ./inventory)
-    #[arg(long, global = true, env = "KAPITAN_INVENTORY_PATH")]
+    #[arg(long, global = true, env = "KRAB_INVENTORY_PATH")]
     inventory_path: Option<PathBuf>,
 
     /// Emit results and diagnostics as JSON
@@ -33,7 +33,13 @@ struct Cli {
     raw: bool,
 
     /// Render locally instead of talking to (or starting) the inventory server
-    #[arg(long, global = true, env = "KAPITAN_NO_DAEMON")]
+    /// (`KRAB_NO_DAEMON=1` works too)
+    #[arg(
+        long,
+        global = true,
+        env = "KRAB_NO_DAEMON",
+        value_parser = clap::builder::FalseyValueParser::new()
+    )]
     no_daemon: bool,
 
     #[command(subcommand)]
@@ -68,11 +74,34 @@ enum Command {
     },
 }
 
+/// The `KAPITAN_*` names these variables had before the binary was called
+/// krab still work in this release: copied to the `KRAB_*` name, with a
+/// note on stderr. Runs before argument parsing and before any thread
+/// exists, which is what mutating the environment requires.
+fn accept_old_env_names() {
+    for name in [
+        "PYTHON",
+        "PYTHON_REQUIREMENTS",
+        "NO_DAEMON",
+        "INVENTORY_PATH",
+    ] {
+        let (old, new) = (format!("KAPITAN_{name}"), format!("KRAB_{name}"));
+        if std::env::var_os(&new).is_none()
+            && let Some(value) = std::env::var_os(&old)
+        {
+            eprintln!("note: {old} is now {new}; the old name still works in this release");
+            // SAFETY: single-threaded at this point (start of main).
+            unsafe { std::env::set_var(&new, value) };
+        }
+    }
+}
+
 fn main() -> ExitCode {
     // Piping into `head` must not panic: die quietly on SIGPIPE like other CLIs.
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
+    accept_old_env_names();
     clap_complete::CompleteEnv::with_factory(Cli::command).complete();
     let cli = Cli::parse();
     let foreground_server = matches!(
@@ -124,12 +153,12 @@ fn run(cli: Cli) -> Result<(), Failure> {
                         .into(),
                 )
             })?;
-            let backend = kapitan_lsp::Backend::new(
+            let backend = krab_lsp::Backend::new(
                 connector,
                 app.inventory_path.clone(),
                 app.inv.cfg.compose_target_name,
             );
-            kapitan_lsp::run_stdio(backend, app.cwd.clone())
+            krab_lsp::run_stdio(backend, app.cwd.clone())
                 .map_err(|e| Failure::Message(e.to_string()))
         }
         Command::Completions { .. } => unreachable!(),
