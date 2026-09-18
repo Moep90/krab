@@ -28,6 +28,12 @@ every build's daemon for the inventory).
   case there for every engine behaviour you change or fix, then regenerate
   the expected output with the reference implementation
   (`tests/fixtures/README.md`).
+* `crates/kapitan-compile/tests/kadet_runner.rs` evaluates the component in
+  `tests/fixtures/kadet` through the kadet evaluator and its bundled
+  `kapitan` package (`crates/kapitan-compile/runner/kapitan`), checking the
+  output and the recorded dependencies. It needs a `python3` with `kadet`
+  and `jinja2` importable and skips otherwise. Extend the fixture when you
+  add to the package's API.
 * The corpus test (`crates/kapitan-inventory/tests/corpus.rs`) checks the
   emitters against a directory of compiled files written by the reference
   implementation. It runs only when `KAPITAN_CORPUS` and `KAPITAN_COMPILED`

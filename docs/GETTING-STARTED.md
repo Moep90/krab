@@ -161,12 +161,16 @@ kapitan2 compile --force && git status --short compiled     # prints nothing
 
 `jinja2`, `copy`, `remove` and `external` inputs, output formatting, ref
 embedding and file writing are native. `kadet` components are Python, so a
-Python with `kapitan` (and therefore `kadet`) importable is needed to run
-them. krab looks for, in order: `--python` / `$KAPITAN_PYTHON`, a kapitan
+Python with `kadet` importable is needed to run them (`pip install kadet`,
+and `jinja2` if components render templates); the Python kapitan itself is
+not. krab looks for, in order: `--python` / `$KAPITAN_PYTHON`, a kapitan
 PEX on `PATH` (executed as an interpreter), then `python3`. The component's
-`main()` runs in that Python; it fetches other targets from the daemon on
-demand and reports which files and modules it read so the next compile
-knows exactly what to invalidate.
+`main()` runs in that Python with krab's own `kapitan` package on the path,
+which provides the API components import (`kapitan.inputs.kadet`,
+`kapitan.inputs.helm`, `kapitan.utils`, `kapitan.resources`,
+`kapitan.topics`, `kapitan.errors`, `kapitan.cached`). It fetches other
+targets from the daemon on demand and reports which files and modules it
+read so the next compile knows exactly what to invalidate.
 
 For input types that are not native yet (`jsonnet`, `helm` as a direct
 input, `kustomize`, `cuelang`) run `kapitan2 compile --backend python`,

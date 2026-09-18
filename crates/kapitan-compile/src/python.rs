@@ -1,4 +1,10 @@
-//! Finding a Python that has kapitan installed, and materialising the worker script.
+//! Finding a Python for the compile, and materialising the worker script of
+//! the Python backend.
+//!
+//! The native backend evaluates kadet components in a Python that has
+//! `kadet` installed; the component's `kapitan.*` imports are served by the
+//! package bundled with the evaluator (`runner/kapitan`). The Python backend
+//! runs kapitan's own input types, so it needs the Python kapitan.
 
 use std::path::PathBuf;
 
@@ -6,40 +12,85 @@ pub use kapitan_inventory::python::{PythonCmd, cache_dir};
 
 pub const RUNNER_SOURCE: &str = include_str!("../runner/kapitan_runner.py");
 
-/// Kapitan-specific probing of an interpreter: does it import kapitan and
-/// kadet, and which versions.
+/// What the compile needs from the interpreter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PythonNeeds {
+    /// `kadet` (and its dependencies): the native backend.
+    Kadet,
+    /// The Python kapitan: `--backend python`.
+    Kapitan,
+}
+
+impl PythonNeeds {
+    fn probe_script(self) -> &'static str {
+        match self {
+            PythonNeeds::Kadet => "import kadet, yaml",
+            PythonNeeds::Kapitan => "import kapitan.inputs.kadet, kadet, kapitan.cli",
+        }
+    }
+
+    fn versions_script(self) -> &'static str {
+        match self {
+            PythonNeeds::Kadet => {
+                "import sys\ntry:\n from importlib.metadata import version\n v=version('kadet')\nexcept Exception:\n v='unknown'\nprint(f'kadet {v} python {sys.version.split()[0]}')"
+            }
+            PythonNeeds::Kapitan => {
+                "import sys, kapitan.version as v\ntry:\n from kapitan.yaml_ryml import HAS_RYML\nexcept Exception:\n HAS_RYML=False\nprint(f'kapitan-py {v.VERSION} python {sys.version.split()[0]} rapidyaml {int(bool(HAS_RYML))}')"
+            }
+        }
+    }
+
+    fn not_found(self) -> &'static str {
+        match self {
+            PythonNeeds::Kadet => {
+                "no Python with kadet installed was found; `pip install kadet` (and jinja2 if components render templates), or set KAPITAN_PYTHON to a Python that has it (e.g. a venv python, or `PEX_INTERPRETER=1 /path/to/kapitan.pex`). Tried:"
+            }
+            PythonNeeds::Kapitan => {
+                "no Python with kapitan installed was found; set KAPITAN_PYTHON (e.g. `PEX_INTERPRETER=1 /path/to/kapitan.pex` or a venv python). Tried:"
+            }
+        }
+    }
+
+    fn key(self) -> &'static str {
+        match self {
+            PythonNeeds::Kadet => "kadet",
+            PythonNeeds::Kapitan => "kapitan",
+        }
+    }
+}
+
+/// Compile-specific probing of an interpreter: does it have what the
+/// backend needs, and which versions.
 pub trait PythonProbe: Sized {
     /// Candidates in order: `$KAPITAN_PYTHON`, a kapitan PEX on `$PATH`
-    /// (run as an interpreter), then `python3`; the first that imports kapitan.
-    fn detect(explicit: Option<&str>) -> Result<Self, String>;
+    /// (run as an interpreter), then `python3`; the first that satisfies
+    /// `needs`.
+    fn detect(explicit: Option<&str>, needs: PythonNeeds) -> Result<Self, String>;
 
     /// Versions on the Python side, part of the engine identity.
-    fn versions(&self) -> Result<String, String>;
+    fn versions(&self, needs: PythonNeeds) -> Result<String, String>;
 }
 
 impl PythonProbe for PythonCmd {
-    fn detect(explicit: Option<&str>) -> Result<PythonCmd, String> {
+    fn detect(explicit: Option<&str>, needs: PythonNeeds) -> Result<PythonCmd, String> {
         let mut errors = Vec::new();
         for c in PythonCmd::candidates(explicit) {
-            match probe_cached(&c) {
+            match probe_cached(&c, needs) {
                 Ok(()) => return Ok(c),
                 Err(e) => errors.push(format!("  {}: {e}", c.description)),
             }
         }
-        Err(format!(
-            "no Python with kapitan installed was found; set KAPITAN_PYTHON (e.g. `PEX_INTERPRETER=1 /path/to/kapitan.pex` or a venv python). Tried:\n{}",
-            errors.join("\n")
-        ))
+        Err(format!("{}\n{}", needs.not_found(), errors.join("\n")))
     }
 
-    fn versions(&self) -> Result<String, String> {
-        if let Some(c) = cached(self)
+    fn versions(&self, needs: PythonNeeds) -> Result<String, String> {
+        if let Some(c) = cached(self, needs)
             && let Some(v) = c.get("versions").and_then(serde_json::Value::as_str)
         {
             return Ok(v.to_string());
         }
-        let v = versions_uncached(self)?;
-        remember(self, &v);
+        let v = versions_uncached(self, needs)?;
+        remember(self, needs, &v);
         Ok(v)
     }
 }
@@ -48,70 +99,74 @@ fn cache_file() -> PathBuf {
     cache_dir().join("python-probe.json")
 }
 
-fn cached(python: &PythonCmd) -> Option<serde_json::Value> {
-    let text = std::fs::read_to_string(cache_file()).ok()?;
-    let all: serde_json::Value = serde_json::from_str(&text).ok()?;
-    all.get(python.cache_key()).cloned()
+fn cache_key(python: &PythonCmd, needs: PythonNeeds) -> String {
+    format!("{}|{}", needs.key(), python.cache_key())
 }
 
-fn remember(python: &PythonCmd, versions: &str) {
+fn cached(python: &PythonCmd, needs: PythonNeeds) -> Option<serde_json::Value> {
+    let text = std::fs::read_to_string(cache_file()).ok()?;
+    let all: serde_json::Value = serde_json::from_str(&text).ok()?;
+    all.get(cache_key(python, needs)).cloned()
+}
+
+fn remember(python: &PythonCmd, needs: PythonNeeds, versions: &str) {
     let file = cache_file();
     let mut all: serde_json::Value = std::fs::read_to_string(&file)
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_else(|| serde_json::json!({}));
-    all[python.cache_key()] = serde_json::json!({ "versions": versions });
+    all[cache_key(python, needs)] = serde_json::json!({ "versions": versions });
     let _ = std::fs::create_dir_all(cache_dir());
     let _ = std::fs::write(file, serde_json::to_string_pretty(&all).unwrap());
 }
 
 /// `probe` + `versions`, remembered per interpreter build so an
 /// up-to-date compile does not pay for two Python start-ups.
-fn probe_cached(python: &PythonCmd) -> Result<(), String> {
-    if cached(python).is_some() {
+fn probe_cached(python: &PythonCmd, needs: PythonNeeds) -> Result<(), String> {
+    if cached(python, needs).is_some() {
         return Ok(());
     }
-    probe(python)?;
-    let v = versions_uncached(python)?;
-    remember(python, &v);
+    probe(python, needs)?;
+    let v = versions_uncached(python, needs)?;
+    remember(python, needs, &v);
     Ok(())
 }
 
-fn versions_uncached(python: &PythonCmd) -> Result<String, String> {
+fn last_line(stderr: &[u8], fallback: &str) -> String {
+    String::from_utf8_lossy(stderr)
+        .lines()
+        .last()
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn versions_uncached(python: &PythonCmd, needs: PythonNeeds) -> Result<String, String> {
     let out = python
         .command()
-        .args([
-            "-c",
-            "import sys, kapitan.version as v\ntry:\n from kapitan.yaml_ryml import HAS_RYML\nexcept Exception:\n HAS_RYML=False\nprint(f'kapitan-py {v.VERSION} python {sys.version.split()[0]} rapidyaml {int(bool(HAS_RYML))}')",
-        ])
+        .args(["-c", needs.versions_script()])
         .output()
         .map_err(|e| e.to_string())?;
     if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr)
-            .lines()
-            .last()
-            .unwrap_or("probe failed")
-            .to_string());
+        return Err(last_line(&out.stderr, "probe failed"));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-fn probe(python: &PythonCmd) -> Result<(), String> {
+fn probe(python: &PythonCmd, needs: PythonNeeds) -> Result<(), String> {
     let out = python
         .command()
-        .args(["-c", "import kapitan.inputs.kadet, kadet, kapitan.cli"])
+        .args(["-c", needs.probe_script()])
         .output()
         .map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {
-        let err = String::from_utf8_lossy(&out.stderr);
-        Err(err.lines().last().unwrap_or("import failed").to_string())
+        Err(last_line(&out.stderr, "import failed"))
     }
 }
 
-/// Write the worker script to a cache directory (keyed by its digest) and
-/// return its path.
+/// Write the Python backend's worker script to a cache directory (keyed by
+/// its digest) and return its path.
 pub fn materialize_runner() -> std::io::Result<PathBuf> {
     kapitan_inventory::python::materialize_script("kapitan_runner.py", RUNNER_SOURCE)
 }

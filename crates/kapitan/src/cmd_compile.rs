@@ -72,8 +72,9 @@ pub struct CompileArgs {
     #[arg(long)]
     embed_refs: bool,
 
-    /// Python with kapitan installed used to run kadet/jinja2/helm inputs
-    /// (default: $KAPITAN_PYTHON, a kapitan PEX on PATH, or python3)
+    /// Python used to evaluate kadet components: one with `kadet` installed
+    /// (with `--backend python`, one with kapitan installed). Default:
+    /// $KAPITAN_PYTHON, a kapitan PEX on PATH, or python3
     #[arg(long, env = "KAPITAN_PYTHON")]
     python: Option<String>,
 
@@ -120,7 +121,12 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         })
         .map(|p| p.canonicalize().unwrap_or(p))
         .collect();
-    let python = PythonCmd::detect(args.python.as_deref()).map_err(Failure::Message)?;
+    let backend = match args.backend {
+        BackendArg::Native => Backend::Native,
+        BackendArg::Python => Backend::Python,
+    };
+    let python = PythonCmd::detect(args.python.as_deref(), backend.python_needs())
+        .map_err(Failure::Message)?;
 
     let mut flags = args.flags.clone();
     let reveal = args.reveal || app.dot.compile_bool("reveal").unwrap_or(false);
@@ -194,10 +200,7 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
             args.fetch || app.dot.compile_bool("fetch").unwrap_or(false)
         },
         force_fetch: args.force_fetch || app.dot.compile_bool("force-fetch").unwrap_or(false),
-        backend: match args.backend {
-            BackendArg::Native => Backend::Native,
-            BackendArg::Python => Backend::Python,
-        },
+        backend,
         native,
     };
     let source = AppDocs {

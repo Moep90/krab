@@ -1,3 +1,10 @@
+# Fixtures
+
+`kadet/` is a two-target inventory snapshot with a component, a library
+loaded through `load_from_search_paths` and a jinja2 template, exercising
+the `kapitan` API krab bundles for kadet components
+(`crates/kapitan-compile/tests/kadet_runner.rs`).
+
 # Fixture inventory
 
 A small inventory exercising the features the engine must reproduce exactly:

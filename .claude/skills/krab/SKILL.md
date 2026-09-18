@@ -145,8 +145,9 @@ Editing a template or a kadet module therefore recompiles exactly its
 readers. A no-op run takes ~0.2 s on grid; a full one ~50 s. The manifest is
 currently untracked in git; do not commit it unless asked.
 
-Native today: `jinja2`, `kadet` (Python evaluates the component, Rust does
-the rest), `copy`, `remove`, `external`; output types yaml/json/plain; refs
+Native today: `jinja2`, `kadet` (Python evaluates the component against
+krab's own bundled `kapitan` package, so only `kadet` needs to be
+installed; Rust does the rest), `copy`, `remove`, `external`; output types yaml/json/plain; refs
 (embedding, reveal, creation from functions, `krab refs`); dependency
 fetching (git, http, helm, oci). **Not yet native**: `jsonnet`, `helm` as a
 direct input, `kustomize`, `cuelang`, toml output. For those use
