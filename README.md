@@ -140,9 +140,12 @@ print the reason per target.
 
 Input types, ref embedding, pruning and the YAML/JSON writers are native.
 `kadet` components are Python, so evaluating them needs a Python with
-`kadet` installed (`pip install kadet`, plus `jinja2` if components render
-templates): `$KAPITAN_PYTHON`, a kapitan PEX found on `PATH`, or `python3`,
-in that order. The component's `kapitan.*` imports (`inventory()`,
+`kadet`, `jinja2` and whatever the components import. krab builds it:
+declare the components' packages under `compile.python-requirements` in
+`.kapitan` (pip specifiers or a requirements file) and the first compile
+creates a venv under `~/.cache/kapitan/python/` with `uv` or `python3 -m
+venv`. `$KAPITAN_PYTHON` names an interpreter to use as it is instead.
+The component's `kapitan.*` imports (`inventory()`,
 `inventory_global()`, `topics()`, `HelmChart`, `render_jinja2_file`,
 `prune_empty`, ...) are served by a small `kapitan` package that ships with
 krab, so the Python kapitan is not needed and none of its start-up cost is

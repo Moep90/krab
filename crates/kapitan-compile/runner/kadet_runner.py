@@ -350,7 +350,12 @@ def op_eval(req):
             "doc_reads": sorted(RECORDER.doc_reads),
         }
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"Could not load Kadet module: {os.path.basename(input_path)}: {e}", "traceback": traceback.format_exc()}
+        hint = kadet_input.missing_package_hint(e) if "kgenlib" not in str(e) and "search paths" not in str(e) else ""
+        return {
+            "ok": False,
+            "error": f"Could not load Kadet module: {os.path.basename(input_path)}: {e}{hint}",
+            "traceback": traceback.format_exc(),
+        }
     finally:
         RECORDER.active = False
         RECORDER.target = None

@@ -101,7 +101,7 @@ Compile the targets whose inputs changed.
 | `--output-path <DIR>` | where `compiled/` lives (default: `compile.output-path` from `.kapitan`, else `.`) |
 | `--reveal` | reveal refs in the output instead of compiling them (default: `compile.reveal` from `.kapitan`) |
 | `--embed-refs` | embed the ref files' contents in the output instead of writing hashed tags (default: `compile.embed-refs` from `.kapitan`) |
-| `--python <PATH>` | Python used to evaluate kadet components: one with `kadet` installed (with `--backend python`, one with kapitan installed). Default: `$KAPITAN_PYTHON`, else a kapitan PEX on `PATH`, else `python3` |
+| `--python <PATH>` | Python used to evaluate kadet components, as it is (with `--backend python`, one with kapitan installed). Default: `$KAPITAN_PYTHON`, else the venv krab builds from `compile.python-requirements` |
 | `--flag <FLAG>` | extra flag passed through to kapitan's compile in the Python backend (e.g. `--indent 4`) |
 | `--backend native\|python` | `native` (default): input types run in Rust, Python only evaluates kadet `main()`. `python`: kapitan's own input types in worker processes |
 
@@ -146,8 +146,16 @@ manifest. `--reveal` decrypts refs into the output instead, and makes the
 
 `.kapitan` keys used: `compile.search-paths`, `compile.output-path`,
 `compile.indent`, `compile.fetch`, `compile.force-fetch`, `compile.refs-path`,
-`compile.embed-refs`, `compile.reveal`, `inventory.multiline-string-style`,
-`inventory.python-resolvers`.
+`compile.embed-refs`, `compile.reveal`, `compile.python-requirements`,
+`inventory.multiline-string-style`, `inventory.python-resolvers`.
+
+`compile.python-requirements` (a list of pip specifiers, or the path of a
+requirements file) names what kadet components import besides `kadet` and
+`jinja2`. krab installs them into a venv of its own under
+`$XDG_CACHE_HOME/kapitan/python/<digest>` on the first compile (with `uv`
+when on PATH, else `python3 -m venv` and pip) and evaluates components
+there; a changed list is a new environment. `--python` / `KAPITAN_PYTHON`
+bypass it.
 
 ## `kapitan refs`
 
@@ -243,7 +251,7 @@ registers whatever name the command was invoked as, so an install like
 |---|---|
 | `KAPITAN_INVENTORY_PATH` | same as `--inventory-path` |
 | `KAPITAN_NO_DAEMON` | same as `--no-daemon` |
-| `KAPITAN_PYTHON` | same as `--python` for compile; for Python resolvers it overrides `inventory.python-resolvers.python` in `.kapitan` (the per-machine override of a shared setting) |
+| `KAPITAN_PYTHON` | same as `--python` for compile (that interpreter as it is, instead of the venv krab builds); for Python resolvers it overrides `inventory.python-resolvers.python` in `.kapitan` (the per-machine override of a shared setting) |
 | `RUST_LOG` | log filter (`kapitan_server=debug`, ...) |
 | `XDG_RUNTIME_DIR`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` | where the socket, log and worker cache live |
 
@@ -264,6 +272,7 @@ itself uses:
 | `indent` | `inventory` | YAML indentation for `kapitan inventory` |
 | `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for kapitan compile |
 | `refs-path`, `embed-refs`, `reveal` | `compile` | where ref files live, embed them, reveal them |
+| `python-requirements` | `compile` | packages kadet components import; installed into krab's own venv |
 | `refs-path` | `refs` | where `kapitan refs` looks for ref files |
 | `multiline-string-style` | `inventory` | multiline string style for compiled YAML |
 
