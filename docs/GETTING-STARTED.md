@@ -176,8 +176,11 @@ compile:
 ```
 
 A changed list is a new environment; without the key it holds the baseline
-alone. `--python` / `$KAPITAN_PYTHON` name an interpreter to use as it is
-instead (nothing is installed into it). Nothing else is tried: an installed
+alone. To try another kadet, or your own checkout, without touching the
+shared file, set `KAPITAN_PYTHON_REQUIREMENTS` (one specifier per line, for
+example `kadet==0.3.1` or `-e /home/me/kadet`); a `kadet` named there or in
+`.kapitan` replaces krab's own entry. `--python` / `$KAPITAN_PYTHON` name
+an interpreter to use as it is instead (nothing is installed into it). Nothing else is tried: an installed
 Python kapitan plays no part in kadet evaluation. The component's
 `main()` runs in that Python with krab's own `kapitan` package on the path,
 which provides the API components import (`kapitan.inputs.kadet`,

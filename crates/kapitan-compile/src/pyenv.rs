@@ -17,6 +17,12 @@
 //! else `python3 -m venv` and pip), installs once and evaluates components
 //! in it. The digest covers the base interpreter and the requirements, so a
 //! changed list is a new environment and the old one is simply unused.
+//! `KAPITAN_PYTHON_REQUIREMENTS` adds specifiers for this machine only, one
+//! per line (`kadet==0.3.1`, `kadet @ file:///home/me/kadet`, or
+//! `-e /home/me/kadet` for an editable checkout), without touching the
+//! shared `.kapitan`. A `kadet` or `jinja2` named by either source replaces
+//! the baseline entry, so a pin or a checkout is the only one installed.
+//!
 //! `--python` / `KAPITAN_PYTHON` bypass all of this: that interpreter is
 //! used as it is, and nothing else is ever tried (in particular not a
 //! kapitan PEX that happens to be on PATH).
@@ -41,6 +47,30 @@ pub struct PythonEnv {
     pub requirements_file: Option<PathBuf>,
     /// Whether `.kapitan` declared anything (the baseline alone otherwise).
     pub declared: bool,
+    /// This machine's additions (`$KAPITAN_PYTHON_REQUIREMENTS`, one per line).
+    pub extra: Vec<String>,
+}
+
+/// The project a specifier or installer argument names, normalised
+/// (`Kadet[box]>=0.3` and `-e /home/me/kadet` are both `kadet`).
+fn project_name(spec: &str) -> Option<String> {
+    let spec = spec.trim();
+    if let Some(path) = spec
+        .strip_prefix("-e ")
+        .or_else(|| spec.strip_prefix("--editable "))
+    {
+        let path = path.trim().trim_end_matches('/');
+        let base = Path::new(path).file_name()?.to_str()?;
+        return Some(base.to_ascii_lowercase().replace('_', "-"));
+    }
+    if spec.starts_with('-') {
+        return None;
+    }
+    let end = spec
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'))
+        .unwrap_or(spec.len());
+    let name = &spec[..end];
+    (!name.is_empty()).then(|| name.to_ascii_lowercase().replace('_', "-"))
 }
 
 impl PythonEnv {
@@ -53,6 +83,15 @@ impl PythonEnv {
             requirements: Vec::new(),
             requirements_file: None,
             declared: false,
+            extra: std::env::var("KAPITAN_PYTHON_REQUIREMENTS")
+                .map(|v| {
+                    v.lines()
+                        .map(str::trim)
+                        .filter(|l| !l.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
         let Some(values) = values else {
             return env;
@@ -73,10 +112,22 @@ impl PythonEnv {
         env
     }
 
-    /// The packages installed: the baseline plus the repository's.
+    /// What gets installed, as installer arguments: the baseline (minus any
+    /// package the others name), the repository's specifiers, then this
+    /// machine's.
     pub fn specifiers(&self) -> Vec<String> {
-        let mut out: Vec<String> = BASELINE.iter().map(|s| s.to_string()).collect();
-        for r in &self.requirements {
+        let named: Vec<String> = self
+            .requirements
+            .iter()
+            .chain(&self.extra)
+            .filter_map(|s| project_name(s))
+            .collect();
+        let mut out: Vec<String> = BASELINE
+            .iter()
+            .filter(|b| !named.contains(&b.to_string()))
+            .map(|s| s.to_string())
+            .collect();
+        for r in self.requirements.iter().chain(&self.extra) {
             if !out.contains(r) {
                 out.push(r.clone());
             }
@@ -198,7 +249,19 @@ impl PythonEnv {
             .next()
             .unwrap_or("python3")
             .to_string();
-        let mut install_args: Vec<String> = self.specifiers();
+        // `-e <path>` entries are two installer arguments.
+        let mut install_args: Vec<String> = Vec::new();
+        for s in self.specifiers() {
+            match s
+                .split_once(' ')
+                .filter(|(flag, _)| *flag == "-e" || *flag == "--editable")
+            {
+                Some((flag, path)) => {
+                    install_args.extend([flag.to_string(), path.trim().to_string()])
+                }
+                None => install_args.push(s),
+            }
+        }
         if let Some(f) = &self.requirements_file {
             install_args.push("-r".into());
             install_args.push(f.display().to_string());
@@ -253,16 +316,19 @@ fn run(cmd: &mut Command) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn list_becomes_specifiers_after_the_baseline() {
-        let env = PythonEnv::from_dot(
-            Some(vec![
-                "jmespath".into(),
-                "jinja2".into(),
-                " jsonpath-ng ".into(),
-            ]),
+    /// `from_dot` without this machine's `$KAPITAN_PYTHON_REQUIREMENTS`.
+    fn spec(values: Option<Vec<&str>>) -> PythonEnv {
+        let mut env = PythonEnv::from_dot(
+            values.map(|v| v.into_iter().map(str::to_string).collect()),
             Path::new("/repo"),
         );
+        env.extra.clear();
+        env
+    }
+
+    #[test]
+    fn list_becomes_specifiers_after_the_baseline() {
+        let env = spec(Some(vec!["jmespath", " jsonpath-ng "]));
         assert!(env.declared);
         assert_eq!(
             env.specifiers(),
@@ -273,10 +339,7 @@ mod tests {
 
     #[test]
     fn a_single_txt_path_is_a_requirements_file() {
-        let env = PythonEnv::from_dot(
-            Some(vec!["system/requirements.txt".into()]),
-            Path::new("/repo"),
-        );
+        let env = spec(Some(vec!["system/requirements.txt"]));
         assert_eq!(
             env.requirements_file.as_deref(),
             Some(Path::new("/repo/system/requirements.txt"))
@@ -286,8 +349,34 @@ mod tests {
 
     #[test]
     fn nothing_declared_is_the_baseline_only() {
-        let env = PythonEnv::from_dot(None, Path::new("/repo"));
+        let env = spec(None);
         assert!(!env.declared);
         assert_eq!(env.specifiers(), BASELINE);
+    }
+
+    #[test]
+    fn a_named_baseline_package_replaces_the_baseline_entry() {
+        let env = spec(Some(vec!["Kadet==0.3.1", "jinja2>=3"]));
+        assert_eq!(env.specifiers(), vec!["Kadet==0.3.1", "jinja2>=3"]);
+
+        let mut env = spec(None);
+        env.extra = vec!["-e /home/me/kadet/".into()];
+        assert_eq!(env.specifiers(), vec!["jinja2", "-e /home/me/kadet/"]);
+
+        let mut env = spec(None);
+        env.extra = vec!["kadet @ file:///home/me/kadet".into()];
+        assert_eq!(
+            env.specifiers(),
+            vec!["jinja2", "kadet @ file:///home/me/kadet"]
+        );
+    }
+
+    #[test]
+    fn project_names() {
+        assert_eq!(project_name("kadet").as_deref(), Some("kadet"));
+        assert_eq!(project_name("Kadet[box]>=0.3,<1").as_deref(), Some("kadet"));
+        assert_eq!(project_name("jsonpath_ng").as_deref(), Some("jsonpath-ng"));
+        assert_eq!(project_name("-e /x/kadet").as_deref(), Some("kadet"));
+        assert_eq!(project_name("-r req.txt"), None);
     }
 }

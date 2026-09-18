@@ -252,6 +252,7 @@ registers whatever name the command was invoked as, so an install like
 | `KAPITAN_INVENTORY_PATH` | same as `--inventory-path` |
 | `KAPITAN_NO_DAEMON` | same as `--no-daemon` |
 | `KAPITAN_PYTHON` | same as `--python` for compile (that interpreter as it is, instead of the venv krab builds); for Python resolvers it overrides `inventory.python-resolvers.python` in `.kapitan` (the per-machine override of a shared setting) |
+| `KAPITAN_PYTHON_REQUIREMENTS` | specifiers added to the venv krab builds, for this machine only, one per line: `kadet==0.3.1`, `kadet @ file:///home/me/kadet`, or `-e /home/me/kadet` for an editable checkout. A named `kadet` or `jinja2` replaces krab's baseline entry |
 | `RUST_LOG` | log filter (`kapitan_server=debug`, ...) |
 | `XDG_RUNTIME_DIR`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` | where the socket, log and worker cache live |
 
