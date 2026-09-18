@@ -18,7 +18,7 @@ use crate::inputs::kadet::kadet_runner_digest;
 use crate::manifest::{ItemRecord, MANIFEST_FILE, MANIFEST_VERSION, Manifest, TargetRecord};
 use crate::native::{ItemContext, NativeCompiler, NativeOptions};
 use crate::plan::TargetPlan;
-use crate::python::{PythonCmd, PythonProbe, materialize_runner, runner_digest};
+use crate::python::{PythonCmd, PythonNeeds, PythonProbe, materialize_runner, runner_digest};
 use crate::worker::{Worker, WorkerError};
 
 /// How targets are compiled.
@@ -28,6 +28,16 @@ pub enum Backend {
     Native,
     /// kapitan's Python input types inside a worker process (reference behaviour).
     Python,
+}
+
+impl Backend {
+    /// What the backend needs from the Python interpreter.
+    pub fn python_needs(self) -> PythonNeeds {
+        match self {
+            Backend::Native => PythonNeeds::Kadet,
+            Backend::Python => PythonNeeds::Kapitan,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -212,7 +222,7 @@ pub fn compile(
     let mut manifest = Manifest::load(&manifest_path);
     let versions = opts
         .python
-        .versions()
+        .versions(opts.backend.python_needs())
         .unwrap_or_else(|e| format!("unknown ({e})"));
     let engine = opts.engine_identity(&versions);
     let config_digest = opts.config_digest();
@@ -378,7 +388,6 @@ pub fn compile(
                     opts.python.clone(),
                     socket.as_deref(),
                     &inventory_file,
-                    &opts.flags,
                     provider.clone(),
                 )
                 .map_err(|e| format!("cannot set up the native compiler: {e}"))?,

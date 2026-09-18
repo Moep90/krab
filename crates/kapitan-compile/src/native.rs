@@ -82,15 +82,22 @@ impl NativeCompiler {
         python: PythonCmd,
         socket: Option<&Path>,
         inventory_file: &Path,
-        flags: &[String],
         docs: SharedDocs,
     ) -> std::io::Result<Self> {
+        // What the evaluator's `kapitan` package exposes as the compile
+        // settings (`kapitan.runtime.Settings`).
         let init = json!({
             "cwd": opts.repo_root,
             "inventory_file": inventory_file,
             "inventory_socket": socket,
-            "search_paths": opts.search_paths,
-            "flags": flags,
+            "krab_version": env!("CARGO_PKG_VERSION"),
+            "settings": {
+                "search_paths": opts.search_paths,
+                "reveal": opts.reveal,
+                "embed_refs": opts.embed_refs,
+                "refs_path": opts.refs_path,
+                "indent": opts.indent,
+            },
         });
         let refs = Arc::new(RefController::new(opts.refs_path.clone(), opts.embed_refs));
         let kadet = KadetPool::new(python, init)?;

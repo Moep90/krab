@@ -101,7 +101,7 @@ Compile the targets whose inputs changed.
 | `--output-path <DIR>` | where `compiled/` lives (default: `compile.output-path` from `.kapitan`, else `.`) |
 | `--reveal` | reveal refs in the output instead of compiling them (default: `compile.reveal` from `.kapitan`) |
 | `--embed-refs` | embed the ref files' contents in the output instead of writing hashed tags (default: `compile.embed-refs` from `.kapitan`) |
-| `--python <PATH>` | Python used to evaluate kadet components (and, with `--backend python`, everything). Default: `$KAPITAN_PYTHON`, else a kapitan PEX on `PATH`, else `python3` |
+| `--python <PATH>` | Python used to evaluate kadet components: one with `kadet` installed (with `--backend python`, one with kapitan installed). Default: `$KAPITAN_PYTHON`, else a kapitan PEX on `PATH`, else `python3` |
 | `--flag <FLAG>` | extra flag passed through to kapitan's compile in the Python backend (e.g. `--indent 4`) |
 | `--backend native\|python` | `native` (default): input types run in Rust, Python only evaluates kadet `main()`. `python`: kapitan's own input types in worker processes |
 

@@ -1,0 +1,2 @@
+== {{ name | upper }} ==
+{% for b in bits %}{{ b }}{% endfor %} {{ "03190301" | regex_replace("0", "x") }} {{ {"k": "v"} | yaml | trim }}
