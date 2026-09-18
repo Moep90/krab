@@ -10,7 +10,7 @@ use clap::Args;
 use kapitan_compile::fetch::DEPENDENCIES_PATH;
 use kapitan_compile::{
     Backend, CompileOptions, DocProvider, DocSource, Event, FetchStatus, NativeOptions, PythonCmd,
-    PythonProbe, Selection, Status,
+    PythonEnv, PythonProbe, Selection, Status,
 };
 use kapitan_inventory::emit::MultilineStyle;
 use kapitan_server::protocol::{TargetParams, TargetResult, TargetsResult};
@@ -72,9 +72,9 @@ pub struct CompileArgs {
     #[arg(long)]
     embed_refs: bool,
 
-    /// Python used to evaluate kadet components: one with `kadet` installed
-    /// (with `--backend python`, one with kapitan installed). Default:
-    /// $KAPITAN_PYTHON, a kapitan PEX on PATH, or python3
+    /// Python used to evaluate kadet components, as it is (with `--backend
+    /// python`, one with kapitan installed). Default: the environment krab
+    /// builds from `compile.python-requirements` in .kapitan
     #[arg(long, env = "KAPITAN_PYTHON")]
     python: Option<String>,
 
@@ -125,8 +125,16 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         BackendArg::Native => Backend::Native,
         BackendArg::Python => Backend::Python,
     };
-    let python = PythonCmd::detect(args.python.as_deref(), backend.python_needs())
-        .map_err(Failure::Message)?;
+    // The environment krab builds for kadet components: the baseline plus
+    // what `.kapitan` declares under `compile.python-requirements`.
+    let managed = PythonEnv::from_dot(app.dot.compile_strings("python-requirements"), &repo_root);
+    let python = PythonCmd::detect(
+        args.python.as_deref(),
+        backend.python_needs(),
+        Some(&managed),
+        &|line| eprintln!("{line}"),
+    )
+    .map_err(Failure::Message)?;
 
     let mut flags = args.flags.clone();
     let reveal = args.reveal || app.dot.compile_bool("reveal").unwrap_or(false);
@@ -226,14 +234,15 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
                 } else if opts.dry_run {
                     let _ = writeln!(err, "{stale}/{total} targets would compile");
                 } else {
-                    let backend = match opts.backend {
-                        Backend::Native => "native",
-                        Backend::Python => "python",
+                    let python = match opts.backend {
+                        Backend::Native => format!("kadet in {}", opts.python.description),
+                        Backend::Python => {
+                            format!("python backend, {}", opts.python.description)
+                        }
                     };
                     let _ = writeln!(
                         err,
-                        "compiling {stale}/{total} targets with {workers} worker(s) ({backend}; {})",
-                        opts.python.description
+                        "compiling {stale}/{total} targets with {workers} worker(s) ({python})"
                     );
                 }
             }

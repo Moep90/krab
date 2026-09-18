@@ -10,6 +10,8 @@ use std::path::PathBuf;
 
 pub use kapitan_inventory::python::{PythonCmd, cache_dir};
 
+use crate::pyenv::PythonEnv;
+
 pub const RUNNER_SOURCE: &str = include_str!("../runner/kapitan_runner.py");
 
 /// What the compile needs from the interpreter.
@@ -43,7 +45,7 @@ impl PythonNeeds {
     fn not_found(self) -> &'static str {
         match self {
             PythonNeeds::Kadet => {
-                "no Python with kadet installed was found; `pip install kadet` (and jinja2 if components render templates), or set KAPITAN_PYTHON to a Python that has it (e.g. a venv python, or `PEX_INTERPRETER=1 /path/to/kapitan.pex`). Tried:"
+                "no Python with kadet installed was found; set KAPITAN_PYTHON to a Python that has it (`pip install kadet jinja2`). Tried:"
             }
             PythonNeeds::Kapitan => {
                 "no Python with kapitan installed was found; set KAPITAN_PYTHON (e.g. `PEX_INTERPRETER=1 /path/to/kapitan.pex` or a venv python). Tried:"
@@ -62,17 +64,55 @@ impl PythonNeeds {
 /// Compile-specific probing of an interpreter: does it have what the
 /// backend needs, and which versions.
 pub trait PythonProbe: Sized {
-    /// Candidates in order: `$KAPITAN_PYTHON`, a kapitan PEX on `$PATH`
-    /// (run as an interpreter), then `python3`; the first that satisfies
-    /// `needs`.
-    fn detect(explicit: Option<&str>, needs: PythonNeeds) -> Result<Self, String>;
+    /// The interpreter for `needs`.
+    ///
+    /// Kadet evaluation uses `$KAPITAN_PYTHON` / `--python` when given, as
+    /// it is; otherwise krab's own `managed` environment (see
+    /// [`crate::pyenv`]), built on demand. Nothing else is tried. The
+    /// Python backend tries `$KAPITAN_PYTHON`, a kapitan PEX on `$PATH`
+    /// (run as an interpreter), then `python3`. `log` receives progress
+    /// lines.
+    fn detect(
+        explicit: Option<&str>,
+        needs: PythonNeeds,
+        managed: Option<&PythonEnv>,
+        log: &dyn Fn(&str),
+    ) -> Result<Self, String>;
 
     /// Versions on the Python side, part of the engine identity.
     fn versions(&self, needs: PythonNeeds) -> Result<String, String>;
 }
 
 impl PythonProbe for PythonCmd {
-    fn detect(explicit: Option<&str>, needs: PythonNeeds) -> Result<PythonCmd, String> {
+    fn detect(
+        explicit: Option<&str>,
+        needs: PythonNeeds,
+        managed: Option<&PythonEnv>,
+        log: &dyn Fn(&str),
+    ) -> Result<PythonCmd, String> {
+        if needs == PythonNeeds::Kadet {
+            if let Some(c) = PythonCmd::explicit(explicit) {
+                return match probe_cached(&c, needs) {
+                    Ok(()) => Ok(c),
+                    Err(e) => Err(format!(
+                        "{} cannot evaluate kadet components: {e}\n\
+                         unset KAPITAN_PYTHON / drop --python to use the environment krab builds, \
+                         or install kadet (and jinja2) there",
+                        c.description
+                    )),
+                };
+            }
+            if let Some(env) = managed {
+                let c = env.ensure(log)?;
+                return match probe_cached(&c, needs) {
+                    Ok(()) => Ok(c),
+                    Err(e) => Err(format!(
+                        "krab's Python environment {} cannot import kadet: {e}",
+                        c.description
+                    )),
+                };
+            }
+        }
         let mut errors = Vec::new();
         for c in PythonCmd::candidates(explicit) {
             match probe_cached(&c, needs) {
