@@ -1,4 +1,4 @@
-"""Resolvers for the Python bridge tests (see crates/kapitan-inventory/tests/python_resolvers.rs).
+"""Resolvers for the Python bridge tests (see crates/krab-inventory/tests/python_resolvers.rs).
 
 Written the way kapitan's omegaconf backend expected: plain functions and a
 `pass_resolvers()` returning them by name. `_root_`, `_parent_` and `_node_`

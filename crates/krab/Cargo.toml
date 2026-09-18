@@ -1,0 +1,27 @@
+[package]
+name = "krab"
+description = "krab: Kapitan in Rust. Fast inventory rendering with provenance, an inventory daemon, incremental compile and a language server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "krab"
+path = "src/main.rs"
+
+[dependencies]
+krab-inventory = { workspace = true }
+krab-server = { workspace = true }
+krab-compile = { workspace = true }
+krab-lsp = { workspace = true }
+clap = { workspace = true }
+clap_complete = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+libc = { workspace = true }
+tracing-subscriber = { workspace = true }

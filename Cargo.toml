@@ -3,17 +3,17 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "2.0.0-alpha.3"
+version = "2.0.0-alpha.4"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/kapicorp/krab"
 rust-version = "1.85"
 
 [workspace.dependencies]
-kapitan-inventory = { path = "crates/kapitan-inventory" }
-kapitan-server = { path = "crates/kapitan-server" }
-kapitan-compile = { path = "crates/kapitan-compile" }
-kapitan-lsp = { path = "crates/kapitan-lsp" }
+krab-inventory = { path = "crates/krab-inventory" }
+krab-server = { path = "crates/krab-server" }
+krab-compile = { path = "crates/krab-compile" }
+krab-lsp = { path = "crates/krab-lsp" }
 saphyr-parser = "0.0.12"
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive", "rc"] }

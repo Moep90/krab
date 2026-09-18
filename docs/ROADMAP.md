@@ -1,8 +1,10 @@
 # Roadmap
 
-Status as of 2026-09-14. Inventory, daemon, incremental compile, native
-compile for the input types grid uses, and the language server are in place;
-grid renders and compiles byte-identical to kapitan 0.36.3 (160/160 targets).
+Status as of 2026-09-18. Inventory, daemon, incremental compile, native
+compile for the input types grid uses, references, dependency fetching,
+Python resolvers and the language server are in place; grid renders and
+compiles byte-identical to kapitan 0.36.3 (160/160 targets). The binary is
+`krab` (releases before 2.0.0-alpha.4 shipped it as `kapitan`).
 
 ## Where the roadmap lives
 
@@ -22,14 +24,14 @@ issue-branch-PR flow.
 ## How to resume
 
 ```sh
-cargo build --release                                     # kapitan2 on PATH is a symlink to the build
+cargo build --release                                     # krab on PATH is a symlink to the build
 cd path/to/an/inventory/repo                              # the directory holding .kapitan
-kapitan2 inventory check && kapitan2 compile --dry-run    # daemon + manifest sanity
+krab inventory check && krab compile --dry-run    # daemon + manifest sanity
 python3 path/to/krab/scripts/lsp-smoke.py . inventory/targets/some/target.yml 1:10 20:24
 python3 path/to/krab/scripts/lsp-smoke-live.py .          # completion + live diagnostics (edits and restores a class)
 ```
 
-Parity check after engine changes: `kapitan2 compile --force` in the
+Parity check after engine changes: `krab compile --force` in the
 inventory repo, then `git status compiled` must be clean. The reference
 implementation is the Python kapitan (a PEX; run scripts with
 `PEX_INTERPRETER=1`).

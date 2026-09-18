@@ -14,7 +14,7 @@
    files, and re-renders only what changed. The CLI works identically with or
    without it.
 5. **Library.** Everything the CLI does is a function call in
-   `kapitan-inventory`; the CLI and the server are thin.
+   `krab-inventory`; the CLI and the server are thin.
 
 ## Data model
 
@@ -108,7 +108,7 @@ surfaces as the evaluator's own diagnostic rather than a traceback. The worker
 patches `OmegaConf.select` / `to_container` / `is_config` to accept those
 proxies, or installs a stand-in `omegaconf` module when the package is
 missing. The import result (names, special arguments, project modules loaded)
-is cached by file digest under `~/.cache/kapitan/resolvers`, so workers start
+is cached by file digest under `~/.cache/krab/resolvers`, so workers start
 on first use only (at most `workers`, default CPUs capped at 8). Python wins
 over same-named native resolvers unless `prefer-native` is set, because the
 native `contrib` set is a port of one such file and cannot follow its edits.
@@ -138,10 +138,10 @@ Every error is a `Diagnostic { code, message, target, path, labels, help }`.
 Labels carry origins that resolve to `file:line:col`. The CLI renders them with
 miette (source snippets) or as JSON lines (`--json`).
 
-## Server (`kapitan-server`)
+## Server (`krab-server`)
 
 One daemon per inventory directory, started on demand by the CLI (or with
-`kapitan server start`), exiting after 30 minutes without requests.
+`krab server start`), exiting after 30 minutes without requests.
 
 * **State**: the `Inventory` (with its file and class-closure caches), the
   rendered targets, the failed targets with their diagnostics, and an index
@@ -155,9 +155,9 @@ One daemon per inventory directory, started on demand by the CLI (or with
   every failed target, and picks up new or deleted target files. Atomic
   editor saves (write temp + rename) therefore cost one target render.
 * **Protocol**: JSON-RPC 2.0, newline delimited, over
-  `$XDG_RUNTIME_DIR/kapitan/<hash of inventory path>-<hash of build>.sock`
+  `$XDG_RUNTIME_DIR/krab/<hash of inventory path>-<hash of build>.sock`
   (see `protocol.rs` for the method list). `inventory.wait` is a long poll on
-  the generation counter; `kapitan inventory watch` is a thin client of it.
+  the generation counter; `krab inventory watch` is a thin client of it.
   The socket is bound before the initial render; `inventory.*` requests wait
   for the render, `server.*` ones answer at once (`ready: false`).
 * **Parity**: the CLI uses the server when it can and renders locally
@@ -168,7 +168,7 @@ One daemon per inventory directory, started on demand by the CLI (or with
 * **Secrets** are never revealed server-side; the inventory holds references
   only.
 
-## Language server (`kapitan-lsp`)
+## Language server (`krab-lsp`)
 
 A thin translator from LSP to the daemon's JSON-RPC, so the editor never
 renders anything itself:
@@ -187,7 +187,7 @@ renders anything itself:
   label's location (or the target file's first line when there is none) and
   clearing files that became clean.
 
-## Compile (`kapitan-compile`)
+## Compile (`krab-compile`)
 
 Principle: *exact invalidation or nothing*. A target is recompiled when, and
 only when, one of these changed since its last compile:
@@ -205,7 +205,7 @@ only when, one of these changed since its last compile:
 5. the compiled output itself (a tree digest, so manual edits or a `git
    checkout` are noticed).
 
-Everything is stored in `compiled/.kapitan-manifest.json`. `--explain` and
+Everything is stored in `compiled/.krab-manifest.json`. `--explain` and
 `--dry-run` print the reason per target.
 
 Within a stale target, kadet items are reused rather than evaluated when
@@ -225,7 +225,7 @@ into a private temporary tree that then replaces `compiled/<target path>`
 while leaving nested targets' directories alone. Full runs remove output
 directories that belong to no target.
 
-### Native input types (`kapitan-compile/src/inputs`, `output.rs`, `refs/`)
+### Native input types (`krab-compile/src/inputs`, `output.rs`, `refs/`)
 
 * `jinja2`: minijinja with Jinja2's environment (strict undefined,
   `trim_blocks`, `lstrip_blocks`, no auto-escaping), Python-style rendering of
@@ -255,7 +255,7 @@ directories that belong to no target.
   `helm template` arguments the way kapitan's `render_chart` does, hashes
   the chart directory so every chart file becomes a dependency of the
   target, runs helm, caches the output by content under
-  `$XDG_CACHE_HOME/kapitan/helm-render` and parses it with the inventory's
+  `$XDG_CACHE_HOME/krab/helm-render` and parses it with the inventory's
   loader. kapitan's kadet output cache is off because a hit would hide what
   a component reads.
 * Output: `prune_empty`, output-type resolution, ref embedding
@@ -279,7 +279,7 @@ directories that belong to no target.
   CLIs. Ref files are written with `yaml.safe_dump`'s layout so kapitan and
   krab can read each other's. kapitan's `mock` key is honoured for tests.
 
-### Dependency fetching (`kapitan-compile/src/fetch.rs`)
+### Dependency fetching (`krab-compile/src/fetch.rs`)
 
 `parameters.kapitan.dependencies` is fetched before staleness is decided,
 so the files it produces are ordinary inputs: the inputs that read them
@@ -294,7 +294,7 @@ with tar, gzip and zip unpacking by content type or magic bytes, as
 kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
 `safe_copy_tree` (never overwrite, skip dot-entries) or, when forced,
 `copy_tree` (overwrite everything). Versioned helm charts are cached under
-`$XDG_CACHE_HOME/kapitan/charts` because a published chart version is
+`$XDG_CACHE_HOME/krab/charts` because a published chart version is
 immutable; `--force-fetch` pulls again.
 
 `type: oci` (`oci.rs`) speaks the registry distribution API the way oras
@@ -328,6 +328,6 @@ output. `--backend python` runs kapitan's Python input types instead.
 list merging, merge-time dereferencing, every shipped resolver, YAML 1.1
 scalars and emitter quirks; `tests/fixtures/expected/*.yaml` is the reference
 implementation's output for it (regenerate with `generate_expected.py`).
-`crates/kapitan-inventory/tests/fixture.rs` renders it and compares byte for
+`crates/krab-inventory/tests/fixture.rs` renders it and compares byte for
 byte. The production inventory this was developed against renders identically
 for all 160 targets.

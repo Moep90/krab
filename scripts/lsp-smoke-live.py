@@ -5,7 +5,7 @@
 # completion + live diagnostics
 import json, subprocess, sys, os, time
 root = sys.argv.pop(1) if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]) else os.getcwd()
-proc = subprocess.Popen(["kapitan2", "lsp"], cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open("/tmp/claude/lsp_stderr2.txt", "w"))
+proc = subprocess.Popen(["krab", "lsp"], cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open("/tmp/claude/lsp_stderr2.txt", "w"))
 nid = 0
 def send(method, params, notify=False):
     global nid
