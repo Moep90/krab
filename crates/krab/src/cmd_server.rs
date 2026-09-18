@@ -1,4 +1,4 @@
-//! `kapitan server …`
+//! `krab server …`
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -63,7 +63,7 @@ pub fn run(app: &App, command: ServerCommand) -> Result<(), Failure> {
                 let mut c = Client::connect(&sock)?;
                 c.shutdown().map_err(|e| app.rpc_fail(e))?;
                 if !app.json {
-                    eprintln!("stopped kapitan {} (pid {})", info.version, info.pid);
+                    eprintln!("stopped krab {} (pid {})", info.version, info.pid);
                 }
             }
             Ok(())
@@ -117,7 +117,7 @@ fn print_info(info: &InfoResult, json: bool) {
         println!("{}", serde_json::to_string_pretty(info).unwrap());
         return;
     }
-    println!("kapitan server {} (pid {})", info.version, info.pid);
+    println!("krab server {} (pid {})", info.version, info.pid);
     if info.version != build_version() {
         println!(
             "  note:       another build than this binary ({})",

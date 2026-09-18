@@ -1,4 +1,4 @@
-//! `kapitan refs`: write, reveal, update and validate references, with
+//! `krab refs`: write, reveal, update and validate references, with
 //! kapitan's flags.
 
 use std::io::{Read as _, Write as _};

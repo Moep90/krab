@@ -1,4 +1,4 @@
-//! The kapitan inventory server: an always-on process holding the rendered
+//! The krab inventory server: an always-on process holding the rendered
 //! inventory in memory, watching the files, re-rendering only what changed,
 //! and answering JSON-RPC over a unix socket. Plus the client side.
 

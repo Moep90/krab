@@ -1,4 +1,4 @@
-//! `kapitan inventory …`
+//! `krab inventory …`
 
 use std::path::{Path, PathBuf};
 
@@ -410,7 +410,7 @@ fn print_targets_table(summaries: &[TargetSummary]) {
     );
     if errors > 0 {
         summary.push_str(&format!(
-            ", {errors} with render errors (see `kapitan inventory check`)"
+            ", {errors} with render errors (see `krab inventory check`)"
         ));
     }
     eprintln!("{summary}");

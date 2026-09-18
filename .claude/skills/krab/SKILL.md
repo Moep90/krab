@@ -15,11 +15,13 @@ repo: `grid`).
   `docs/DESIGN.md`, flags in `docs/CLI.md`, open work on the GitHub project
   board (linked from `docs/ROADMAP.md`). Local checkouts are git worktrees
   under `/home/coder/krab/<branch-name>`.
-- Binary: the release is installed by mise as `krab`
-  (`github:kapicorp/krab`, prerelease, `rename_exe = "krab"` in
-  `~/.config/mise/config.toml`; the shim resolves only under `/home/coder`,
-  use `~/.local/share/mise/installs/github-kapicorp-krab/<version>/krab`
-  from elsewhere). A development build is `target/release/kapitan` in its
+- Binary: `krab` (releases before 2.0.0-alpha.4 shipped it as `kapitan`).
+  The release is installed by mise (`github:kapicorp/krab`, prerelease, in
+  `~/.config/mise/config.toml`; the `rename_exe = "krab"` there is only
+  needed for those older releases; the shim resolves only under
+  `/home/coder`, use
+  `~/.local/share/mise/installs/github-kapicorp-krab/<version>/krab` from
+  elsewhere). A development build is `target/release/krab` in its
   worktree; every build keeps its own daemon, so both can run side by side.
 - Reference: `/usr/local/bin/kapitan` is the Python kapitan (a PEX). Keep
   using it for anything krab does not do yet (see "Not yet native").
@@ -162,7 +164,7 @@ krab compile --force && git status --short compiled   # must print nothing
 ```
 
 For the inventory alone: `krab inventory -t X` must match
-`kapitan inventory -t X` byte for byte. Fixture tests
+`krab inventory -t X` byte for byte. Fixture tests
 (`cargo test --release`) cover the engine without grid, including
 `resolvers.py` through the Python bridge; the corpus test needs
 `KAPITAN_CORPUS` and `KAPITAN_COMPILED` (see `docs/DESIGN.md`, Testing).
@@ -210,7 +212,7 @@ extension is `editors/vscode` (installed as `kapicorp.kapitan`). Point
 `kapitan.path` at the same binary the shell uses and set `kapitan.python`
 (passed on as `KAPITAN_PYTHON`) when the inventory has Python resolvers: the
 extension host's `python3` cannot import omegaconf. Smoke test without an
-editor (the scripts expect a `kapitan2` name on `PATH`; symlink `krab` to it):
+editor (the scripts run `krab` from `PATH`):
 
 ```bash
 python3 scripts/lsp-smoke.py grid inventory/targets/aws/eu-central-1/cluster.yml 1:10 20:24
@@ -224,7 +226,7 @@ is under `~/.vscode-server/data/logs/*/exthost*/output_logging_*/`.
 
 ```bash
 git worktree add /home/coder/krab/<name> -b <branch> origin/main   # one worktree per branch
-cargo build --release -j 4     # target/release/kapitan; a rebuilt binary uses a fresh socket, nothing to stop
+cargo build --release -j 4     # target/release/krab; a rebuilt binary uses a fresh socket, nothing to stop
 cargo fmt --all && cargo clippy --all-targets --release && cargo test --release
 ```
 
@@ -239,7 +241,7 @@ To release: bump `version` in the workspace `Cargo.toml` (and
 Crates: `kapitan-inventory` (engine: loader, class resolution, OmegaConf
 merge and interpolation, resolvers, the Python resolver bridge, provenance,
 emitters), `kapitan-server` (daemon + client), `kapitan-compile` (manifest,
-native inputs, refs, Python runners), `kapitan-lsp`, `kapitan` (CLI). Native
+native inputs, refs, Python runners), `kapitan-lsp`, `krab` (CLI). Native
 resolvers are Rust functions registered in
 `crates/kapitan-inventory/src/resolvers/`; the README shows how to add one.
 `vendor/saphyr-parser` carries two PyYAML-compatibility patches.

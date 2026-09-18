@@ -1,4 +1,4 @@
-//! The `kapitan` command line.
+//! The `krab` command line.
 
 mod app;
 mod cmd_compile;
@@ -17,7 +17,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use crate::app::{App, Failure};
 
 #[derive(Parser)]
-#[command(name = "kapitan", version, about = "Generic templated configuration management", long_about = None)]
+#[command(name = "krab", version, about = "Kapitan in Rust: generic templated configuration management", long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
     /// Inventory directory (default: `inventory-path` from .kapitan, else ./inventory)
@@ -61,7 +61,7 @@ enum Command {
         #[arg(long, hide = true)]
         stdio: bool,
     },
-    /// Print the shell completion script: `source <(kapitan completions bash)`
+    /// Print the shell completion script: `source <(krab completions bash)`
     Completions {
         #[arg(value_enum)]
         shell: completions::Shell,

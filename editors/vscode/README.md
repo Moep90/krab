@@ -6,9 +6,9 @@ to see the resolved value in the targets that include the file and where it
 was written or overridden, go to definition on class names and references,
 and completion of class names and parameter paths.
 
-The extension launches `kapitan lsp` (the Rust kapitan) in the workspace
+The extension launches `krab lsp` (the Rust kapitan) in the workspace
 folder containing `.kapitan` (or a first-level subdirectory such as `grid/`).
-The language server talks to the kapitan inventory daemon, which it starts if
+The language server talks to the krab inventory daemon, which it starts if
 needed, so results are always the daemon's current render.
 
 ## Install
@@ -32,11 +32,10 @@ code --install-extension kapitan-vscode-0.1.0.vsix
 CI packages the extension on every pull request (the `kapitan-vscode`
 workflow artifact) and the release workflow attaches it to the release.
 
-Set `kapitan.path` if the binary is not on `PATH` (for example `kapitan2`
-while both implementations are installed). Point it at the same binary your
-shell uses: each build keeps its own inventory daemon, so two builds mean two
-daemons rendering the same inventory. The default `kapitan` may resolve to
-the Python kapitan, which has no `lsp` command.
+Set `kapitan.path` if `krab` is not on the extension host's `PATH`, or to
+use a development build. Point it at the same binary your shell uses: each
+build keeps its own inventory daemon, so two builds mean two daemons
+rendering the same inventory.
 
 If the inventory has Python resolvers, set `kapitan.python` to an interpreter
 that can import omegaconf (a venv or pixi environment python). The language
