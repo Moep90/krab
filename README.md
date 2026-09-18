@@ -31,7 +31,7 @@ for Linux (x86_64 and aarch64, glibc 2.35 or newer) and macOS (Intel and
 Apple silicon), a `SHA256SUMS` file, and the VS Code extension as a `.vsix`:
 
 ```sh
-version=2.0.0-alpha.2 target=x86_64-unknown-linux-gnu    # or aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
+version=2.0.0-alpha.3 target=x86_64-unknown-linux-gnu    # or aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
 curl -LO https://github.com/kapicorp/krab/releases/download/v$version/kapitan-$version-$target.tar.gz
 tar xzf kapitan-$version-$target.tar.gz
 install -m 755 kapitan-$version-$target/kapitan ~/.local/bin/kapitan2   # any name you like
@@ -50,9 +50,10 @@ The binary is called `kapitan`. While you run both implementations side by
 side, install it under another name such as `kapitan2`; everything below
 works the same.
 
-Compiling `kadet` components still needs a Python with `kadet` installed
-(see [Compiling](#compiling)); the Python `kapitan` is not required. Nothing
-else needs Python.
+Compiling `kadet` components needs a Python 3 on the machine: krab builds
+itself a venv with `kadet`, `jinja2` and the packages the repository declares
+in `.kapitan` (see [Compiling](#compiling)). The Python `kapitan` is not
+required. Nothing else needs Python.
 
 ## Quick start
 
@@ -100,11 +101,11 @@ target names.
 |---|---|
 | `crates/kapitan-inventory` | the engine: YAML loading with source positions, class resolution, OmegaConf-compatible merge and `${...}` interpolation, resolver registry, provenance, PyYAML-compatible emitter |
 | `crates/kapitan-server` | the inventory daemon: watches files, re-renders exactly what changed, JSON-RPC over a unix socket; and the client with auto-spawn |
-| `crates/kapitan-compile` | incremental compile: native input types, ref embedding, rapidyaml/PyYAML/JSON writers, staleness from a manifest |
+| `crates/kapitan-compile` | incremental compile: native input types, ref embedding, rapidyaml/PyYAML/JSON writers, staleness from a manifest; the kadet evaluator with its bundled `kapitan` package and the Python environment it runs in |
 | `crates/kapitan-lsp` | language server over the daemon: live diagnostics, hover with resolved values and provenance, go to definition, completion |
 | `crates/kapitan` | the `kapitan` binary |
 | `editors/vscode` | VS Code extension that launches `kapitan lsp` |
-| `tests/fixtures` | a small inventory and the reference implementation's output for it |
+| `tests/fixtures` | a small inventory and the reference implementation's output for it; a kadet component exercising the bundled `kapitan` API |
 | `vendor/saphyr-parser` | the YAML parser, with two PyYAML-compatibility patches (see `vendor/README.md`) |
 
 ## Editing
@@ -140,9 +141,12 @@ print the reason per target.
 
 Input types, ref embedding, pruning and the YAML/JSON writers are native.
 `kadet` components are Python, so evaluating them needs a Python with
-`kadet` installed (`pip install kadet`, plus `jinja2` if components render
-templates): `$KAPITAN_PYTHON`, a kapitan PEX found on `PATH`, or `python3`,
-in that order. The component's `kapitan.*` imports (`inventory()`,
+`kadet`, `jinja2` and whatever the components import. krab builds it:
+declare the components' packages under `compile.python-requirements` in
+`.kapitan` (pip specifiers or a requirements file) and the first compile
+creates a venv under `~/.cache/kapitan/python/` with `uv` or `python3 -m
+venv`. `$KAPITAN_PYTHON` names an interpreter to use as it is instead.
+The component's `kapitan.*` imports (`inventory()`,
 `inventory_global()`, `topics()`, `HelmChart`, `render_jinja2_file`,
 `prune_empty`, ...) are served by a small `kapitan` package that ships with
 krab, so the Python kapitan is not needed and none of its start-up cost is

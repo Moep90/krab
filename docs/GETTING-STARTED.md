@@ -161,10 +161,27 @@ kapitan2 compile --force && git status --short compiled     # prints nothing
 
 `jinja2`, `copy`, `remove` and `external` inputs, output formatting, ref
 embedding and file writing are native. `kadet` components are Python, so a
-Python with `kadet` importable is needed to run them (`pip install kadet`,
-and `jinja2` if components render templates); the Python kapitan itself is
-not. krab looks for, in order: `--python` / `$KAPITAN_PYTHON`, a kapitan
-PEX on `PATH` (executed as an interpreter), then `python3`. The component's
+Python with `kadet` importable is needed to run them (plus `jinja2` for
+templates and whatever the components themselves import); the Python
+kapitan itself is not. krab builds that environment for you: declare the
+components' own packages in `.kapitan` and the first compile creates a venv
+under `~/.cache/kapitan/python/` (with `uv` when installed, else `python3
+-m venv` and pip) holding `kadet`, `jinja2` and them:
+
+```yaml
+compile:
+  python-requirements:        # pip specifiers, or the path of a requirements file
+    - jmespath
+    - jsonpath-ng
+```
+
+A changed list is a new environment; without the key it holds the baseline
+alone. To try another kadet, or your own checkout, without touching the
+shared file, set `KAPITAN_PYTHON_REQUIREMENTS` (one specifier per line, for
+example `kadet==0.3.1` or `-e /home/me/kadet`); a `kadet` named there or in
+`.kapitan` replaces krab's own entry. `--python` / `$KAPITAN_PYTHON` name
+an interpreter to use as it is instead (nothing is installed into it). Nothing else is tried: an installed
+Python kapitan plays no part in kadet evaluation. The component's
 `main()` runs in that Python with krab's own `kapitan` package on the path,
 which provides the API components import (`kapitan.inputs.kadet`,
 `kapitan.inputs.helm`, `kapitan.utils`, `kapitan.resources`,
