@@ -200,8 +200,8 @@ only when, one of these changed since its last compile:
    which input files are used;
 3. the documents of other targets it read through `inventory_global()`
    (recorded per target name, or `*` when it iterated everything);
-4. compile settings and the compiler identity (kapitan version, worker script
-   digest, Python-side kapitan version);
+4. compile settings and the compiler identity (krab version, evaluator
+   digest, Python-side kadet and Python versions);
 5. the compiled output itself (a tree digest, so manual edits or a `git
    checkout` are noticed).
 
@@ -236,7 +236,19 @@ directories that belong to no target.
   and calls `main()`; its output comes back as JSON. It records files read,
   directories listed, modules imported and targets read from the global
   inventory. With an inventory server running it fetches targets over the
-  socket on demand; without one it loads a snapshot file. `HelmChart`
+  socket on demand; without one it loads a snapshot file. The component's
+  `kapitan.*` imports resolve to the package next to the evaluator
+  (`runner/kapitan`): the component API (`inventory()`, `inventory_global()`,
+  `topics()`, `load_from_search_paths`, `BaseObj`...), `HelmChart`,
+  `utils.render_jinja2_file`/`prune_empty`, `resources.inventory()`, the
+  error classes, and a `cached` module that presents krab's compile settings
+  under the old `cached.args` names. It is built on `kapitan.runtime`, which
+  the evaluator configures with the documents, the settings and the
+  recorder; nothing in it reads a parsed command line or keeps process-wide
+  state, and importing any other `kapitan.*` module is an error rather than
+  a fall-through to an installed kapitan. The interpreter therefore only
+  needs `kadet` (and `jinja2` for templates), not the Python kapitan.
+  `HelmChart`
   renders inside a component go through the host: mid-evaluation the runner
   sends a `helm` request on its stdout (`worker.rs` answers host requests
   between the eval request and its reply) and `inputs/helm.rs` builds the

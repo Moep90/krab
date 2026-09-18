@@ -50,8 +50,9 @@ The binary is called `kapitan`. While you run both implementations side by
 side, install it under another name such as `kapitan2`; everything below
 works the same.
 
-Compiling `kadet` components still needs a Python with `kapitan` installed
-(see [Compiling](#compiling)). Nothing else needs Python.
+Compiling `kadet` components still needs a Python with `kadet` installed
+(see [Compiling](#compiling)); the Python `kapitan` is not required. Nothing
+else needs Python.
 
 ## Quick start
 
@@ -139,11 +140,16 @@ print the reason per target.
 
 Input types, ref embedding, pruning and the YAML/JSON writers are native.
 `kadet` components are Python, so evaluating them needs a Python with
-`kapitan` and `kadet` installed: `$KAPITAN_PYTHON`, a kapitan PEX found on
-`PATH`, or `python3`, in that order. The evaluator only runs the component's
-`main()` and asks the daemon for other targets when a generator reads them.
-`--backend python` runs kapitan's own Python input types instead, for
-comparison or for input types that are not native yet.
+`kadet` installed (`pip install kadet`, plus `jinja2` if components render
+templates): `$KAPITAN_PYTHON`, a kapitan PEX found on `PATH`, or `python3`,
+in that order. The component's `kapitan.*` imports (`inventory()`,
+`inventory_global()`, `topics()`, `HelmChart`, `render_jinja2_file`,
+`prune_empty`, ...) are served by a small `kapitan` package that ships with
+krab, so the Python kapitan is not needed and none of its start-up cost is
+paid. The evaluator only runs the component's `main()` and asks the daemon
+for other targets when a generator reads them. `--backend python` runs
+kapitan's own Python input types instead, for comparison or for input types
+that are not native yet; that backend does need the Python kapitan.
 
 References are native too. Compile turns `?{type:path}` tags into kapitan's
 hashed or embedded form, creates refs that do not exist yet from their
