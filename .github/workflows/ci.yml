@@ -53,5 +53,5 @@ jobs:
       - run: npm run package
       - uses: actions/upload-artifact@v4
         with:
-          name: kapitan-vscode
+          name: krab-vscode
           path: editors/vscode/*.vsix

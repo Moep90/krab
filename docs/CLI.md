@@ -1,8 +1,7 @@
 # CLI reference
 
-The binary is `kapitan`. Run it from the directory holding `.kapitan`; the
-examples use `kapitan2` where it is installed next to the Python kapitan.
-`kapitan <command> --help` is always current; this page adds the context.
+The binary is `krab`. Run it from the directory holding `.kapitan`.
+`krab <command> --help` is always current; this page adds the context.
 
 ## Global options
 
@@ -10,10 +9,10 @@ Accepted before or after the subcommand.
 
 | flag | meaning |
 |---|---|
-| `--inventory-path <DIR>` | inventory directory. Default: `inventory-path` from `.kapitan`, else `./inventory`. Env: `KAPITAN_INVENTORY_PATH` |
+| `--inventory-path <DIR>` | inventory directory. Default: `inventory-path` from `.kapitan`, else `./inventory`. Env: `KRAB_INVENTORY_PATH` |
 | `--json` | results and diagnostics as JSON (see [JSON output](#json-output)) |
 | `--raw` | skip kapitan's typed normalisation of `parameters.kapitan` (pydantic model defaults and ordering). Implies local rendering |
-| `--no-daemon` | render in-process instead of talking to (or starting) the daemon. Env: `KAPITAN_NO_DAEMON=1` |
+| `--no-daemon` | render in-process instead of talking to (or starting) the daemon. Env: `KRAB_NO_DAEMON=1` |
 | `-V, --version` | version |
 
 Exit code is 0 on success and 1 when a command fails or any target it rendered
@@ -21,7 +20,7 @@ or compiled has errors. Diagnostics go to stderr (or, with `--json`, to stdout
 as one object per line). Log verbosity follows `RUST_LOG` (default `warn`;
 `info` for `server run`).
 
-## `kapitan inventory` (alias `i`)
+## `krab inventory` (alias `i`)
 
 Show the rendered inventory. Without a subcommand it prints target documents.
 
@@ -47,7 +46,7 @@ target with labels, classes, compile inputs and diagnostics.
 ### `inventory classes`
 
 `-t <TARGET>`: the target's classes in include order (what
-`kapitan inventory -t X` would show under `classes`, but as the flat,
+`krab inventory -t X` would show under `classes`, but as the flat,
 resolved list). Without `-t`: every class file and how many targets include
 it. `--unused`: only class files no target includes.
 
@@ -83,7 +82,7 @@ re-rendered from them and which of those failed, followed by the new
 diagnostics. `--json` prints one change object per line. Ctrl-C to stop; the
 daemon keeps running.
 
-## `kapitan compile` (alias `c`)
+## `krab compile` (alias `c`)
 
 Compile the targets whose inputs changed.
 
@@ -94,18 +93,18 @@ Compile the targets whose inputs changed.
 | `--force` | recompile even when nothing changed |
 | `--dry-run` | print which targets would compile and why, compile nothing |
 | `--explain` | compile, and print per target why it was compiled or skipped (and per dependency why it was or was not fetched) |
-| `--fetch` | fetch `parameters.kapitan.dependencies` (git, http/https, helm) whose output path is missing before compiling (default: `compile.fetch` from `.kapitan`) |
+| `--fetch` | fetch `parameters.kapitan.dependencies` (git, http/https, helm, oci) whose output path is missing before compiling (default: `compile.fetch` from `.kapitan`) |
 | `--no-fetch` | do not fetch even when `.kapitan` says `fetch: true` |
 | `--force-fetch` | fetch every dependency again and overwrite what exists (default: `compile.force-fetch` from `.kapitan`) |
 | `-p, --parallelism <N>` | worker processes (default: number of CPUs) |
 | `--output-path <DIR>` | where `compiled/` lives (default: `compile.output-path` from `.kapitan`, else `.`) |
 | `--reveal` | reveal refs in the output instead of compiling them (default: `compile.reveal` from `.kapitan`) |
 | `--embed-refs` | embed the ref files' contents in the output instead of writing hashed tags (default: `compile.embed-refs` from `.kapitan`) |
-| `--python <PATH>` | Python used to evaluate kadet components, as it is (with `--backend python`, one with kapitan installed). Default: `$KAPITAN_PYTHON`, else the venv krab builds from `compile.python-requirements` |
+| `--python <PATH>` | Python used to evaluate kadet components, as it is (with `--backend python`, one with kapitan installed). Default: `$KRAB_PYTHON`, else the venv krab builds from `compile.python-requirements` |
 | `--flag <FLAG>` | extra flag passed through to kapitan's compile in the Python backend (e.g. `--indent 4`) |
 | `--backend native\|python` | `native` (default): input types run in Rust, Python only evaluates kadet `main()`. `python`: kapitan's own input types in worker processes |
 
-Staleness is decided per target from `compiled/.kapitan-manifest.json`: the
+Staleness is decided per target from `compiled/.krab-manifest.json`: the
 rendered document digest, every path the previous compile read, the other
 targets consulted through the global inventory, the compiler identity and
 the output tree digest. A full run (no `-t`/`-l`) also removes output
@@ -120,7 +119,7 @@ true` initialises submodules); `type: http`/`https` downloads the file and
 saves it, or with `unpack: true` extracts a tar, tar.gz/tgz or zip archive
 into `output_path`; `type: helm` runs `helm pull --untar` for `chart_name`
 at `version` from `source` (a repository URL or `oci://` reference) and
-keeps versioned charts under `$XDG_CACHE_HOME/kapitan/charts` so a chart
+keeps versioned charts under `$XDG_CACHE_HOME/krab/charts` so a chart
 seen once is never pulled again. `output_path` is relative to
 `--output-path`. As in kapitan, nothing that exists is overwritten unless
 forced; unlike kapitan, a dependency whose output path already exists is
@@ -152,12 +151,12 @@ manifest. `--reveal` decrypts refs into the output instead, and makes the
 `compile.python-requirements` (a list of pip specifiers, or the path of a
 requirements file) names what kadet components import besides `kadet` and
 `jinja2`. krab installs them into a venv of its own under
-`$XDG_CACHE_HOME/kapitan/python/<digest>` on the first compile (with `uv`
+`$XDG_CACHE_HOME/krab/python/<digest>` on the first compile (with `uv`
 when on PATH, else `python3 -m venv` and pip) and evaluates components
-there; a changed list is a new environment. `--python` / `KAPITAN_PYTHON`
+there; a changed list is a new environment. `--python` / `KRAB_PYTHON`
 bypass it.
 
-## `kapitan refs`
+## `krab refs`
 
 Write, reveal, update and validate references (`?{type:path}` tags), with
 kapitan's flags. Ref files live under `--refs-path` (default: `refs.refs-path`
@@ -178,10 +177,10 @@ from `.kapitan`, else `./refs`). Types: `plain`, `base64`, `env`, `gkms`,
 | `--refs-path <DIR>` | where ref files live |
 
 ```sh
-kapitan refs --write gkms:targets/prod/db-password -f password.txt -t prod
-kapitan refs --reveal -f compiled/prod/manifests/secret.yml
-kapitan refs --reveal --tag '?{gkms:targets/prod/db-password}'
-kapitan refs --validate-targets
+krab refs --write gkms:targets/prod/db-password -f password.txt -t prod
+krab refs --reveal -f compiled/prod/manifests/secret.yml
+krab refs --reveal --tag '?{gkms:targets/prod/db-password}'
+krab refs --validate-targets
 ```
 
 Credentials: `gkms` uses application-default credentials
@@ -194,7 +193,7 @@ the inventory's `vault_params` set them; `awskms` and `azkms` call the `aws`
 and `az` command line clients. `env` refs read `KAPITAN_VAR_<name>` at
 reveal time and fall back to the stored value.
 
-## `kapitan server`
+## `krab server`
 
 The daemon is started automatically by the commands above; these manage it.
 
@@ -207,14 +206,15 @@ The daemon is started automatically by the commands above; these manage it.
 | `server run [--idle-timeout <SECS>]` | run in the foreground; this is what `start` launches. Default idle timeout 1800 s |
 
 One daemon per inventory directory and build. Socket:
-`$XDG_RUNTIME_DIR/kapitan/<inventory>-<build>.sock` (fallback
-`/tmp/kapitan-<uid>/`), where `<inventory>` hashes the canonical inventory
+`$XDG_RUNTIME_DIR/krab/<inventory>-<build>.sock` (fallback
+`/tmp/krab-<uid>/`), where `<inventory>` hashes the canonical inventory
 path and `<build>` the binary's version, size and mtime. Two builds pointed
-at the same inventory (a shell's `kapitan` and an editor's `kapitan2`) each
+at the same inventory (the shell's `krab` and a development build the
+editor was pointed at) each
 keep their own daemon rather than restart each other's; a rebuilt binary gets
 a fresh socket and the previous daemon idles out. Log, shared by all builds:
-`$XDG_STATE_HOME/kapitan/server-<inventory>.log` (fallback
-`~/.local/state/kapitan/`).
+`$XDG_STATE_HOME/krab/server-<inventory>.log` (fallback
+`~/.local/state/krab/`).
 
 The daemon binds its socket before the initial render and holds `inventory.*`
 requests until that render is done, so a client's first call waits on the
@@ -226,11 +226,11 @@ The protocol is JSON-RPC 2.0, newline delimited: `server.info`,
 `inventory.classes`, `inventory.explain`, `inventory.deps`,
 `inventory.diagnostics` and `inventory.wait` (a long poll on the generation
 counter). Parameter and result shapes are in
-`crates/kapitan-server/src/protocol.rs`. After starting a daemon the client
+`crates/krab-server/src/protocol.rs`. After starting a daemon the client
 checks that the server answering on its socket is the same build, and
 refuses to use one that is not.
 
-## `kapitan lsp`
+## `krab lsp`
 
 Run the language server over stdio. Editors pass `--stdio`; it is accepted
 and ignored. The working directory must be the repository root (where
@@ -238,22 +238,26 @@ and ignored. The working directory must be the repository root (where
 hover, go to definition, completion (see
 [GETTING-STARTED.md](GETTING-STARTED.md#5-editor)).
 
-## `kapitan completions <bash|zsh|fish|elvish|powershell>`
+## `krab completions <bash|zsh|fish|elvish|powershell>`
 
-Print the completion script: `source <(kapitan completions bash)`. The script
-registers whatever name the command was invoked as, so an install like
-`~/.local/bin/kapitan2 -> .../kapitan` completes as `kapitan2` (run
-`kapitan2 completions bash`). Target names are completed from the daemon.
+Print the completion script: `source <(krab completions bash)`. The script
+registers whatever name the command was invoked as, so a development build
+linked as `~/.local/bin/krab-dev -> .../target/release/krab` completes as
+`krab-dev` (run `krab-dev completions bash`). Target names are completed
+from the daemon.
 
 ## Environment variables
 
 | variable | effect |
 |---|---|
-| `KAPITAN_INVENTORY_PATH` | same as `--inventory-path` |
-| `KAPITAN_NO_DAEMON` | same as `--no-daemon` |
-| `KAPITAN_PYTHON` | same as `--python` for compile (that interpreter as it is, instead of the venv krab builds); for Python resolvers it overrides `inventory.python-resolvers.python` in `.kapitan` (the per-machine override of a shared setting) |
-| `KAPITAN_PYTHON_REQUIREMENTS` | specifiers added to the venv krab builds, for this machine only, one per line: `kadet==0.3.1`, `kadet @ file:///home/me/kadet`, or `-e /home/me/kadet` for an editable checkout. A named `kadet` or `jinja2` replaces krab's baseline entry |
-| `RUST_LOG` | log filter (`kapitan_server=debug`, ...) |
+| `KRAB_INVENTORY_PATH` | same as `--inventory-path` |
+| `KRAB_NO_DAEMON` | same as `--no-daemon` |
+| `KRAB_PYTHON` | same as `--python` for compile (that interpreter as it is, instead of the venv krab builds); for Python resolvers it overrides `inventory.python-resolvers.python` in `.kapitan` (the per-machine override of a shared setting) |
+| `KRAB_PYTHON_REQUIREMENTS` | specifiers added to the venv krab builds, for this machine only, one per line: `kadet==0.3.1`, `kadet @ file:///home/me/kadet`, or `-e /home/me/kadet` for an editable checkout. A named `kadet` or `jinja2` replaces krab's baseline entry |
+| `RUST_LOG` | log filter (`krab_server=debug`, ...) |
+
+The `KAPITAN_*` spellings of the first four (`KAPITAN_PYTHON`, ...) still
+work in this release and print a note; they go away in the next.
 | `XDG_RUNTIME_DIR`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` | where the socket, log and worker cache live |
 
 The `oc.env` resolver reads the environment of the process that renders,
@@ -270,11 +274,11 @@ itself uses:
 | `inventory-path` | `compile`, `inventory`, `global` | inventory directory |
 | `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout |
 | `inventory-backend` | `global` | informational; only `omegaconf` semantics are implemented |
-| `indent` | `inventory` | YAML indentation for `kapitan inventory` |
-| `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for kapitan compile |
+| `indent` | `inventory` | YAML indentation for `krab inventory` |
+| `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for krab compile |
 | `refs-path`, `embed-refs`, `reveal` | `compile` | where ref files live, embed them, reveal them |
 | `python-requirements` | `compile` | packages kadet components import; installed into krab's own venv |
-| `refs-path` | `refs` | where `kapitan refs` looks for ref files |
+| `refs-path` | `refs` | where `krab refs` looks for ref files |
 | `multiline-string-style` | `inventory` | multiline string style for compiled YAML |
 
 ## JSON output
