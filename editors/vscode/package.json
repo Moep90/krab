@@ -16,8 +16,8 @@
       "properties": {
         "kapitan.path": {
           "type": "string",
-          "default": "kapitan",
-          "description": "Path to the kapitan binary (must support `kapitan lsp`). Use the same binary as your shell: the daemon it starts serves both."
+          "default": "krab",
+          "description": "Path to the krab binary (must support `krab lsp`). Use the same binary as your shell: the daemon it starts serves both."
         },
         "kapitan.python": {
           "type": "string",

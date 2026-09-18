@@ -677,8 +677,8 @@ fn to_lsp_diagnostic(
             severity: Some(severity),
             code: Some(NumberOrString::String(d.code.to_string())),
             source: Some(match d.target {
-                Some(ref t) => format!("kapitan ({t})"),
-                None => "kapitan".into(),
+                Some(ref t) => format!("krab ({t})"),
+                None => "krab".into(),
             }),
             message,
             related_information: if related.is_empty() {

@@ -1,8 +1,8 @@
 //! Kapitan references (`?{type:path}` tags), mirroring `kapitan/refs` of
 //! kapitan 0.36.3: compiling tags into output (the short `?{type:path:hash}`
 //! form, the `--embed-refs` payload, or a fresh ref created from
-//! `||functions`), revealing them (`--reveal`, `kapitan refs --reveal`) and
-//! writing them (`kapitan refs --write`).
+//! `||functions`), revealing them (`--reveal`, `krab refs --reveal`) and
+//! writing them (`krab refs --write`).
 //!
 //! Ref files are YAML mappings under the refs path (`data`, `encoding`,
 //! `type`, plus `key` for the KMS backends, `recipients` for gpg and
@@ -475,7 +475,7 @@ impl RefController {
         let type_name = attrs.next().unwrap_or("");
         let path = attrs.next().unwrap_or("");
         RefError(format!(
-            "reference {type_name}:{path} not found under {} (run `kapitan refs --write {type_name}:{path} -f <file>` to create it)",
+            "reference {type_name}:{path} not found under {} (run `krab refs --write {type_name}:{path} -f <file>` to create it)",
             self.refs_path.display()
         ))
     }
@@ -739,7 +739,7 @@ impl RefController {
         Ok(Some(r))
     }
 
-    /// The ref stored in a ref file anywhere on disk (`kapitan refs --ref-file`).
+    /// The ref stored in a ref file anywhere on disk (`krab refs --ref-file`).
     pub fn ref_from_file(&self, path: &Path) -> Result<Ref, RefError> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| RefError(format!("cannot read {}: {e}", path.display())))?;

@@ -240,7 +240,7 @@ pub fn compile(
         for t in &selection.targets {
             if !all_digests.contains_key(t) {
                 return Err(format!(
-                    "target `{t}` not found; list targets with `kapitan inventory targets`"
+                    "target `{t}` not found; list targets with `krab inventory targets`"
                 ));
             }
         }

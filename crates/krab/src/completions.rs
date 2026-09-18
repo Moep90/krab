@@ -31,7 +31,7 @@ impl Shell {
 
 /// Print the registration script. Completion of subcommands, flags and target
 /// names is computed live by the binary (`COMPLETE=<shell> <name>`), where
-/// `<name>` is whatever this process was invoked as (`kapitan`, `kapitan2`, a
+/// `<name>` is whatever this process was invoked as (`krab`, `krab-dev`, a
 /// path), so a renamed or symlinked install completes under its own name.
 pub fn print_registration(shell: Shell) -> std::io::Result<()> {
     let shells = clap_complete::env::Shells::builtins();
@@ -46,14 +46,14 @@ pub fn print_registration(shell: Shell) -> std::io::Result<()> {
 
 /// How this process was started: `argv[0]` as the shell passed it. Not
 /// `current_exe()`, which follows symlinks and would report the link target
-/// (`kapitan`) for an install like `~/.local/bin/kapitan2 -> .../kapitan`.
+/// (`krab`) for an install like `~/.local/bin/krab-dev -> .../krab`.
 fn invoked_as() -> PathBuf {
     std::env::args_os()
         .next()
         .filter(|a| !a.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::current_exe().ok())
-        .unwrap_or_else(|| PathBuf::from("kapitan"))
+        .unwrap_or_else(|| PathBuf::from("krab"))
 }
 
 /// The command name to register completion for and the completer the shell
@@ -63,7 +63,7 @@ fn registration_names(invoked: &Path, cwd: Option<&Path>) -> (String, String) {
     let name = invoked
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "kapitan".into());
+        .unwrap_or_else(|| "krab".into());
     let mut completer = invoked.to_path_buf();
     if completer.components().count() > 1 {
         if let Some(cwd) = cwd {
@@ -102,19 +102,17 @@ mod tests {
 
     #[test]
     fn bare_name_is_kept_for_path_lookup() {
-        let (name, bin) = registration_names(Path::new("kapitan2"), Some(Path::new("/work")));
-        assert_eq!(name, "kapitan2");
-        assert_eq!(bin, "kapitan2");
+        let (name, bin) = registration_names(Path::new("krab-dev"), Some(Path::new("/work")));
+        assert_eq!(name, "krab-dev");
+        assert_eq!(bin, "krab-dev");
     }
 
     #[test]
     fn relative_path_is_anchored_to_cwd() {
-        let (name, bin) = registration_names(
-            Path::new("target/release/kapitan"),
-            Some(Path::new("/work")),
-        );
-        assert_eq!(name, "kapitan");
-        assert_eq!(bin, "/work/target/release/kapitan");
+        let (name, bin) =
+            registration_names(Path::new("target/release/krab"), Some(Path::new("/work")));
+        assert_eq!(name, "krab");
+        assert_eq!(bin, "/work/target/release/krab");
     }
 
     #[test]

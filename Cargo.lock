@@ -827,25 +827,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "kapitan"
-version = "2.0.0-alpha.3"
-dependencies = [
- "clap",
- "clap_complete",
- "kapitan-compile",
- "kapitan-inventory",
- "kapitan-lsp",
- "kapitan-server",
- "libc",
- "miette",
- "parking_lot",
- "serde",
- "serde_json",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "kapitan-compile"
 version = "2.0.0-alpha.3"
 dependencies = [
@@ -940,6 +921,25 @@ checksum = "07293a4e297ac234359b510362495713f75ea345d5307140414f20c69ffeb087"
 dependencies = [
  "bitflags 2.13.2",
  "libc",
+]
+
+[[package]]
+name = "krab"
+version = "2.0.0-alpha.3"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "kapitan-compile",
+ "kapitan-inventory",
+ "kapitan-lsp",
+ "kapitan-server",
+ "libc",
+ "miette",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

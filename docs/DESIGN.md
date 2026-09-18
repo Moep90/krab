@@ -141,7 +141,7 @@ miette (source snippets) or as JSON lines (`--json`).
 ## Server (`kapitan-server`)
 
 One daemon per inventory directory, started on demand by the CLI (or with
-`kapitan server start`), exiting after 30 minutes without requests.
+`krab server start`), exiting after 30 minutes without requests.
 
 * **State**: the `Inventory` (with its file and class-closure caches), the
   rendered targets, the failed targets with their diagnostics, and an index
@@ -157,7 +157,7 @@ One daemon per inventory directory, started on demand by the CLI (or with
 * **Protocol**: JSON-RPC 2.0, newline delimited, over
   `$XDG_RUNTIME_DIR/kapitan/<hash of inventory path>-<hash of build>.sock`
   (see `protocol.rs` for the method list). `inventory.wait` is a long poll on
-  the generation counter; `kapitan inventory watch` is a thin client of it.
+  the generation counter; `krab inventory watch` is a thin client of it.
   The socket is bound before the initial render; `inventory.*` requests wait
   for the render, `server.*` ones answer at once (`ready: false`).
 * **Parity**: the CLI uses the server when it can and renders locally

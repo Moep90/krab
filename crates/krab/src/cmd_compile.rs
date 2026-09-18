@@ -1,4 +1,4 @@
-//! `kapitan compile`: incremental compilation of the targets that need it.
+//! `krab compile`: incremental compilation of the targets that need it.
 
 use std::collections::BTreeMap;
 
@@ -40,7 +40,7 @@ pub struct CompileArgs {
     #[arg(long)]
     explain: bool,
 
-    /// Fetch `parameters.kapitan.dependencies` (git, http, helm) whose
+    /// Fetch `parameters.kapitan.dependencies` (git, http, helm, oci) whose
     /// output path is missing (default: `compile.fetch` from .kapitan)
     #[arg(long, overrides_with = "no_fetch")]
     fetch: bool,
@@ -475,7 +475,7 @@ impl DocSource for AppDocs<'_> {
             }
             if !failed.is_empty() {
                 return Err(format!(
-                    "{} target(s) fail to render ({}…); fix the inventory first (`kapitan inventory check`)",
+                    "{} target(s) fail to render ({}…); fix the inventory first (`krab inventory check`)",
                     failed.len(),
                     failed[..failed.len().min(3)].join(", ")
                 ));

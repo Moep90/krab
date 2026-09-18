@@ -346,7 +346,7 @@ impl Server {
                 "inventory::unknown_target",
                 format!("target `{name}` not found"),
             )
-            .with_help("list targets with `kapitan inventory targets`"),
+            .with_help("list targets with `krab inventory targets`"),
         ))
     }
 

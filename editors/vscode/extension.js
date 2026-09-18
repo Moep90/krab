@@ -1,4 +1,4 @@
-// Starts `kapitan lsp` for every workspace folder that holds a `.kapitan`
+// Starts `krab lsp` for every workspace folder that holds a `.kapitan`
 // file and connects it to YAML documents under that folder.
 const path = require("path");
 const fs = require("fs");
@@ -28,7 +28,7 @@ async function startClient(root) {
   const python = config.get("python", "");
   if (python) env.KAPITAN_PYTHON = python;
   const serverOptions = {
-    command: config.get("path", "kapitan"),
+    command: config.get("path", "krab"),
     args: ["lsp"],
     options: { cwd: root, env },
     transport: TransportKind.stdio,

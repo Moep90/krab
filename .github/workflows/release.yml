@@ -1,7 +1,7 @@
 # Builds the release artifacts and attaches them to the GitHub release.
 #
 # Pushing a tag `vX.Y.Z` (matching the workspace version in Cargo.toml)
-# builds the `kapitan` binary for Linux (x86_64, aarch64; glibc 2.35+) and
+# builds the `krab` binary for Linux (x86_64, aarch64; glibc 2.35+) and
 # macOS (Intel, Apple silicon), packages the VS Code extension, and creates
 # the release with generated notes, or uploads to it if it already exists.
 # Tags with a pre-release suffix (`v2.0.0-alpha.1`) are marked pre-release.
@@ -32,7 +32,7 @@ jobs:
       - id: version
         run: |
           version=$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[] | select(.name == "kapitan") | .version')
+            | jq -r '.packages[] | select(.name == "krab") | .version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
             echo "::error::tag $GITHUB_REF_NAME does not match the workspace version $version in Cargo.toml"
@@ -40,7 +40,7 @@ jobs:
           fi
 
   binary:
-    name: kapitan (${{ matrix.target }})
+    name: krab (${{ matrix.target }})
     needs: version
     runs-on: ${{ matrix.os }}
     strategy:
@@ -70,17 +70,17 @@ jobs:
           echo "CARGO_TARGET_${triple^^}_LINKER=${{ matrix.cross }}-gcc" >> "$GITHUB_ENV"
           echo "CC_${triple}=${{ matrix.cross }}-gcc" >> "$GITHUB_ENV"
           echo "AR_${triple}=${{ matrix.cross }}-ar" >> "$GITHUB_ENV"
-      - run: cargo build --release --locked -p kapitan --target ${{ matrix.target }}
+      - run: cargo build --release --locked -p krab --target ${{ matrix.target }}
       - name: Package
         run: |
-          name=kapitan-${{ needs.version.outputs.version }}-${{ matrix.target }}
+          name=krab-${{ needs.version.outputs.version }}-${{ matrix.target }}
           mkdir "$name"
-          cp target/${{ matrix.target }}/release/kapitan LICENSE README.md "$name/"
+          cp target/${{ matrix.target }}/release/krab LICENSE README.md "$name/"
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v4
         with:
-          name: kapitan-${{ matrix.target }}
-          path: kapitan-*.tar.gz
+          name: krab-${{ matrix.target }}
+          path: krab-*.tar.gz
           if-no-files-found: error
 
   vscode:

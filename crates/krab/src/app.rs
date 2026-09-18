@@ -116,7 +116,7 @@ impl App {
         let inv = Inventory::new(cfg, Arc::new(registry));
         let connector = (!no_daemon && !raw).then(|| Connector {
             inventory_root: inventory_path.clone(),
-            exe: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("kapitan")),
+            exe: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("krab")),
             version: build_version(),
             idle_timeout: Duration::from_secs(1800),
         });
