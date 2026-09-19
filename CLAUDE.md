@@ -30,9 +30,9 @@ cargo test -p krab-inventory fixture::name_of_case   # one case
 Tests that need more than cargo:
 
 * `crates/krab-inventory/tests/python_resolvers.rs` and the kadet evaluator test
-  (`crates/krab-compile/tests/kadet_runner.rs`) need a `python3`; the latter
-  needs `kadet` and `jinja2` importable and skips otherwise. CI installs
-  `pyyaml omegaconf kadet jinja2`.
+  (`crates/krab-compile/tests/kadet_runner.rs`) need a `python3` with `pyyaml`,
+  `omegaconf`, `kadet` and `jinja2` importable. The kadet test skips without
+  them; `.github/workflows/ci.yml` has the versions CI uses.
 * The corpus test (`crates/krab-inventory/tests/corpus.rs`) runs only when
   `KRAB_CORPUS` and `KRAB_COMPILED` point at a real inventory and reference
   output.
