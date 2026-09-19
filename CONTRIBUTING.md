@@ -127,16 +127,6 @@ which workflow and which commit produced the binary they downloaded:
 gh attestation verify <the archive you downloaded> --repo kapicorp/krab
 ```
 
-## Publishing
-
-The crates are `publish = false` and cannot go to crates.io as they stand.
-`[patch.crates-io]` replaces `saphyr-parser` with the patched copy in
-`vendor/`, and cargo strips patch sections when it packages a crate: a
-published `krab-inventory` would resolve against the unpatched crate on
-crates.io and silently lose the PyYAML compatibility fixes. `cargo install
-krab` needs the fork published under a name of its own, or the patches
-upstream, first. Releases ship prebuilt binaries, which are unaffected.
-
 ## Layout and conventions
 
 * `krab-inventory` is the library entry point and must stay free of
@@ -157,3 +147,13 @@ upstream, first. Releases ship prebuilt binaries, which are unaffected.
 `docs/DESIGN.md` the semantics. Open work is tracked as issues on the
 krab roadmap project board (https://github.com/orgs/kapicorp/projects/5);
 `docs/ROADMAP.md` points there.
+
+## Publishing
+
+The crates are `publish = false` and cannot go to crates.io as they stand.
+`[patch.crates-io]` replaces `saphyr-parser` with the patched copy in
+`vendor/`, and cargo strips patch sections when it packages a crate: a
+published `krab-inventory` would resolve against the unpatched crate on
+crates.io and silently lose the PyYAML compatibility fixes. `cargo install
+krab` needs the fork published under a name of its own, or the patches
+upstream, first. Releases ship prebuilt binaries, which are unaffected.
