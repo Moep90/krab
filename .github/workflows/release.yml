@@ -3,7 +3,7 @@
 # Pushing a tag `vX.Y.Z` (matching the workspace version in Cargo.toml)
 # builds the `krab` binary for Linux (x86_64, aarch64; glibc 2.35+) and
 # macOS (Intel, Apple silicon), packages the VS Code extension, and creates
-# the release with generated notes, or uploads to it if it already exists.
+# the release with notes from the commit log, or uploads to it if it exists.
 # Tags with a pre-release suffix (`v2.0.0-alpha.1`) are marked pre-release.
 #
 # Run it by hand (workflow_dispatch) to build the artifacts from any branch
@@ -36,6 +36,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: version
         run: |
           version=$(cargo metadata --no-deps --format-version 1 \
@@ -66,25 +68,21 @@ jobs:
             os: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install the pinned toolchain
         run: |
           rustup show active-toolchain
           rustup target add ${{ matrix.target }}
-      - name: Install the cross toolchain
-        if: matrix.cross
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-${{ matrix.cross }}
-          triple=$(echo "${{ matrix.target }}" | tr '-' '_')
-          echo "CARGO_TARGET_${triple^^}_LINKER=${{ matrix.cross }}-gcc" >> "$GITHUB_ENV"
-          echo "CC_${triple}=${{ matrix.cross }}-gcc" >> "$GITHUB_ENV"
-          echo "AR_${triple}=${{ matrix.cross }}-ar" >> "$GITHUB_ENV"
       - run: cargo build --release --locked -p krab --target ${{ matrix.target }}
       - name: Package
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET: ${{ matrix.target }}
         run: |
-          name=krab-${{ needs.version.outputs.version }}-${{ matrix.target }}
+          name="krab-$VERSION-$TARGET"
           mkdir "$name"
-          cp target/${{ matrix.target }}/release/krab LICENSE README.md "$name/"
+          cp "target/$TARGET/release/krab" LICENSE README.md "$name/"
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -102,11 +100,14 @@ jobs:
         working-directory: editors/vscode
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No dependency cache here: this job's output is published, and a cache
+      # entry poisoned by an earlier run would ride along into the release.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: editors/vscode/package-lock.json
+          package-manager-cache: false
       - run: npm ci
       - run: npm run package
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -131,6 +132,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
