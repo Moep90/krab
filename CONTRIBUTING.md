@@ -7,7 +7,8 @@
 builds with no system dependencies.
 
 `rust-version` in `Cargo.toml` is a different number: the oldest toolchain
-krab still compiles on.
+krab still compiles on. It is not repeated in prose anywhere, so there is
+nothing to keep in sync; cargo names the version it needs if yours is older.
 
 ```sh
 cargo build --release            # target/release/krab
