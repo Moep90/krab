@@ -69,12 +69,40 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # The Python resolver tests run a user resolvers.py in python3; PyYAML
       # and omegaconf make the fixture parity test run against the real package.
-      # kadet and jinja2 let the kadet evaluator test run.
+      # kadet and jinja2 let the kadet evaluator test run. omegaconf is held
+      # at the version the reference implementation needs, so this job and the
+      # parity job exercise the same one.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install pyyaml omegaconf kadet jinja2
+      - run: pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2
       - run: cargo test --locked
+
+  parity:
+    # tests/fixtures/expected is what kapitan 0.36.3 prints. Regenerating it
+    # here means a hand-written expectation cannot pass review.
+    name: Reference parity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      # omegaconf is pinned because kapitan 0.36.3 accepts >=2.4.0.dev3, and
+      # 2.4.0.dev15 dropped ListMergeMode, which its omegaconf backend imports.
+      - run: pip install "kapitan[omegaconf]==0.36.3" "omegaconf==2.4.0.dev3"
+      - run: python tests/fixtures/generate_expected.py
+      - name: Expected output is still what the reference prints
+        run: |
+          git add -A tests/fixtures/expected
+          git diff --cached --exit-code -- tests/fixtures/expected || {
+            echo "::error::tests/fixtures/expected no longer matches kapitan 0.36.3. Regenerate it (see tests/fixtures/README.md) and commit the result."
+            exit 1
+          }
 
   msrv:
     # rust-version in Cargo.toml is a promise to anyone building from source.
@@ -179,3 +207,23 @@ jobs:
         with:
           name: krab-vscode
           path: editors/vscode/*.vsix
+
+  # Branch protection cannot require a job that is conditionally skipped, and
+  # `deny` is one. Requiring this single check instead means a skipped job
+  # passes and a failed or cancelled one does not.
+  required:
+    name: CI passed
+    if: always()
+    needs: [lint, test, parity, msrv, deny, zizmor, vscode]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Every job succeeded or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          if jq -e 'to_entries[] | select(.value.result != "success" and .value.result != "skipped")' <<<"$RESULTS" >/dev/null; then
+            echo "::error::a required job did not pass"
+            exit 1
+          fi
