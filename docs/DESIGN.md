@@ -52,7 +52,7 @@ directory follows: `compiled/app/` against `compiled/prod/app/`. `name.path`
 
 Two files that end up with one name are an `inventory::conflicting_targets`
 diagnostic naming both. The reference renders nothing at all in that case, and
-says nothing.
+says nothing (`docs/DECISIONS.md`, D7).
 
 ## Class resolution
 
