@@ -252,7 +252,13 @@ Three things, in order of how much they should change your plans:
   than the reference: jinja2, copy and external all take part in target-level
   staleness while only kadet produces item records. The `Freshness` field
   proposed in `docs/exec-plans/16-external-freshness.md` is `cacheable()` under
-  another name, made mandatory rather than defaulted.
+  another name, made mandatory rather than defaulted. A second check points the
+  same way: of the six corpora in [#128](https://github.com/kapicorp/krab/issues/128),
+  only corpus D uses `external`, and D's entire compile is 0.6 s of real work,
+  so always rebuilding those targets costs a fraction of that. **Left open
+  deliberately**: the evidence favours Option A, and no decision has been taken.
+  F2 and F3 are filed as [#152](https://github.com/kapicorp/krab/issues/152) and
+  fold into this work if D3 produces a general definition of an input.
 
 I did not resolve D1-D5 myself because each changes what gets built, not merely
 how.
