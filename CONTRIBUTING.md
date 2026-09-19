@@ -19,7 +19,12 @@ One issue, one branch, one PR.
 
 ## Build
 
-Rust 1.85 or newer. The workspace builds with no system dependencies.
+`rust-toolchain.toml` pins the compiler; rustup installs it, `rustfmt` and
+`clippy` on the first `cargo` command you run in the tree. The workspace
+builds with no system dependencies.
+
+`rust-version` in `Cargo.toml` is a different number: the oldest toolchain
+krab still compiles on. CI checks it, day-to-day work does not use it.
 
 ```sh
 cargo build --release            # target/release/krab

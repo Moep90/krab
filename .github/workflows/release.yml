@@ -15,8 +15,13 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
-permissions:
-  contents: read
+# One release build per tag at a time, and never cancel one: a half-uploaded
+# release is worse than a redundant build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,10 +30,12 @@ jobs:
   version:
     name: Version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: version
         run: |
           version=$(cargo metadata --no-deps --format-version 1 \
@@ -43,6 +50,8 @@ jobs:
     name: krab (${{ matrix.target }})
     needs: version
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -57,10 +66,11 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned toolchain
+        run: |
+          rustup show active-toolchain
+          rustup target add ${{ matrix.target }}
       - name: Install the cross toolchain
         if: matrix.cross
         run: |
@@ -77,7 +87,7 @@ jobs:
           mkdir "$name"
           cp target/${{ matrix.target }}/release/krab LICENSE README.md "$name/"
           tar czf "$name.tar.gz" "$name"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: krab-${{ matrix.target }}
           path: krab-*.tar.gz
@@ -86,19 +96,21 @@ jobs:
   vscode:
     name: VS Code extension
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: editors/vscode
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
       - run: npm ci
       - run: npm run package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: krab-vscode
           path: editors/vscode/*.vsix
@@ -112,7 +124,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           merge-multiple: true
