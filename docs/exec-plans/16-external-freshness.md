@@ -121,9 +121,22 @@ there, and only a type that can report what it read may opt in. The `Freshness`
 field below is that same rule, made mandatory rather than defaulted, and it
 extends to cue and kustomize whenever krab implements them natively.
 
-Still worth checking before committing: do any of the inventories in the audit
-(issue #128) actually use `external`, and how slow are those items? One grep and
-one timing run by someone with access.
+**Checked, and it points the same way.** Of the six corpora in issue #128,
+exactly one uses `external`: corpus D, "5 targets, kadet + jinja2 + copy +
+external + jsonnet". D is also the repository where krab is already a drop-in,
+with 39 of 39 compiled files byte-identical. Its full compile is recorded at
+6.4 s for the reference against 2.2 s for krab, of which 0.6 s is real work. An
+`external` target rebuilding every run therefore costs a fraction of 0.6 s in
+the only audited inventory that would be affected.
+
+Not established, and a five-minute check for someone with access to D: how many
+of its 5 targets use `external`, and whether the script itself is expensive. A
+`grep -r 'input_type: external'` plus per-target timings from `krab compile
+--force` answers both. An inventory outside the audit could also use it more
+heavily.
+
+**Decision status: deliberately left open.** The evidence favours Option A and
+no decision has been taken.
 
 ### Scope of issue #16 versus this plan
 
