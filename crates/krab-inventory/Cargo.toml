@@ -19,3 +19,6 @@ sha2 = { workspace = true }
 md-5 = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
+
+[lints]
+workspace = true

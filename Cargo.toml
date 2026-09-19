@@ -9,6 +9,20 @@ license = "Apache-2.0"
 repository = "https://github.com/kapicorp/krab"
 rust-version = "1.90"
 
+# Lints every crate inherits via `[lints] workspace = true`. This table chooses
+# which lints; CI decides how hard they bite (CARGO_BUILD_WARNINGS=deny), so a
+# working copy still builds with a warning in it.
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+get_unwrap = "warn"
+# Only the krab binary formats output; the libraries return values. main.rs
+# opts out for the whole crate.
+print_stdout = "warn"
+print_stderr = "warn"
+undocumented_unsafe_blocks = "warn"
+
 [workspace.dependencies]
 krab-inventory = { path = "crates/krab-inventory" }
 krab-server = { path = "crates/krab-server" }

@@ -22,7 +22,10 @@ permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+  # Not RUSTFLAGS: that is part of the build fingerprint and of the cache key,
+  # so setting it there costs a full rebuild and a cache miss on every run.
+  # build.warnings does the same job without either (Cargo 1.97 and newer).
+  CARGO_BUILD_WARNINGS: deny
 
 jobs:
   lint:
@@ -74,6 +77,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # build.warnings landed in Cargo 1.97 and the oldest supported toolchain
+      # predates it. This job answers "does it compile", not "is it tidy".
+      CARGO_BUILD_WARNINGS: warn
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check on the oldest supported toolchain
