@@ -105,13 +105,14 @@ The release notes come from `git-cliff`, grouped by the `area:` prefix of
 each commit (`cliff.toml`). To see what the next tag would say:
 
 ```sh
-git cliff --unreleased --tag v2.0.0-alpha.5
+git cliff --unreleased
 ```
 
-Each archive carries a build provenance attestation:
+Each archive carries a build provenance attestation, so anyone can check
+which workflow and which commit produced the binary they downloaded:
 
 ```sh
-gh attestation verify krab-2.0.0-alpha.4-x86_64-unknown-linux-gnu.tar.gz --repo kapicorp/krab
+gh attestation verify <the archive you downloaded> --repo kapicorp/krab
 ```
 
 ## Layout and conventions
