@@ -1,6 +1,7 @@
-# Checks every pull request and every push to main: formatting, clippy,
-# the unit and fixture tests (the Python resolver tests need python3), and
-# that the VS Code extension still packages.
+# Checks every pull request and every push to main: formatting and clippy,
+# the unit and fixture tests on Linux and macOS (the Python resolver tests
+# need python3), that the workspace still builds on the oldest toolchain it
+# claims to support, and that the VS Code extension still packages.
 #
 # The toolchain comes from rust-toolchain.toml, so CI and a working copy
 # build with the same compiler and the same components.
@@ -24,11 +25,32 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
-  rust:
-    name: Rust
+  lint:
+    name: Format and clippy
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned toolchain
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --locked
+
+  test:
+    # krab holds a unix socket, spawns python3, watches the filesystem and
+    # builds paths by hand. Releases ship macOS binaries, so macOS is tested.
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned toolchain
@@ -43,9 +65,24 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pyyaml omegaconf kadet jinja2
-      - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --locked
       - run: cargo test --locked
+
+  msrv:
+    # rust-version in Cargo.toml is a promise to anyone building from source.
+    # The number is read from the manifest so it lives in exactly one place.
+    name: Minimum supported Rust version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check on the oldest supported toolchain
+        run: |
+          msrv=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "krab") | .rust_version')
+          echo "rust-version in Cargo.toml is $msrv"
+          rustup toolchain install "$msrv" --profile minimal
+          cargo "+$msrv" check --locked --all-targets
 
   vscode:
     name: VS Code extension

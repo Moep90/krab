@@ -7,7 +7,7 @@ version = "2.0.0-alpha.4"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/kapicorp/krab"
-rust-version = "1.85"
+rust-version = "1.90"
 
 [workspace.dependencies]
 krab-inventory = { path = "crates/krab-inventory" }
