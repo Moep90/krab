@@ -12,7 +12,7 @@ One issue, one branch, one PR.
 2. The fixture case comes first. Add it to `tests/fixtures/inventory` and
    regenerate the expected output with the reference, so the test fails for the
    reason the issue describes before anything is implemented.
-3. Implement, then run `cargo test --release`, plus the parity check below for
+3. Implement, then run `cargo test --locked`, plus the parity check below for
    anything that touches the engine.
 4. A deliberate difference from the reference gets a row in
    `docs/DECISIONS.md` in the same PR. Otherwise it is a bug.
@@ -28,10 +28,13 @@ krab still compiles on. CI checks it, day-to-day work does not use it.
 
 ```sh
 cargo build --release            # target/release/krab
-cargo fmt --all
-cargo clippy --all-targets --release
-cargo test --release
+cargo fmt --all --check
+cargo clippy --all-targets --locked
+cargo test --locked
 ```
+
+The last three are what CI runs and what the pull request template asks you
+to tick.
 
 Put `target/release/krab` on your `PATH` (a symlink is fine). The name
 does not collide with the Python `kapitan`, so both stay installed side by
@@ -41,7 +44,7 @@ stops every build's daemon for the inventory).
 
 ## Tests
 
-* `cargo test --release` runs the unit tests and the fixture test.
+* `cargo test --locked` runs the unit tests and the fixture test.
   `tests/fixtures/inventory` is a small inventory exercising class
   resolution, list merging, merge-time dereferencing, every shipped
   resolver, YAML 1.1 scalars and PyYAML emitter quirks;

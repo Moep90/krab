@@ -103,6 +103,7 @@ target names.
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | installing, the daemon, inspecting an inventory, compiling, editor setup |
 | [docs/CLI.md](docs/CLI.md) | every command and flag, environment variables, `.kapitan` keys |
 | [docs/DESIGN.md](docs/DESIGN.md) | the data model, the exact merge and interpolation semantics, provenance, the server protocol, how compile decides what is stale |
+| [docs/architecture.md](docs/architecture.md) | where things live: crate layering, a code map per crate, the invariants that cut across them |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | every deliberate difference from the reference implementation, and why |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | current status and a pointer to the project board where planned work is tracked |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | building, testing, checking parity against the reference implementation |
