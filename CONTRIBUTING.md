@@ -118,15 +118,40 @@ git push origin v2.0.0-alpha.4
 ```
 
 `.github/workflows/release.yml` refuses a tag that does not match the
-workspace version, builds `krab` for Linux x86_64 and aarch64 (on
-Ubuntu 22.04, so glibc 2.35 or newer) and for macOS Intel and Apple silicon,
-packages the extension, and creates the GitHub release with generated notes,
+workspace version, builds `krab` for Linux x86_64 and aarch64 (each on its
+own Ubuntu 22.04 runner, so glibc 2.35 or newer) and for macOS Intel and
+Apple silicon, packages the extension, and creates the GitHub release with
 the four `krab-<version>-<target>.tar.gz` archives, the `.vsix` and a
 `SHA256SUMS` file. A tag with a pre-release suffix (`-alpha.1`) becomes a
 pre-release. If the release already exists (created from the GitHub UI, for
 example) the assets are uploaded to it instead. Running the workflow by hand
 from the Actions tab builds the same artifacts from any branch without
 publishing anything.
+
+The release notes come from `git-cliff`, grouped by the `area:` prefix of
+each commit (`cliff.toml`). To see what the next tag would say:
+
+```sh
+git cliff --unreleased --tag v2.0.0-alpha.5
+```
+
+Each archive carries a build provenance attestation, so anyone can check
+which workflow and which commit produced the binary they downloaded:
+
+```sh
+gh attestation verify krab-2.0.0-alpha.4-x86_64-unknown-linux-gnu.tar.gz --repo kapicorp/krab
+```
+
+## Publishing
+
+The crates are `publish = false` and cannot go to crates.io as they stand.
+`[patch.crates-io]` replaces `saphyr-parser` with the patched copy in
+`vendor/`, and cargo strips patch sections when it packages a crate: a
+published `krab-inventory` would resolve against the unpatched crate on
+crates.io and silently lose the PyYAML compatibility fixes, which is worse
+than not publishing. `cargo install krab` needs the fork published under a
+name of its own, or the patches upstream, first. Releases ship prebuilt
+binaries, which are unaffected.
 
 ## Layout and conventions
 
