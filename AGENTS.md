@@ -60,7 +60,7 @@ daemon socket, so a dev build and the installed release coexist.
 
 ## Architecture
 
-`docs/architecture.md` is the guided tour: the crate layering, a code map per
+`docs/ARCHITECTURE.md` is the guided tour: the crate layering, a code map per
 crate, and the four cross-cutting invariants (provenance, Python-compatible
 equality and stringification, `Diagnostic` errors, daemon/local parity).
 Read it before changing anything across crate boundaries.
