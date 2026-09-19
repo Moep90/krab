@@ -225,6 +225,35 @@ Three things, in order of how much they should change your plans:
 | D4 | Is byte-identical to kapitan 0.36.3 with the OmegaConf backend still the sole compatibility target? [#118](https://github.com/kapicorp/krab/issues/118) and [#119](https://github.com/kapicorp/krab/issues/119) report inventories that the reference runs on reclass and a `.kapitan` `version:` key that Krab ignores. | I assumed yes throughout, per `CONTRIBUTING.md`. If the answer is no, the compatibility matrix in Section 5 needs a second column. It also decides whether an inventory-backend boundary is justified at all, or whether the correct fix for [#118](https://github.com/kapicorp/krab/issues/118) is a ten-line guard. | all, and the inventory-backend row in Section 6 |
 | D5 | Do you want a compile-level golden fixture at all, or is parity against real inventories (the #128 method) the intended oracle? PR [#97](https://github.com/kapicorp/krab/pull/97) explicitly defers this. | Determines whether M2 is worth doing. | M2 |
 
+### 1.5 Decisions taken since
+
+* **D1: answered.** Reported publicly, as
+  [#144](https://github.com/kapicorp/krab/issues/144)-[#150](https://github.com/kapicorp/krab/issues/150).
+* **D5: both.** A committed compile fixture running in CI on every change, and
+  the real-inventory comparison retained as the periodic deeper check. They
+  catch different things.
+* **D4: reclass eventually.** Supporting reclass is accepted scope, so a backend
+  boundary is justified rather than only a guard. Every compatibility claim in
+  Section 5 gains a second column when that work starts. The ten-line refusal
+  for [#118](https://github.com/kapicorp/krab/issues/118) remains correct in the
+  meantime and should not wait.
+* **D2: under investigation.** Whether any deployment shares a daemon across
+  accounts decides mode bits versus a `SO_PEERCRED` allowlist. The exposure in
+  [#150](https://github.com/kapicorp/krab/issues/150) stays open until then, and
+  it matters most on CI and container hosts.
+* **D3: evidence gathered, not yet decided.** Asked whether kapitan's other
+  opaque input types settle it. They do. `kapitan/inputs/base.py` defines
+  `cacheable() -> False` and an abstract `inputs_hash`, and **only `kadet`
+  overrides them**. `cuelang`, `kustomize`, `jsonnet`, `helm`, `external`,
+  `jinja2` and `copy` are all non-cacheable in the reference. So caching there
+  is opt-in, and only a type that can report what it read may opt in. That is
+  Option A as a principle, and it extends to cue and kustomize whenever krab
+  implements them natively. Worth noting that krab is currently more aggressive
+  than the reference: jinja2, copy and external all take part in target-level
+  staleness while only kadet produces item records. The `Freshness` field
+  proposed in `docs/exec-plans/16-external-freshness.md` is `cacheable()` under
+  another name, made mandatory rather than defaulted.
+
 I did not resolve D1-D5 myself because each changes what gets built, not merely
 how.
 
