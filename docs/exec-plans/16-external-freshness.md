@@ -113,8 +113,16 @@ enough to matter. It is correct by construction, matches the reference, and is
 revertible. B can be added later on top of A without a second migration; A
 cannot be retrofitted under B without breaking people who declared.
 
-What would settle it: do any of the inventories in the audit (issue #128)
-actually use `external`, and how long do those items take? That is one grep and
+**Evidence gathered since, and it points at A.** `kapitan/inputs/base.py`
+defines `cacheable() -> False` and an abstract `inputs_hash`, and **only
+`kadet` overrides them**. `cuelang`, `kustomize`, `jsonnet`, `helm`, `external`,
+`jinja2` and `copy` are all non-cacheable in the reference. Caching is opt-in
+there, and only a type that can report what it read may opt in. The `Freshness`
+field below is that same rule, made mandatory rather than defaulted, and it
+extends to cue and kustomize whenever krab implements them natively.
+
+Still worth checking before committing: do any of the inventories in the audit
+(issue #128) actually use `external`, and how slow are those items? One grep and
 one timing run by someone with access.
 
 ### Scope of issue #16 versus this plan
