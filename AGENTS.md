@@ -5,11 +5,9 @@ this file, so there is one copy to maintain.
 
 ## What this is
 
-`krab` is Kapitan rewritten in Rust: a cargo workspace (edition 2024) holding
-the inventory engine, an inventory daemon, an incremental compiler, a language
-server and the `krab` binary. It reads the same `.kapitan`,
+`krab` is Kapitan rewritten in Rust. It reads the same `.kapitan`,
 `inventory/classes`, `inventory/targets`, `refs/` and `resolvers.py` as the
-Python implementation.
+Python implementation, and `docs/ARCHITECTURE.md` says what the crates do.
 
 Output must be byte-identical to kapitan 0.36.3 with the omegaconf inventory
 backend. Merging, interpolation, resolvers, YAML and JSON emission and compiled
@@ -21,19 +19,19 @@ new one needs a row there before it merges.
 
 ```sh
 cargo build --release                      # target/release/krab
-cargo fmt --all
-cargo clippy --all-targets --locked        # CI runs with RUSTFLAGS=-D warnings
+cargo fmt --all --check
+cargo clippy --all-targets --locked
 cargo test --locked
-cargo test -p krab-inventory --test fixture          # one test binary
-cargo test -p krab-inventory fixture::name_of_case   # one case
+cargo test -p krab-inventory --test fixture               # one test binary
+cargo test -p krab-inventory renders_like_the_reference   # one case, by its name
 ```
 
 Tests that need more than cargo:
 
 * `crates/krab-inventory/tests/python_resolvers.rs` and the kadet evaluator test
   (`crates/krab-compile/tests/kadet_runner.rs`) need a `python3` with `pyyaml`,
-  `omegaconf`, `kadet` and `jinja2` importable. The kadet test skips without
-  them; `.github/workflows/ci.yml` has the versions CI uses.
+  `omegaconf`, `kadet` and `jinja2` importable. Both skip and report why when
+  an import is missing, so a green run does not mean they ran.
 * The corpus test (`crates/krab-inventory/tests/corpus.rs`) runs only when
   `KRAB_CORPUS` and `KRAB_COMPILED` point at a real inventory and reference
   output.
@@ -69,18 +67,19 @@ Read it before changing anything across crate boundaries.
 * Contributors work from a fork and cannot merge. Nothing should be planned
   whose next step is a merge landing: if a change needs another one first, say
   so in the pull request and keep it reviewable on its own.
-* Split work by what depends on what, not by which files it touches. Two
-  changes to one file cannot be two parallel pull requests. Merge the branches
-  together locally before opening them; conflicts show up in threes that pairs
-  do not catch.
+* Splitting work into pull requests goes by dependency, not by file. Before
+  opening two that touch the same file, merge both branches onto a scratch
+  branch off `main` and build it: a conflict can first appear only once a
+  third branch lands, so checking them in pairs is not enough.
 * A version number in prose survives only where a test compares it to its
   source. Anywhere else, derive it or leave it out.
 * Work that is deferred or rejected goes on the tracking issue with its
   reason. A decision kept in a conversation is gone by the next one.
-* Releasing: bump `version` in the workspace `Cargo.toml` (and
-  `editors/vscode/package.json` when it changed), merge, then tag `main` with
-  that version; `release.yml` refuses a tag that disagrees with it.
-  CONTRIBUTING.md has the command.
+* Releasing is a maintainer's job, and the rest of this list still applies to
+  the pull request that prepares it: bump `version` in the workspace
+  `Cargo.toml`, and `editors/vscode/package.json` when it changed. The tag
+  comes after the merge and `release.yml` refuses one that disagrees with the
+  manifest. CONTRIBUTING.md has the command.
 
 ## Environment variables
 
