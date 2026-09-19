@@ -102,10 +102,12 @@ package and install it.
 ## CI and releases
 
 `.github/workflows/ci.yml` runs on every pull request and push to `main`:
-`cargo fmt --check`, `cargo clippy --all-targets` and `cargo test` with
-warnings denied, and `npm run package` in `editors/vscode` (the `.vsix` is
-kept as a workflow artifact). The corpus test does not run there; it needs
-a real inventory and the reference implementation.
+`cargo fmt --check` and `cargo clippy --all-targets` with warnings denied,
+`cargo test` on Linux and macOS, a `cargo check` on the oldest toolchain
+`rust-version` claims, `cargo deny`, a `zizmor` pass over the workflow files
+themselves, and `npm run package` in `editors/vscode` (the `.vsix` is kept as
+a workflow artifact). The corpus test does not run there; it needs a real
+inventory and the reference implementation.
 
 To release, bump `version` in the workspace `Cargo.toml` (and the extension's
 `package.json` when it changed), merge, then tag `main`:

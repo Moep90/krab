@@ -91,6 +91,54 @@ jobs:
           rustup toolchain install "$msrv" --profile minimal
           cargo "+$msrv" check --locked --all-targets
 
+  deny:
+    # Licences, duplicate and wildcard dependencies, and the registries they
+    # come from. Only runs when the dependency set or the policy changed.
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: changed
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          if git diff --name-only "origin/${{ github.base_ref }}" HEAD \
+            | grep -qE '^(Cargo\.(toml|lock)|deny\.toml|crates/[^/]+/Cargo\.toml)$'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Licences, bans and sources
+        if: steps.changed.outputs.run == 'true'
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check licenses bans sources
+      # An advisory published overnight is news, not a reason to block an
+      # unrelated pull request.
+      - name: Advisories
+        if: steps.changed.outputs.run == 'true'
+        continue-on-error: true
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories
+
+  zizmor:
+    # Lints these workflow files: template injection into `run:`, permissions
+    # wider than a job needs, unpinned actions.
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          advanced-security: false
+
   vscode:
     name: VS Code extension
     runs-on: ubuntu-latest
