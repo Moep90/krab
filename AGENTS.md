@@ -66,10 +66,21 @@ Read it before changing anything across crate boundaries.
   `docs/DESIGN.md` carries the semantics.
 * Open work is tracked on the GitHub project board linked from `docs/ROADMAP.md`,
   not in the repo.
+* Contributors work from a fork and cannot merge. Nothing should be planned
+  whose next step is a merge landing: if a change needs another one first, say
+  so in the pull request and keep it reviewable on its own.
+* Split work by what depends on what, not by which files it touches. Two
+  changes to one file cannot be two parallel pull requests. Merge the branches
+  together locally before opening them; conflicts show up in threes that pairs
+  do not catch.
+* A version number in prose survives only where a test compares it to its
+  source. Anywhere else, derive it or leave it out.
+* Work that is deferred or rejected goes on the tracking issue with its
+  reason. A decision kept in a conversation is gone by the next one.
 * Releasing: bump `version` in the workspace `Cargo.toml` (and
-  `editors/vscode/package.json` when it changed), merge, then tag `main`
-  (`v2.0.0-alpha.4`); `release.yml` refuses a tag that disagrees with the
-  workspace version.
+  `editors/vscode/package.json` when it changed), merge, then tag `main` with
+  that version; `release.yml` refuses a tag that disagrees with it.
+  CONTRIBUTING.md has the command.
 
 ## Environment variables
 
