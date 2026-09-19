@@ -1,9 +1,13 @@
 version: 2
+# cooldown: a version published minutes ago has had no time to be caught if the
+# release was compromised. Seven days is zizmor's floor for the audit.
 updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "deps:"
     labels:
@@ -14,6 +18,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci:"
     labels:
