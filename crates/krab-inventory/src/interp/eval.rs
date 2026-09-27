@@ -191,6 +191,12 @@ impl<'a> Evaluator<'a> {
                 None
             }
         };
+        // A resolver result that is itself an interpolation (`${relpath:...}`
+        // gives `${.ns}`) is evaluated where it now sits by the next read,
+        // not answered from the memo with the text.
+        if get(self.root, path).is_some_and(|n| n.as_str().is_some_and(|s| s.contains("${"))) {
+            self.cache.remove(path);
+        }
         if let Some(from) = self.pending_source.take()
             && get(self.root, path).is_some_and(|n| n.value.is_container())
         {
