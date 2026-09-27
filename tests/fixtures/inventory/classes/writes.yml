@@ -33,3 +33,15 @@ parameters:
       - \${write:merged.into,merged.src}
       - \${write:merged.into,merged.absent}
   seen_by: ${gateway.services}
+  # The origin holds a deferred relative interpolation that the second pass
+  # evaluates before the write reads it: the write must copy what it
+  # resolves to at the origin, not the relative text.
+  late:
+    out:
+      keep: 1
+    namespace: ns
+    blocks:
+      a:
+        namespace: \${relpath:late.namespace}
+    dump:
+      - \${write:late.out.x.a,late.blocks.a}
