@@ -38,3 +38,23 @@ fn write_refuses_to_overwrite_without_force() {
     assert!(stored().contains("two"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A symlink at the ref path counts as an existing ref even when it dangles:
+/// writing through it would create a file wherever it points.
+#[cfg(unix)]
+#[test]
+fn write_refuses_a_dangling_symlink_without_force() {
+    let dir = std::env::temp_dir().join(format!("krab-refs-link-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("inventory/targets")).unwrap();
+    std::fs::create_dir_all(dir.join("r")).unwrap();
+    std::fs::write(dir.join("a"), "one").unwrap();
+    std::os::unix::fs::symlink(dir.join("elsewhere"), dir.join("r/x")).unwrap();
+
+    assert!(!write(&dir, "a", false).status.success());
+    assert!(
+        !dir.join("elsewhere").exists(),
+        "nothing written through the link"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
