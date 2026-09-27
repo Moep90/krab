@@ -1,0 +1,42 @@
+applications: []
+classes:
+  - realias
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: realias
+      parts:
+        - realias
+      path: realias
+      short: realias
+  _reclass_:
+    name:
+      full: realias
+      parts:
+        - realias
+      path: realias
+      short: realias
+  alias:
+    namespace: base-ns
+    ns: base-ns
+  base_component:
+    namespace: base-ns
+    ns: base-ns
+  kapitan:
+    compile: []
+    dependencies: []
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: null
+  leaf_in_string: x-base-ns
+  leaf_reader: base-ns
+  merged:
+    namespace: base-ns
+    ns: override-ns
+  overrides:
+    ns: override-ns
+resolved: false
