@@ -146,7 +146,9 @@ repository's `resolvers.py`.
 The registry records the files it depends on, `.kapitan` among them; the
 daemon exits when one changes and the next request starts a fresh one.
 
-`write` (mutating the tree from a resolver) is not supported and reports why.
+`write` merges the resolved origin into the destination while the pass runs,
+as kapitan's `write_to_key` does, and clears the memoised results. Values
+resolved earlier in the render keep what they saw, as in the reference.
 
 ## Kapitan model (`model.rs`)
 
