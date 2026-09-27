@@ -6,7 +6,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-pub const MANIFEST_VERSION: u32 = 2;
+pub const MANIFEST_VERSION: u32 = 3;
 pub const MANIFEST_FILE: &str = ".krab-manifest.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -16,9 +16,6 @@ pub struct Manifest {
     /// Python side versions. Each target record carries the one it was built with.
     #[serde(default)]
     pub engine: String,
-    /// Fingerprint of every path any target read, relative to the repository root.
-    #[serde(default)]
-    pub files: BTreeMap<String, String>,
     #[serde(default)]
     pub targets: BTreeMap<String, TargetRecord>,
 }
@@ -34,8 +31,10 @@ pub struct TargetRecord {
     /// Compiler identity that produced this record (see `Manifest::engine`).
     #[serde(default)]
     pub engine: String,
-    /// Every path the compile read (keys into `Manifest::files`).
-    pub deps: Vec<String>,
+    /// Every path the compile read, relative to the repository root, with
+    /// its fingerprint at the time: another target's later compile must not
+    /// make this one look current.
+    pub deps: BTreeMap<String, String>,
     /// Other targets whose inventory was read (`*` = all), with their document digests.
     #[serde(default)]
     pub globals: BTreeMap<String, String>,
@@ -58,8 +57,8 @@ pub struct ItemRecord {
     /// Parts of the target document the component read (`parameters.<key>`,
     /// another top-level key, or `*` for the whole document), with digests.
     pub doc_reads: BTreeMap<String, String>,
-    /// Paths it read, relative to the repository root (keys into `Manifest::files`).
-    pub deps: Vec<String>,
+    /// Paths it read, relative to the repository root, with their fingerprints.
+    pub deps: BTreeMap<String, String>,
     /// Other targets it read (`*` = all), with their document digests.
     pub globals: BTreeMap<String, String>,
     /// Files it wrote, relative to `compiled/`, with their fingerprints.
@@ -79,13 +78,6 @@ impl Manifest {
             },
             Err(_) => Manifest::default(),
         }
-    }
-
-    /// Drop file entries no target refers to any more.
-    pub fn prune_files(&mut self) {
-        let used: std::collections::BTreeSet<&String> =
-            self.targets.values().flat_map(|t| t.deps.iter()).collect();
-        self.files.retain(|k, _| used.contains(k));
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
