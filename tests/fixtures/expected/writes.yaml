@@ -33,6 +33,18 @@ parameters:
     validate: []
     vars:
       target: null
+  late:
+    blocks:
+      a:
+        namespace: ns
+    dump:
+      - DONE
+    namespace: ns
+    out:
+      keep: 1
+      x:
+        a:
+          namespace: ns
   merged:
     dump:
       - DONE
