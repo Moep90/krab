@@ -46,6 +46,15 @@ pub struct ResolveEvent {
 /// whole interpolation string and makes the node MISSING; it never reaches
 /// the user.
 pub(crate) const TO_MISSING: &str = "interpolation::to_missing";
+/// The same, reached through another interpolation on the way. Lookups
+/// (`oc.select`) treat only a node that already holds `???` as absent; this
+/// one makes the whole value MISSING, as in the reference.
+pub(crate) const TO_MISSING_VIA: &str = "interpolation::to_missing_via";
+
+fn is_to_missing(e: &Error) -> bool {
+    let code = &e.diagnostic().code;
+    code == TO_MISSING || code == TO_MISSING_VIA
+}
 
 fn is_missing(v: &Value) -> bool {
     matches!(v, Value::Str(s) if s == "???")
@@ -164,7 +173,7 @@ impl<'a> Evaluator<'a> {
         };
         let outer_source = self.pending_source.take();
         let resolved = match self.deref_at(path) {
-            Err(e) if e.diagnostic().code == TO_MISSING => {
+            Err(e) if is_to_missing(&e) => {
                 if self.still_holds(path, &expr) {
                     *get_mut(self.root, path).unwrap() =
                         Node::new(Value::Str("???".into()), origin);
@@ -546,7 +555,13 @@ impl<'a> Evaluator<'a> {
                     let Some(child) = child else { return Ok(None) };
                     let cp = p.child(child);
                     if get(self.root, &cp).unwrap().is_interpolation() {
-                        self.deref_at(&cp)?
+                        self.deref_at(&cp).map_err(|e| {
+                            if is_to_missing(&e) {
+                                self.err(TO_MISSING_VIA, e.diagnostic().message.clone(), at, origin)
+                            } else {
+                                e
+                            }
+                        })?
                     } else {
                         Resolved::At(cp)
                     }
@@ -644,7 +659,7 @@ impl<'a> Evaluator<'a> {
     fn deep_resolve_value(&mut self, v: Value, at: &KeyPath) -> Result<Value> {
         match v {
             Value::Str(s) if s.contains("${") => match self.deref_at(at) {
-                Err(e) if e.diagnostic().code == TO_MISSING => Ok(Value::Str("???".into())),
+                Err(e) if is_to_missing(&e) => Ok(Value::Str("???".into())),
                 r => self.deep_value(r?),
             },
             Value::Map(m) => {
