@@ -60,7 +60,8 @@ pub struct DotKapitan {
     pub inventory_path: Option<PathBuf>,
     pub compose_target_name: Option<bool>,
     pub inventory_backend: Option<String>,
-    /// A top-level `inventory_backend:` key, which kapitan does not read.
+    /// An `inventory_backend:` section without the `inventory-backend` key,
+    /// the only key kapitan reads from it.
     pub legacy_backend_key: bool,
     pub indent: Option<usize>,
     pub python_resolvers: PythonResolverSettings,
@@ -115,25 +116,13 @@ impl DotKapitan {
         {
             cfg.compose_target_name = Some(b);
         }
-        // kapitan reads the command's section, then `global`: any omegaconf wins.
-        let backends: Vec<String> = ["global", "compile", "inventory"]
-            .iter()
-            .filter_map(
-                |s| match section(s).and_then(|m| m.get("inventory-backend")) {
-                    Some(n) => match &n.value {
-                        Value::Str(v) => Some(v.clone()),
-                        _ => None,
-                    },
-                    None => None,
-                },
-            )
-            .collect();
-        cfg.inventory_backend = backends
-            .iter()
-            .find(|b| *b == "omegaconf")
-            .or(backends.first())
-            .cloned();
-        cfg.legacy_backend_key = node.get("inventory_backend").is_some();
+        // kapitan: `from_dot_kapitan("inventory_backend", "inventory-backend", ...)`,
+        // the `inventory_backend` section first, then `global`.
+        if let Some(Value::Str(b)) = get(&["inventory_backend", "global"], "inventory-backend") {
+            cfg.inventory_backend = Some(b);
+        }
+        cfg.legacy_backend_key =
+            section("inventory_backend").is_some_and(|m| m.get("inventory-backend").is_none());
         if let Some(Value::Int(i)) = get(&["inventory"], "indent") {
             cfg.indent = Some(i.max(1) as usize);
         }
@@ -153,7 +142,7 @@ impl DotKapitan {
             None => "`.kapitan` sets no `inventory-backend`".to_string(),
         };
         let legacy = if self.legacy_backend_key {
-            " (kapitan does not read the top-level `inventory_backend` key)"
+            " (the `inventory_backend` section has no `inventory-backend` key, the only one kapitan reads there)"
         } else {
             ""
         };
@@ -297,14 +286,24 @@ mod tests {
             warning(Some("global:\n  inventory-backend: omegaconf\n")),
             None
         );
+        // kapitan reads `inventory_backend.inventory-backend`, then `global`.
         assert_eq!(
-            warning(Some("compile:\n  inventory-backend: omegaconf\n")),
+            warning(Some("inventory_backend:\n  inventory-backend: omegaconf\n")),
             None
         );
+        assert!(warning(Some("compile:\n  inventory-backend: omegaconf\n")).is_some());
+        let overridden = warning(Some(
+            "inventory_backend:\n  inventory-backend: reclass\nglobal:\n  inventory-backend: omegaconf\n",
+        ))
+        .unwrap();
+        assert!(overridden.contains("`reclass`"), "{overridden}");
         let reclass = warning(Some("global:\n  inventory-backend: reclass\n")).unwrap();
         assert!(reclass.contains("`reclass`"), "{reclass}");
         let legacy = warning(Some("inventory_backend:\n  omegaconf: true\n")).unwrap();
-        assert!(legacy.contains("`inventory_backend`"), "{legacy}");
+        assert!(
+            legacy.contains("`inventory_backend` section has no `inventory-backend` key"),
+            "{legacy}"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }
