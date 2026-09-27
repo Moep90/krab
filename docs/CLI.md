@@ -90,7 +90,7 @@ Compile the targets whose inputs changed.
 
 | flag | meaning |
 |---|---|
-| `-t, --targets <T>...` | targets to consider (default: all) |
+| `-t, --targets <T>...` | targets to consider (default: all); other targets that fail to render are skipped with a warning, unless a selected target reads them through the global inventory |
 | `-l, --labels k=v ...` | targets whose labels match |
 | `--force` | recompile even when nothing changed |
 | `--dry-run` | print which targets would compile and why, compile nothing |

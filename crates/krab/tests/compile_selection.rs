@@ -45,7 +45,10 @@ fn selected_targets_compile_when_others_fail_to_render() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
     assert!(dir.join("compiled/ok/out/x.yml").is_file());
-    assert!(stderr.contains("bad"), "the skipped target is named: {stderr}");
+    assert!(
+        stderr.contains("bad"),
+        "the skipped target is named: {stderr}"
+    );
 
     let _ = std::fs::remove_dir_all(dir.join("compiled"));
     assert!(!compile(&dir, &["-t", "bad"]).status.success());
