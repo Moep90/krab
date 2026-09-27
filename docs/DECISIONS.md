@@ -13,11 +13,12 @@ and are listed in [../README.md](../README.md#compatibility).
 | # | Subject | Reference | krab | Why |
 |---|---|---|---|---|
 | D7 | Two target files with one name (`a/x.yml` and `b/x.yml` without `compose-target-name`) | Renders nothing at all, and says nothing: no targets, no diagnostic, exit code 0 | `inventory::conflicting_targets`, naming both files | An inventory that silently produces no targets cannot be debugged |
+| D10 | `${write:dest,origin}` where a parent of `dest` does not exist | Crashes the render: `dictionary changed size during iteration` | Creates the missing mappings and writes | The write has an obvious meaning, and the crash is an iteration artefact of the reference |
 
 D1 to D6 are the rows of the ledger introduced on the repository-governance
-branch. This row keeps the number it has there so the two versions of the file
+branch. D7 keeps the number it has there so the two versions of the file
 merge without renumbering; if that branch lands first, drop this file and keep
-only the row.
+only the rows.
 
 ## Adding one
 

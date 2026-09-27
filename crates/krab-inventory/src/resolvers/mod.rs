@@ -242,6 +242,31 @@ impl Ctx<'_, '_> {
         }
     }
 
+    /// `OmegaConf.update(_root_, key, value, merge=True, force_add=True)`:
+    /// merge `value` into the node at the absolute `key`, creating missing
+    /// mappings on the way.
+    pub fn write(&mut self, key: &str, value: Value) -> Result<(), ResolverError> {
+        let origin = self.origin;
+        let mut node = &mut *self.ev.root;
+        for k in KeyPath::parse(key).0 {
+            node = match (&mut node.value, k) {
+                (Value::Map(m), Key::Str(s)) => m.entry(s).or_insert_with(|| Node::map(origin)),
+                (Value::Map(m), Key::Index(i)) => {
+                    m.entry(i.to_string()).or_insert_with(|| Node::map(origin))
+                }
+                (Value::List(l), Key::Index(i)) if i < l.len() => &mut l[i],
+                _ => {
+                    return Err(ResolverError::Message(format!(
+                        "cannot write to `{key}`: a parent is not a mapping"
+                    )));
+                }
+            };
+        }
+        merge_into(node, Node::new(value, origin));
+        self.ev.invalidate();
+        Ok(())
+    }
+
     /// Attach a non-fatal warning to the render.
     pub fn warn(&mut self, message: impl Into<String>) {
         let d = Diagnostic::warning(
@@ -278,6 +303,24 @@ pub fn arity(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), R
         .into());
     }
     Ok(())
+}
+
+/// `OmegaConf.merge` of one node into another: mappings merge key by key,
+/// anything else replaces.
+fn merge_into(dst: &mut Node, src: Node) {
+    match (&mut dst.value, src.value) {
+        (Value::Map(d), Value::Map(s)) => {
+            for (k, v) in s {
+                match d.get_mut(&k) {
+                    Some(existing) => merge_into(existing, v),
+                    None => {
+                        d.insert(k, v);
+                    }
+                }
+            }
+        }
+        (_, value) => *dst = Node::new(value, src.origin),
+    }
 }
 
 pub fn as_str<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v str, ResolverError> {

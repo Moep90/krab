@@ -1,0 +1,68 @@
+applications: []
+classes:
+  - writes
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: writes
+      parts:
+        - writes
+      path: writes
+      short: writes
+  _reclass_:
+    name:
+      full: writes
+      parts:
+        - writes
+      path: writes
+      short: writes
+  gateway:
+    services:
+      existing:
+        hostname: existing.example.com
+      svc:
+        hostname: svc.example.com
+        port: 8080
+  kapitan:
+    compile: []
+    dependencies: []
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: null
+  merged:
+    dump:
+      - DONE
+      - NOT FOUND
+    into:
+      keep: 1
+      list:
+        - 1
+        - 2
+      nested:
+        a: 1
+        b: 2
+      over: new
+    src:
+      list:
+        - 1
+        - 2
+      nested:
+        b: 2
+      over: new
+  seen_by:
+    existing:
+      hostname: existing.example.com
+  svc:
+    dump:
+      - DONE
+    gateway_path: gateway.services.svc
+    gateway_service:
+      hostname: svc.example.com
+      port: 8080
+    instance: svc
+    port: 8080
+resolved: false

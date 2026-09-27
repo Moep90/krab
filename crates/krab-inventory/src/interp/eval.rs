@@ -90,6 +90,11 @@ impl<'a> Evaluator<'a> {
         self.root
     }
 
+    /// Forget memoised results after the tree was changed underneath them.
+    pub(crate) fn invalidate(&mut self) {
+        self.cache.clear();
+    }
+
     /// Run `passes` full resolution passes over the tree.
     pub fn resolve_all(&mut self, passes: usize) -> Result<()> {
         for _ in 0..passes {
