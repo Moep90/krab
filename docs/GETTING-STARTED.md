@@ -188,8 +188,8 @@ which provides the API components import (`kapitan.inputs.kadet`,
 targets from the daemon on demand and reports which files and modules it
 read so the next compile knows exactly what to invalidate.
 
-For input types that are not native yet (`jsonnet`, `helm` as a direct
-input, `kustomize`, `cuelang`) run `krab compile --backend python`,
+For input types that are not native yet (`jsonnet`, `kustomize`,
+`cuelang`) run `krab compile --backend python`,
 which drives kapitan's own input types in a worker process with the same
 incremental bookkeeping, or use the Python `kapitan` for those targets.
 
