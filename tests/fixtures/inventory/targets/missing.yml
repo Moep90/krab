@@ -31,3 +31,20 @@ parameters:
   r_alias: ${values.b_in_string}
   r_literal: "a???"
   r_write: ${write:w_dst,m}
+  # oc.select through an interpolation that resolves to ???: MISSING, not
+  # the default (only a node that already holds ??? counts as absent).
+  s_nested: ${oc.select:via.x,d1}
+  s_alias: ${oc.select:via_alias,d2}
+  via:
+    x: ${hm}
+  via_alias: ${hm}
+  hm: ???
+  # write merges like OmegaConf.update: ??? leaves existing values.
+  wdst:
+    k: existing
+    l: [1]
+  wsrc:
+    k: ???
+    j: ???
+    l: ???
+  r_write_keep: ${write:wdst,wsrc}
