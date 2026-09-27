@@ -435,6 +435,7 @@ pub fn compile(
             manifest_path: &manifest_path,
             files_before: &files_before,
             digests: &digests,
+            unrendered: &unrendered,
         };
 
         std::thread::scope(|scope| {
@@ -561,6 +562,7 @@ struct Ctx<'a> {
     manifest_path: &'a Path,
     files_before: &'a BTreeMap<String, String>,
     digests: &'a Digests,
+    unrendered: &'a [String],
 }
 
 fn run_one(
@@ -795,6 +797,18 @@ fn install_and_record(
     manifest: &Mutex<Manifest>,
     started: Instant,
 ) -> Result<(), String> {
+    if let Some(g) = reads
+        .globals
+        .iter()
+        .find(|g| *g == "*" || ctx.unrendered.contains(g))
+    {
+        let read = if g == "*" { "every target" } else { g };
+        return Err(format!(
+            "read {read} from the global inventory, which is incomplete: {} target(s) fail to render ({})",
+            ctx.unrendered.len(),
+            ctx.unrendered[..ctx.unrendered.len().min(3)].join(", ")
+        ));
+    }
     let final_dir = ctx.compiled_dir.join(&plan.target_path);
     let children = child_names(&plan.target_path, ctx.target_paths);
     install(temp_target, &final_dir, &children)
