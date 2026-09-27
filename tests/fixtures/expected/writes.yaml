@@ -17,6 +17,24 @@ parameters:
         - writes
       path: writes
       short: writes
+  edge:
+    dump:
+      - DONE
+    holder:
+      dump: 7
+    me:
+      a: 1
+    scalar_holder:
+      dump:
+        - ERROR WHILE RESOLVING
+    scalar_parent:
+      b:
+        a: 1
+    src_a:
+      a: 1
+    src_map:
+      dump: 7
+    src_scalar: 5
   gateway:
     services:
       existing:
