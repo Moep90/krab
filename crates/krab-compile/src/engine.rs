@@ -253,7 +253,12 @@ pub fn compile(
     }
     let everything_digest =
         digest_str(&all_digests.values().cloned().collect::<Vec<_>>().join("\n"));
-    let target_paths: BTreeSet<String> = all_digests.keys().map(|n| n.replace('.', "/")).collect();
+    // Targets that fail to render still own their directory under `compiled/`.
+    let target_paths: BTreeSet<String> = all_digests
+        .keys()
+        .chain(&unrendered)
+        .map(|n| n.replace('.', "/"))
+        .collect();
 
     // Candidates: by name, by label (needs the documents), or everything.
     let mut candidates: Vec<String> = all_digests.keys().cloned().collect();

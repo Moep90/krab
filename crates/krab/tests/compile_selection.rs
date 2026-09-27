@@ -89,3 +89,41 @@ fn a_selected_target_reading_a_rendered_target_compiles() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_skipped_nested_target_keeps_its_output() {
+    let dir = repo("nested", "a: 1\n");
+    std::fs::write(
+        dir.join(".kapitan"),
+        "global:\n  inventory-backend: omegaconf\n  compose-target-name: true\n",
+    )
+    .unwrap();
+    let _ = std::fs::remove_file(dir.join("inventory/targets/bad.yml"));
+    std::fs::create_dir_all(dir.join("inventory/targets/ok")).unwrap();
+    let child = dir.join("inventory/targets/ok/child.yml");
+    std::fs::write(
+        &child,
+        "parameters:\n  kapitan:\n    vars:\n      target: ok.child\n    compile:\n      - input_type: jinja2\n        input_paths:\n          - templates/x.yml\n        output_path: out\n",
+    )
+    .unwrap();
+    let out = compile(&dir, &[]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(dir.join("compiled/ok/child/out/x.yml").is_file());
+
+    std::fs::write(&child, "parameters:\n  x: ${missing}\n").unwrap();
+    let out = compile(&dir, &["-t", "ok"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        dir.join("compiled/ok/child/out/x.yml").is_file(),
+        "the skipped target's output is kept"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
