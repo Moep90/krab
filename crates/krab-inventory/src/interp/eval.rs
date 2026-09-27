@@ -41,6 +41,16 @@ pub struct ResolveEvent {
     pub origin: Origin,
 }
 
+/// Internal error code for an interpolation that reached a MISSING (`???`)
+/// value: OmegaConf's `InterpolationToMissingValueError`. It aborts the
+/// whole interpolation string and makes the node MISSING; it never reaches
+/// the user.
+pub(crate) const TO_MISSING: &str = "interpolation::to_missing";
+
+fn is_missing(v: &Value) -> bool {
+    matches!(v, Value::Str(s) if s == "???")
+}
+
 /// How many copies of copies [`Evaluator::anchored`] follows.
 const ANCHOR_DEPTH: usize = 8;
 
@@ -153,7 +163,17 @@ impl<'a> Evaluator<'a> {
             (n.as_str().unwrap_or_default().to_string(), n.origin)
         };
         let outer_source = self.pending_source.take();
-        let resolved = self.deref_at(path)?;
+        let resolved = match self.deref_at(path) {
+            Err(e) if e.diagnostic().code == TO_MISSING => {
+                if self.still_holds(path, &expr) {
+                    *get_mut(self.root, path).unwrap() =
+                        Node::new(Value::Str("???".into()), origin);
+                }
+                self.pending_source = outer_source;
+                return Ok(());
+            }
+            r => r?,
+        };
         let source = match resolved {
             Resolved::At(q) => {
                 self.resolve_subtree(&q)?;
@@ -542,6 +562,18 @@ impl<'a> Evaluator<'a> {
                     }
                 }
             };
+            let missing = match &cur {
+                Resolved::At(p) => get(self.root, p).is_some_and(|n| is_missing(&n.value)),
+                Resolved::Owned(v) => is_missing(v),
+            };
+            if missing {
+                return Err(self.err(
+                    TO_MISSING,
+                    format!("interpolation to missing value `{}`", keys[..=i].join(".")),
+                    at,
+                    origin,
+                ));
+            }
         }
         Ok(Some(cur))
     }
@@ -605,10 +637,10 @@ impl<'a> Evaluator<'a> {
 
     fn deep_resolve_value(&mut self, v: Value, at: &KeyPath) -> Result<Value> {
         match v {
-            Value::Str(s) if s.contains("${") => {
-                let r = self.deref_at(at)?;
-                self.deep_value(r)
-            }
+            Value::Str(s) if s.contains("${") => match self.deref_at(at) {
+                Err(e) if e.diagnostic().code == TO_MISSING => Ok(Value::Str("???".into())),
+                r => self.deep_value(r?),
+            },
             Value::Map(m) => {
                 let mut out = Map::with_capacity(m.len());
                 for (k, node) in m {
@@ -665,6 +697,8 @@ impl<'a> Evaluator<'a> {
         match self.select_path(start, &keys, at, origin) {
             Ok(r) => Ok(r),
             Err(e) if e.diagnostic().code == "interpolation::not_a_container" => Ok(None),
+            // OmegaConf.select returns the default for a MISSING node.
+            Err(e) if e.diagnostic().code == TO_MISSING => Ok(None),
             Err(e) => Err(e),
         }
     }
