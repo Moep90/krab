@@ -296,7 +296,7 @@ fn write(app: &App, args: &RefsArgs, rc: &RefController, token: &str) -> Result<
     };
     let (type_name, path) = split_token(token)?;
     let existing = rc.refs_path.join(path);
-    if existing.exists() && !args.force {
+    if existing.symlink_metadata().is_ok() && !args.force {
         return Err(Failure::Message(format!(
             "{} already exists; pass --force to replace it",
             existing.display()
