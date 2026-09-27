@@ -264,8 +264,14 @@ fn write(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     // through values memoised earlier in the pass.
     ctx.ev.invalidate();
     let content = match ctx.select(origin) {
-        Ok(Some(v)) if v.truthy() => v,
-        Ok(_) => return Ok(Value::Str("NOT FOUND".into())),
+        Ok(Some(v)) if !v.truthy() => return Ok(Value::Str("NOT FOUND".into())),
+        Ok(Some(v @ (Value::Map(_) | Value::List(_)))) => v,
+        // The reference resolves a copy of the origin, which only a container allows.
+        Ok(Some(_)) => {
+            ctx.warn(format!("`{origin}` is not a mapping or a list"));
+            return Ok(Value::Str("ERROR WHILE RESOLVING".into()));
+        }
+        Ok(None) => return Ok(Value::Str("NOT FOUND".into())),
         Err(e) => {
             let message = match e {
                 ResolverError::Message(m) => m,
