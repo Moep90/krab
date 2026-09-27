@@ -1,0 +1,5 @@
+# Values that a later ??? must not override.
+parameters:
+  keep_scalar: set
+  keep_map:
+    x: 1

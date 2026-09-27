@@ -1,0 +1,8 @@
+# A later ??? leaves an existing value alone; only a new key becomes ???.
+classes:
+  - missing_base
+parameters:
+  keep_scalar: ???
+  keep_map: ???
+  fresh: ???
+  reads_kept: ${keep_scalar}
