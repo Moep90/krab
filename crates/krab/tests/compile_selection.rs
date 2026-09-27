@@ -53,3 +53,36 @@ fn selected_targets_compile_when_others_fail_to_render() {
     assert!(!dir.join("compiled/ok").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_selected_target_reading_the_whole_global_inventory_fails() {
+    let dir = repo(
+        "global",
+        "{% for t in inventory_global %}{{ t }}\n{% endfor %}",
+    );
+    let out = compile(&dir, &["-t", "ok"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{stderr}");
+    assert!(stderr.contains("global inventory"), "{stderr}");
+    assert!(!dir.join("compiled/ok/out/x.yml").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_selected_target_reading_a_rendered_target_compiles() {
+    let dir = repo(
+        "named",
+        "{{ inventory_global['ok'].parameters.kapitan.vars.target }}\n",
+    );
+    let out = compile(&dir, &["-t", "ok"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("compiled/ok/out/x.yml")).unwrap(),
+        "ok"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
