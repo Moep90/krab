@@ -199,9 +199,13 @@ impl Ctx<'_, '_> {
 
     /// Like [`Ctx::select`] with an explicit list of keys (no splitting on dots).
     pub fn select_keys(&mut self, keys: &[String]) -> Result<Option<Value>, ResolverError> {
-        let r = self
+        let r = match self
             .ev
-            .select_path(KeyPath::root(), keys, &self.at, self.origin)?;
+            .select_path(KeyPath::root(), keys, &self.at, self.origin)
+        {
+            Err(e) if e.diagnostic().code == crate::interp::eval::TO_MISSING => None,
+            r => r?,
+        };
         match r {
             Some(r) => Ok(Some(self.ev.deep_value(r)?)),
             None => Ok(None),
