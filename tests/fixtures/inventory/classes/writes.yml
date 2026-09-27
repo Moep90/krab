@@ -1,0 +1,35 @@
+# The `write` idiom: a list of throwaway entries whose deferred `write` calls
+# copy a block to a path computed after merging.
+parameters:
+  gateway:
+    services:
+      existing:
+        hostname: existing.example.com
+  svc:
+    instance: svc
+    port: 8080
+    gateway_path: gateway.services.svc
+    gateway_service:
+      hostname: svc.example.com
+      port: ${svc.port}
+    dump:
+      - >-
+        \${write:
+        ${relpath:svc.gateway_path},
+        ${relpath:svc.instance}.gateway_service
+        }
+  merged:
+    into:
+      keep: 1
+      over: old
+      nested:
+        a: 1
+    src:
+      over: new
+      nested:
+        b: 2
+      list: [1, 2]
+    dump:
+      - \${write:merged.into,merged.src}
+      - \${write:merged.into,merged.absent}
+  seen_by: ${gateway.services}
