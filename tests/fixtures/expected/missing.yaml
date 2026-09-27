@@ -1,0 +1,60 @@
+applications: []
+classes: []
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: missing
+      parts:
+        - missing
+      path: missing
+      short: missing
+  _reclass_:
+    name:
+      full: missing
+      parts:
+        - missing
+      path: missing
+      short: missing
+  comp:
+    output:
+      host: ???
+  h: ???
+  holder:
+    inner: ???
+    other: fine
+  kapitan:
+    compile: []
+    dependencies: []
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: null
+  m: ???
+  names:
+    x: X
+  r_absent: ???
+  r_alias: ???
+  r_child: ???
+  r_default: ???
+  r_escaped: ???
+  r_holder:
+    inner: ???
+    other: fine
+  r_key: ???
+  r_list:
+    - ???
+    - ok
+  r_literal: a???
+  r_plain: ???
+  r_select: dflt
+  r_select_null: null
+  r_select_str: x dflt
+  r_string: ???
+  r_two: ???
+  r_write: NOT FOUND
+  values:
+    b_in_string: ???
+resolved: false
