@@ -1,0 +1,9 @@
+classes:
+  - realias
+parameters:
+  overrides:
+    ns: override-ns
+  alias: ${base_component}
+  merged: ${merge:${base_component}, ${overrides}}
+  leaf_reader: ${base_component.namespace}
+  leaf_in_string: "x-${base_component.namespace}"
