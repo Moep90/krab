@@ -179,6 +179,14 @@ impl<'a> Evaluator<'a> {
                         Node::new(Value::Str("???".into()), origin);
                 }
                 self.pending_source = outer_source;
+                if self.track {
+                    self.events.push(ResolveEvent {
+                        path: path.clone(),
+                        expr,
+                        source: None,
+                        origin,
+                    });
+                }
                 return Ok(());
             }
             r => r?,
