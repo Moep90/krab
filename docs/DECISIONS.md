@@ -13,6 +13,7 @@ and are listed in [../README.md](../README.md#compatibility).
 | # | Subject | Reference | krab | Why |
 |---|---|---|---|---|
 | D7 | Two target files with one name (`a/x.yml` and `b/x.yml` without `compose-target-name`) | Renders nothing at all, and says nothing: no targets, no diagnostic, exit code 0 | `inventory::conflicting_targets`, naming both files | An inventory that silently produces no targets cannot be debugged |
+| D11 | OCI credentials (`OCI_USERNAME` / `OCI_PASSWORD`) and the token realm of a bearer challenge | oras sends them as basic auth to whatever realm the registry names, on any host, over plain http with `insecure: true` | Never over http: a registry asking for authentication with `insecure: true` fails. A realm on another origin must be https, and gets credentials only with TLS verification | The realm comes from the registry's response, so anyone who can answer as the registry could collect the credentials |
 
 D1 to D6 are the rows of the ledger introduced on the repository-governance
 branch. This row keeps the number it has there so the two versions of the file

@@ -325,7 +325,9 @@ none), verified against its `sha256` digest, and, as in kapitan's
 extracted into the artifact root and removed. Authentication answers one
 `WWW-Authenticate` challenge: a bearer token from the realm (Docker Hub,
 ghcr.io, Artifact Registry) with `OCI_USERNAME` / `OCI_PASSWORD` as basic
-credentials when set, or basic authentication directly. `insecure` selects
+credentials when set, or basic authentication directly; credentials never
+go over http, and to a realm on another origin only over verified https
+(`docs/DECISIONS.md`, D11). `insecure` selects
 plain http and `tls_verify` disables verification or names a CA bundle
 (parsed with ureq's PEM reader). Conflicting connection settings for one
 source are an error and `media_type` filters are unioned, as in the

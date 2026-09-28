@@ -134,7 +134,10 @@ distribution API: layers are saved under their title annotation, tar blobs
 are extracted, and the artifact or its `subpath` is copied; `media_type`
 keeps only matching layers, `insecure: true` uses plain http, `tls_verify`
 is a boolean or a CA bundle path, and credentials come from `OCI_USERNAME`
-/ `OCI_PASSWORD`.
+/ `OCI_PASSWORD`. Credentials are never sent over plain http: with
+`insecure: true` a registry that asks for authentication fails while they
+are set. A token realm on another origin gets them only over https with TLS
+verification (`docs/DECISIONS.md`, D11).
 
 References in the output are compiled the way kapitan does: an existing ref
 becomes `?{type:path:hash}` (or its embedded payload with `--embed-refs`),
