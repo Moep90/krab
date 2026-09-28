@@ -65,12 +65,22 @@ pub struct ItemRecord {
     pub outputs: BTreeMap<String, String>,
 }
 
+/// Whether `text` is a manifest of another version (its shape may differ).
+fn other_version(text: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .and_then(|v| v.get("version")?.as_u64())
+        .is_some_and(|v| v != u64::from(MANIFEST_VERSION))
+}
+
 impl Manifest {
     pub fn load(path: &Path) -> Manifest {
         match std::fs::read_to_string(path) {
             Ok(text) => match serde_json::from_str::<Manifest>(&text) {
                 Ok(m) if m.version == MANIFEST_VERSION => m,
                 Ok(_) => Manifest::default(),
+                // Another version need not parse as this one: start over quietly.
+                Err(_) if other_version(&text) => Manifest::default(),
                 Err(e) => {
                     tracing::warn!("ignoring unreadable manifest {}: {e}", path.display());
                     Manifest::default()
