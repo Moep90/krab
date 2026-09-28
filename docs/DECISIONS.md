@@ -13,6 +13,7 @@ and are listed in [../README.md](../README.md#compatibility).
 | # | Subject | Reference | krab | Why |
 |---|---|---|---|---|
 | D7 | Two target files with one name (`a/x.yml` and `b/x.yml` without `compose-target-name`) | Renders nothing at all, and says nothing: no targets, no diagnostic, exit code 0 | `inventory::conflicting_targets`, naming both files | An inventory that silently produces no targets cannot be debugged |
+| D12 | Digests of an OCI artifact (`source: registry/repo@sha256:...`, index entries, layers) | oras writes whatever manifest and layers the registry returns, checking no digest; an index yields no layers | A digest reference must match the manifest bytes; an index must list exactly one manifest, which must match its entry; every layer must match its `sha256` digest; other algorithms fail | Without the manifest check, a registry answering a pinned digest with another manifest chooses the layers, and they verify against their own digests |
 
 D1 to D6 are the rows of the ledger introduced on the repository-governance
 branch. This row keeps the number it has there so the two versions of the file
