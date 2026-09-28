@@ -1,6 +1,6 @@
 //! The native compiler: one target, all its compile items, written straight
-//! into the target's temporary tree. Only `kadet` evaluates Python (through
-//! the evaluator pool); everything else is Rust.
+//! into the target's temporary tree. Only `kadet` evaluates Python (in an
+//! evaluator process of the target's own); everything else is Rust.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -20,6 +20,7 @@ use crate::output::{OutputType, Writer, WriterOptions};
 use crate::plan::TargetPlan;
 use crate::python::PythonCmd;
 use crate::refs::{RefController, TargetSecrets};
+use crate::worker::Worker;
 
 #[derive(Clone, Debug)]
 pub struct NativeOptions {
@@ -139,6 +140,9 @@ impl NativeCompiler {
             target: TargetSecrets::from_document(&plan.name, &plan.doc),
         };
         let compile_root = temp_dir.join("compiled");
+        // This target's kadet evaluator; it exits with the target, as the
+        // process of `compile -t` does.
+        let mut evaluator = None;
         for raw in &plan.compile {
             let item = Item::from_json(raw)?;
             let target_compile_path = compile_root.join(&plan.target_path).join(&item.output_path);
@@ -153,6 +157,7 @@ impl NativeCompiler {
                 &mut reads,
                 items,
                 &mut records,
+                &mut evaluator,
             );
             if let Err(e) = result {
                 if item.continue_on_error {
@@ -182,6 +187,7 @@ impl NativeCompiler {
         reads: &mut Reads,
         ctx: &ItemContext,
         records: &mut ItemRecords,
+        evaluator: &mut Option<Worker>,
     ) -> Result<(), String> {
         let output_type = OutputType::parse(&item.output_type)
             .ok_or_else(|| format!("unknown output_type `{}`", item.output_type))?;
@@ -205,6 +211,7 @@ impl NativeCompiler {
                         }
                         None => {
                             let output = self.kadet.eval(
+                                evaluator,
                                 &plan.name,
                                 &input,
                                 &item.input_params,
