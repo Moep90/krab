@@ -97,3 +97,21 @@ fn an_older_manifest_recompiles_everything_once() {
     assert!(stderr(compile(&dir, &[])).contains("0 compiled, 3 up to date"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_version_2_manifest_is_replaced_without_a_warning() {
+    let dir = repo("v2shape");
+    std::fs::create_dir_all(dir.join("compiled")).unwrap();
+    // The shape version 2 wrote: `deps` as a list, one shared `files` table.
+    std::fs::write(
+        dir.join("compiled/.krab-manifest.json"),
+        r#"{"version":2,"engine":"x","files":{"templates/x.txt":"f:0"},"targets":{"t1":{"target_path":"t1","doc_digest":"d","config_digest":"c","engine":"x","deps":["templates/x.txt"],"output_digest":"o","compiled_at":0,"duration_ms":0}}}"#,
+    )
+    .unwrap();
+    let out = compile(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{stderr}");
+    assert!(stderr.contains("3 compiled"), "{stderr}");
+    assert!(!stderr.contains("unreadable"), "{stderr}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
