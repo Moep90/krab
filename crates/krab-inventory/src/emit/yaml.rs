@@ -1136,4 +1136,39 @@ mod tests {
     fn folded_trailing_blank_lines_keep() {
         assert_folded("a\nb\n\n", "k: >+\n  a\n\n  b\n\n...\n");
     }
+
+    #[test]
+    fn folded_breaks_only_at_a_single_space_past_column_80() {
+        let x = |n| "x".repeat(n);
+        assert_folded(&format!("{} y\n", x(78)), &format!("k: >\n  {} y\n", x(78)));
+        assert_folded(
+            &format!("{} y\n", x(79)),
+            &format!("k: >\n  {}\n  y\n", x(79)),
+        );
+        assert_folded(
+            &format!("{}  y\n", x(79)),
+            &format!("k: >\n  {}  y\n", x(79)),
+        );
+    }
+
+    /// PyYAML folds a long line that starts with a space too, so the value
+    /// reads back changed. krab writes the same bytes as the reference.
+    #[test]
+    fn folded_long_line_starting_with_a_space_matches_pyyaml() {
+        let mut m = crate::value::Map::new();
+        let text = format!(" {}w\nz\n", "w ".repeat(49));
+        m.insert("k".into(), Node::synthetic(Value::Str(text)));
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Folded),
+            ..DumpOptions::default()
+        };
+        assert_eq!(
+            dump_yaml(&Node::synthetic(Value::Map(m)), &opts),
+            format!(
+                "k: >2\n   {}w\n  {}w\n  z\n",
+                "w ".repeat(39),
+                "w ".repeat(9)
+            )
+        );
+    }
 }
