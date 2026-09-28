@@ -70,7 +70,8 @@ struct ItemRecords {
 pub struct NativeCompiler {
     pub opts: NativeOptions,
     refs: Arc<RefController>,
-    kadet: KadetPool,
+    /// The evaluator, or why there is no Python for it.
+    kadet: Result<KadetPool, String>,
     docs: SharedDocs,
 }
 
@@ -80,7 +81,7 @@ impl NativeCompiler {
     /// from `inventory_file` (every document) otherwise.
     pub fn new(
         opts: NativeOptions,
-        python: PythonCmd,
+        python: Result<PythonCmd, String>,
         socket: Option<&Path>,
         inventory_file: &Path,
         docs: SharedDocs,
@@ -101,7 +102,10 @@ impl NativeCompiler {
             },
         });
         let refs = Arc::new(RefController::new(opts.refs_path.clone(), opts.embed_refs));
-        let kadet = KadetPool::new(python, init)?;
+        let kadet = match python {
+            Ok(p) => Ok(KadetPool::new(p, init)?),
+            Err(e) => Err(e),
+        };
         Ok(NativeCompiler {
             opts,
             refs,
@@ -210,7 +214,7 @@ impl NativeCompiler {
                             previous.clone()
                         }
                         None => {
-                            let output = self.kadet.eval(
+                            let output = self.kadet.as_ref().map_err(String::clone)?.eval(
                                 evaluator,
                                 &plan.name,
                                 &input,
