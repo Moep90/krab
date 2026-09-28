@@ -484,7 +484,7 @@ impl Emitter {
                 Style::Folded
             };
         }
-        if a.allow_single_quoted && !(self.simple_key_context && a.multiline) {
+        if forced.is_none() && a.allow_single_quoted && !(self.simple_key_context && a.multiline) {
             return Style::Single;
         }
         Style::Double
@@ -1005,6 +1005,17 @@ mod tests {
             dump_yaml(&Node::synthetic(Value::Map(m)), &opts),
             "a: '03190301'\nb: '1234567'\nc: '123'\nd: '0'\ne: 1e3\nf: '007'\ng: '12'\n"
         );
+    }
+
+    #[test]
+    fn a_block_style_that_does_not_fit_falls_back_to_double_quotes() {
+        let node = parse_document("a: \"x\\ny \"\nb: \"p\\nq\\n\"\n", SourceId(0)).unwrap();
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Literal),
+            ..DumpOptions::default()
+        };
+        // PyYAML with kapitan's literal representer.
+        assert_eq!(dump_yaml(&node, &opts), "a: \"x\\ny \"\nb: |\n  p\n  q\n");
     }
 
     #[test]
