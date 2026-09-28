@@ -488,9 +488,11 @@ impl Emitter {
         Style::Double
     }
 
-    /// PyYAML `write_literal` / `write_folded` (folded here keeps every line
-    /// break, which is what PyYAML does for text without long lines).
+    /// PyYAML `write_literal` / `write_folded`. Folded writes an extra break
+    /// between two lines that do not start with a space, and folds at a single
+    /// space past the width.
     fn write_block(&mut self, text: &[char], indicator: char) {
+        let folded = indicator == '>';
         let mut hints = String::new();
         if let Some(&first) = text.first()
             && (first == ' ' || is_break(first))
@@ -509,6 +511,8 @@ impl Emitter {
             self.open_ended = true;
         }
         self.write_line_break();
+        let mut leading_space = true;
+        let mut spaces = false;
         let mut breaks = true;
         let mut start = 0;
         let mut end = 0;
@@ -516,6 +520,14 @@ impl Emitter {
             let ch = text.get(end).copied();
             if breaks {
                 if !ch.is_some_and(is_break) {
+                    if folded
+                        && !leading_space
+                        && ch.is_some_and(|c| c != ' ')
+                        && text[start] == '\n'
+                    {
+                        self.write_line_break();
+                    }
+                    leading_space = ch == Some(' ');
                     for &br in &text[start..end] {
                         if br == '\n' {
                             self.write_line_break();
@@ -531,7 +543,16 @@ impl Emitter {
                     }
                     start = end;
                 }
-            } else if ch.is_none() || ch.is_some_and(is_break) {
+            } else if spaces {
+                if ch != Some(' ') {
+                    if start + 1 == end && self.column > self.opts.width {
+                        self.write_indent();
+                    } else {
+                        self.write_chars(&text[start..end]);
+                    }
+                    start = end;
+                }
+            } else if ch.is_none() || ch.is_some_and(|c| (folded && c == ' ') || is_break(c)) {
                 self.write_chars(&text[start..end]);
                 if ch.is_none() {
                     self.write_line_break();
@@ -540,6 +561,7 @@ impl Emitter {
             }
             if let Some(c) = ch {
                 breaks = is_break(c);
+                spaces = folded && c == ' ';
             }
             end += 1;
         }
@@ -1062,5 +1084,56 @@ mod tests {
         assert_eq!(lines.len(), 2, "{out}");
         assert!(lines[1].starts_with("  word"), "{out}");
         assert!(lines.iter().all(|l| l.len() <= 86), "{out}");
+    }
+
+    /// Dump `{k: text}` in the folded style, read it back, and compare with
+    /// PyYAML's output (kapitan's folded representer).
+    fn assert_folded(text: &str, expected: &str) {
+        let mut m = crate::value::Map::new();
+        m.insert("k".into(), Node::synthetic(Value::Str(text.into())));
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Folded),
+            ..DumpOptions::default()
+        };
+        let out = dump_yaml(&Node::synthetic(Value::Map(m)), &opts);
+        let back = parse_document(&out, SourceId(0)).unwrap();
+        match &back.as_map().unwrap()["k"].value {
+            Value::Str(s) => assert_eq!(s, text, "read back from {out:?}"),
+            v => panic!("read back {v:?} from {out:?}"),
+        }
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn folded_lines_are_separated_by_a_blank_line() {
+        assert_folded("line one\nline two\n", "k: >\n  line one\n\n  line two\n");
+    }
+
+    #[test]
+    fn folded_blank_lines_gain_one_more() {
+        assert_folded("a\n\nb\n", "k: >\n  a\n\n\n  b\n");
+    }
+
+    #[test]
+    fn folded_lines_starting_with_a_space_are_not_separated() {
+        assert_folded("a\nb\n  c\nd\n", "k: >\n  a\n\n  b\n    c\n  d\n");
+    }
+
+    #[test]
+    fn folded_long_lines_break_at_the_width() {
+        assert_folded(
+            &format!("{}\nshort\n", ["word"; 20].join(" ")),
+            "k: >\n  word word word word word word word word word word word word word word word word\n  word word word word\n\n  short\n",
+        );
+    }
+
+    #[test]
+    fn folded_without_a_final_break_strips() {
+        assert_folded("a\nb", "k: >-\n  a\n\n  b\n");
+    }
+
+    #[test]
+    fn folded_trailing_blank_lines_keep() {
+        assert_folded("a\nb\n\n", "k: >+\n  a\n\n  b\n\n...\n");
     }
 }
