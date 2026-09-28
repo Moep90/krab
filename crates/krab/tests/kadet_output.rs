@@ -71,3 +71,9 @@ fn the_compile_setting_wins_over_the_inventory_one() {
         expected("double-quotes")
     );
 }
+
+#[test]
+fn the_folded_style_keeps_line_breaks() {
+    let dot_kapitan = "global:\n  inventory-backend: omegaconf\ncompile:\n  yaml-multiline-string-style: folded\n";
+    assert_eq!(compile("folded", dot_kapitan), expected("folded"));
+}
