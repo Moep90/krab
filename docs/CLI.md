@@ -129,7 +129,8 @@ not fetched at all, so a repository with everything in place compiles
 offline. Without `--fetch` only items marked `force_fetch: true` are
 fetched (and overwritten). `--dry-run` lists what would be fetched.
 `type: oci` pulls an artifact (what `oras push` produces) from `source`, a
-bare `registry/repository:tag` or `@digest` reference, with the registry
+bare `registry/repository:tag` or `@digest` reference (a digest must match
+the manifest, and an index must list exactly one manifest), with the registry
 distribution API: layers are saved under their title annotation, tar blobs
 are extracted, and the artifact or its `subpath` is copied; `media_type`
 keeps only matching layers, `insecure: true` uses plain http, `tls_verify`

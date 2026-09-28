@@ -317,10 +317,12 @@ kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
 immutable; `--force-fetch` pulls again.
 
 `type: oci` (`oci.rs`) speaks the registry distribution API the way oras
-does: the manifest (an index is followed to its first manifest) lists the
-layers, each is downloaded to the path in its
-`org.opencontainers.image.title` annotation (the digest when there is
-none), verified against its `sha256` digest, and, as in kapitan's
+does: the manifest (checked against the reference when that is a digest;
+an index must list exactly one manifest, which is followed and checked
+against the index entry) lists the layers, each is downloaded to the path
+in its `org.opencontainers.image.title` annotation (the digest when there
+is none), verified against its `sha256` digest (other algorithms fail;
+`docs/DECISIONS.md`, D12), and, as in kapitan's
 `_extract_tar_blobs`, layers that are tar archives (gzipped or not) are
 extracted into the artifact root and removed. Authentication answers one
 `WWW-Authenticate` challenge: a bearer token from the realm (Docker Hub,
