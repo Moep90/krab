@@ -23,8 +23,8 @@ inventory (including a repository's Python `resolvers.py`), the daemon, the
 language server, the native compile path for `jinja2`, `kadet`, `copy`,
 `remove` and `external` inputs, references (`?{gkms:...}` and friends:
 compile, create, reveal, `krab refs`), and dependency fetching (`git`,
-`http(s)`, `helm`, `oci`). Not native yet: `jsonnet`, `helm` (as a direct
-input type), `kustomize`, `cuelang` and `toml` output; see
+`http(s)`, `helm`, `oci`). Not native yet: `jsonnet`, `kustomize`,
+`cuelang` and `toml` output; see
 [Compatibility](#compatibility).
 
 ## Install
@@ -204,8 +204,7 @@ Deliberate differences: class cycles are reported instead of recursing
 forever; unknown YAML tags are errors; timestamps stay strings; a dependency
 whose output path already exists is not fetched at all, so a repository
 with everything in place compiles offline. Not implemented yet: `jsonnet`,
-`helm` (as a direct input type; charts rendered by kgenlib inside kadet
-work), `kustomize` and `cuelang` inputs, `toml` output, Python-defined
+`kustomize` and `cuelang` inputs, `toml` output, Python-defined
 jinja2 filters other than the common ones, and the `write` resolver.
 [docs/DESIGN.md](docs/DESIGN.md) lists the semantics in detail.
 
