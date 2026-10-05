@@ -95,7 +95,7 @@ evaluating every string containing `${` and writing the result back. A node
 interpolation aliasing a container resolves that container in place first and
 then copies it. Resolver results are written back verbatim, so a resolver that
 returns a string with `${` (e.g. `default`, `relpath`, `oc.dict.values`) is
-evaluated on the next pass — exactly as in the reference. Cycles and references
+evaluated on the next pass, exactly as in the reference. Cycles and references
 to an enclosing container are errors with the full chain of locations.
 
 After the passes, `${escape:x}` markers become literal `${x}`.
@@ -281,8 +281,9 @@ directories that belong to no target.
   (`?{type:base64(json(ref)):embedded}`) or hashing, then rapidyaml-compatible
   YAML (`emit/ryml.rs`, verified byte for byte on ~7000 compiled files),
   PyYAML fallback for control characters, and Python-compatible JSON.
-  Multiline strings default to double quotes, matching a quirk of the
-  reference where the compile flag is shadowed by the inventory one.
+  Multiline strings are literal blocks unless the target's
+  `parameters.multiline_string_style` or `compile.yaml-multiline-string-style`
+  says otherwise.
 * References (`refs/`): a port of `kapitan/refs`. `RefController` loads ref
   files (cached), compiles tags (`?{type:path:hash}`, embedded payloads,
   `plain` inlined, `env` always hashed), creates missing refs from their
