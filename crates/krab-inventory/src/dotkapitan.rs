@@ -116,6 +116,7 @@ const KRAB_KEYS: &[(&str, &[&str])] = &[
             "compose-node-name",
             "compose-target-name",
             "inventory-backend",
+            "enable-class-wildcards",
             // Read from `global` when the `compile`, `inventory` or `refs`
             // section lacks them (kapitan's `from_dot_kapitan`).
             "search-paths",
@@ -133,7 +134,10 @@ const KRAB_KEYS: &[(&str, &[&str])] = &[
             "yaml-dump-null-as-empty",
         ],
     ),
-    ("inventory_backend", &["inventory-backend"]),
+    (
+        "inventory_backend",
+        &["inventory-backend", "enable-class-wildcards"],
+    ),
     (
         "compile",
         &[
@@ -257,6 +261,7 @@ pub struct DotKapitan {
     pub inventory_path: Option<PathBuf>,
     pub compose_target_name: Option<bool>,
     pub inventory_backend: Option<String>,
+    pub enable_class_wildcards: Option<bool>,
     /// An `inventory_backend:` section without the `inventory-backend` key,
     /// the only key kapitan reads from it.
     pub legacy_backend_key: bool,
@@ -347,6 +352,11 @@ impl DotKapitan {
         // the `inventory_backend` section first, then `global`.
         if let Some(Value::Str(b)) = get(&["inventory_backend", "global"], "inventory-backend") {
             cfg.inventory_backend = Some(b);
+        }
+        if let Some(Value::Bool(b)) =
+            get(&["inventory_backend", "global"], "enable-class-wildcards")
+        {
+            cfg.enable_class_wildcards = Some(b);
         }
         cfg.legacy_backend_key =
             section("inventory_backend").is_some_and(|m| m.get("inventory-backend").is_none());
