@@ -1,0 +1,34 @@
+applications: []
+classes:
+  - missing_base
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: missing_merge
+      parts:
+        - missing_merge
+      path: missing_merge
+      short: missing_merge
+  _reclass_:
+    name:
+      full: missing_merge
+      parts:
+        - missing_merge
+      path: missing_merge
+      short: missing_merge
+  fresh: ???
+  kapitan:
+    compile: []
+    dependencies: []
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: null
+  keep_map:
+    x: 1
+  keep_scalar: set
+  reads_kept: set
+resolved: false

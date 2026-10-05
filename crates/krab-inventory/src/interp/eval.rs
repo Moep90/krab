@@ -41,6 +41,25 @@ pub struct ResolveEvent {
     pub origin: Origin,
 }
 
+/// Internal error code for an interpolation that reached a MISSING (`???`)
+/// value: OmegaConf's `InterpolationToMissingValueError`. It aborts the
+/// whole interpolation string and makes the node MISSING; it never reaches
+/// the user.
+pub(crate) const TO_MISSING: &str = "interpolation::to_missing";
+/// The same, reached through another interpolation on the way. Lookups
+/// (`oc.select`) treat only a node that already holds `???` as absent; this
+/// one makes the whole value MISSING, as in the reference.
+pub(crate) const TO_MISSING_VIA: &str = "interpolation::to_missing_via";
+
+fn is_to_missing(e: &Error) -> bool {
+    let code = &e.diagnostic().code;
+    code == TO_MISSING || code == TO_MISSING_VIA
+}
+
+fn is_missing(v: &Value) -> bool {
+    matches!(v, Value::Str(s) if s == "???")
+}
+
 /// How many copies of copies [`Evaluator::anchored`] follows.
 const ANCHOR_DEPTH: usize = 8;
 
@@ -153,7 +172,25 @@ impl<'a> Evaluator<'a> {
             (n.as_str().unwrap_or_default().to_string(), n.origin)
         };
         let outer_source = self.pending_source.take();
-        let resolved = self.deref_at(path)?;
+        let resolved = match self.deref_at(path) {
+            Err(e) if is_to_missing(&e) => {
+                if self.still_holds(path, &expr) {
+                    *get_mut(self.root, path).unwrap() =
+                        Node::new(Value::Str("???".into()), origin);
+                }
+                self.pending_source = outer_source;
+                if self.track {
+                    self.events.push(ResolveEvent {
+                        path: path.clone(),
+                        expr,
+                        source: None,
+                        origin,
+                    });
+                }
+                return Ok(());
+            }
+            r => r?,
+        };
         let source = match resolved {
             Resolved::At(q) => {
                 self.resolve_subtree(&q)?;
@@ -171,6 +208,12 @@ impl<'a> Evaluator<'a> {
                 None
             }
         };
+        // A resolver result that is itself an interpolation (`${relpath:...}`
+        // gives `${.ns}`) is evaluated where it now sits by the next read,
+        // not answered from the memo with the text.
+        if get(self.root, path).is_some_and(|n| n.as_str().is_some_and(|s| s.contains("${"))) {
+            self.cache.remove(path);
+        }
         if let Some(from) = self.pending_source.take()
             && get(self.root, path).is_some_and(|n| n.value.is_container())
         {
@@ -520,7 +563,13 @@ impl<'a> Evaluator<'a> {
                     let Some(child) = child else { return Ok(None) };
                     let cp = p.child(child);
                     if get(self.root, &cp).unwrap().is_interpolation() {
-                        self.deref_at(&cp)?
+                        self.deref_at(&cp).map_err(|e| {
+                            if is_to_missing(&e) {
+                                self.err(TO_MISSING_VIA, e.diagnostic().message.clone(), at, origin)
+                            } else {
+                                e
+                            }
+                        })?
                     } else {
                         Resolved::At(cp)
                     }
@@ -542,6 +591,18 @@ impl<'a> Evaluator<'a> {
                     }
                 }
             };
+            let missing = match &cur {
+                Resolved::At(p) => get(self.root, p).is_some_and(|n| is_missing(&n.value)),
+                Resolved::Owned(v) => is_missing(v),
+            };
+            if missing {
+                return Err(self.err(
+                    TO_MISSING,
+                    format!("interpolation to missing value `{}`", keys[..=i].join(".")),
+                    at,
+                    origin,
+                ));
+            }
         }
         Ok(Some(cur))
     }
@@ -605,10 +666,10 @@ impl<'a> Evaluator<'a> {
 
     fn deep_resolve_value(&mut self, v: Value, at: &KeyPath) -> Result<Value> {
         match v {
-            Value::Str(s) if s.contains("${") => {
-                let r = self.deref_at(at)?;
-                self.deep_value(r)
-            }
+            Value::Str(s) if s.contains("${") => match self.deref_at(at) {
+                Err(e) if is_to_missing(&e) => Ok(Value::Str("???".into())),
+                r => self.deep_value(r?),
+            },
             Value::Map(m) => {
                 let mut out = Map::with_capacity(m.len());
                 for (k, node) in m {
@@ -665,6 +726,8 @@ impl<'a> Evaluator<'a> {
         match self.select_path(start, &keys, at, origin) {
             Ok(r) => Ok(r),
             Err(e) if e.diagnostic().code == "interpolation::not_a_container" => Ok(None),
+            // OmegaConf.select returns the default for a MISSING node.
+            Err(e) if e.diagnostic().code == TO_MISSING => Ok(None),
             Err(e) => Err(e),
         }
     }
