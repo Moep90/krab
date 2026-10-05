@@ -817,7 +817,7 @@ fn install_and_record(
     if let Some(g) = reads
         .globals
         .iter()
-        .find(|g| *g == "*" || ctx.unrendered.contains(g))
+        .find(|g| (*g == "*" && !ctx.unrendered.is_empty()) || ctx.unrendered.contains(g))
     {
         let read = if g == "*" { "every target" } else { g };
         return Err(format!(
