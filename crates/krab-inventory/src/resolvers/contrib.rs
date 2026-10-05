@@ -84,7 +84,8 @@ fn truncate(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     if chars.len() as i64 <= length {
         return Ok(Value::Str(value.to_string()));
     }
-    let hash = format!("{:x}", Md5::digest(value.as_bytes()));
+    let digest = <Md5 as md5::Digest>::digest(value.as_bytes());
+    let hash = format!("{:02x}{:02x}", digest[0], digest[1]);
     let keep = (length - 5).max(0) as usize;
     Ok(Value::Str(format!(
         "{}-{}",
