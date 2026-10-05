@@ -27,7 +27,7 @@ fn same_version(pin: &str, version: &str) -> bool {
 /// inventory:
 ///   python-resolvers:
 ///     file: system/omegaconf/resolvers/resolvers.py   # default: the reference's discovery
-///     python: /opt/venv/bin/python                     # $KRAB_PYTHON overrides; default: a kapitan PEX, python3
+///     python: /opt/venv/bin/python                     # $KRAB_PYTHON overrides; default: see PythonCmd::candidates
 ///     prefer-native: true                              # keep native resolvers over same-named Python ones
 ///     workers: 4
 ///     enabled: true
