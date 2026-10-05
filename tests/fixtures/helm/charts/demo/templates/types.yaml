@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-types
+data:
+  a: "{{ kindOf .Values.a }} {{ .Values.a }}"
+  b: "{{ kindOf .Values.b }} {{ .Values.b }}"
+  c: "{{ kindOf .Values.c }} {{ .Values.c }}"
+  secret: {{ .Values.secret | quote }}

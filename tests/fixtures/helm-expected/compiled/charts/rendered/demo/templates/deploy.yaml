@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    empty: {}
+  name: rel-demo
+  namespace: ns1
+spec:
+  replicas: 5

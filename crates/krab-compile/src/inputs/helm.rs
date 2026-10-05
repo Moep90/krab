@@ -1,8 +1,10 @@
-//! `helm template` on behalf of the kadet evaluator. kapitan's `HelmChart`
-//! and `render_chart` are patched in `kadet_runner.py` to ask the host, so
-//! the chart files are hashed and recorded as dependencies, the output is
-//! parsed by the inventory's PyYAML-compatible loader instead of PyYAML, and
-//! renders are cached by content across compiles.
+//! `helm template`, for `input_type: helm` (`compile_input`, kapitan's
+//! `Helm.compile_file`) and on behalf of the kadet evaluator (`render`).
+//! kapitan's `HelmChart` and `render_chart` are patched in `kadet_runner.py`
+//! to ask the host, so the chart files are hashed and recorded as
+//! dependencies, the output is parsed by the inventory's PyYAML-compatible
+//! loader instead of PyYAML, and renders are cached by content across
+//! compiles.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -11,13 +13,15 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use krab_inventory::Value;
+use krab_inventory::emit::yaml::{DumpOptions, dump_yaml};
 use krab_inventory::source::SourceId;
 use krab_inventory::yaml::parse_documents;
+use krab_inventory::{Node, Value};
 use serde::Deserialize;
 use serde_json::{Map, Value as Json, json};
 
 use super::Reads;
+use crate::output::{OutputType, Writer};
 
 const DENIED_FLAGS: [&str; 5] = [
     "dry-run",
@@ -47,6 +51,9 @@ pub struct Request {
     /// Return the documents parsed (`docs`) rather than the text (`output`).
     #[serde(default)]
     pub parse: bool,
+    /// `--output-dir`, unless `helm_params.output_file` is set.
+    #[serde(skip)]
+    pub output_dir: Option<String>,
 }
 
 /// Python's `str(value)` for a flag value.
@@ -62,7 +69,7 @@ pub fn template_args(req: &Request) -> Result<Vec<String>, String> {
         .shift_remove("name")
         .map(|v| py_str(&v))
         .filter(|n| !n.is_empty());
-    params.shift_remove("output_file");
+    let output_file = params.shift_remove("output_file");
 
     let mut flags: Vec<(String, Json)> = match &req.helm_flags {
         Some(f) => f.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
@@ -123,6 +130,12 @@ pub fn template_args(req: &Request) -> Result<Vec<String>, String> {
     for f in req.helm_values_file.iter().chain(&req.helm_values_files) {
         args.push("--values".into());
         args.push(f.clone());
+    }
+    if output_file.is_none()
+        && let Some(dir) = &req.output_dir
+    {
+        args.push("--output-dir".into());
+        args.push(dir.clone());
     }
     // kapitan tests `"name_template" not in helm_flags`, whose keys are
     // `--name-template`, so the NAME argument is always present.
@@ -249,6 +262,163 @@ pub(crate) fn run_helm(binary: &str, args: &[String], cwd: &Path) -> Result<Stri
         Some(s) if !s.success() => Err(String::from_utf8_lossy(&out.stderr).into_owned()),
         Some(_) => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
     }
+}
+
+/// kapitan's `Helm.compile_file` for one chart of an `input_type: helm`
+/// item. `params` is the item's `helm_params`, shared by all its charts: as
+/// in the reference's `render_chart`, the first chart consumes `name` and
+/// `output_file`, so later charts render without them.
+#[allow(clippy::too_many_arguments)]
+pub fn compile_input(
+    chart: &Path,
+    item: &Json,
+    params: &mut Map<String, Json>,
+    compile_path: &Path,
+    cwd: &Path,
+    prune: bool,
+    writer: &Writer,
+    reads: &mut Reads,
+) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let scratch = std::env::temp_dir().join(format!(
+        "krab-helm-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    let result = compile_chart(
+        chart,
+        item,
+        params,
+        compile_path,
+        cwd,
+        prune,
+        writer,
+        reads,
+        &scratch,
+    );
+    let _ = std::fs::remove_dir_all(&scratch);
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compile_chart(
+    chart: &Path,
+    item: &Json,
+    params: &mut Map<String, Json>,
+    compile_path: &Path,
+    cwd: &Path,
+    prune: bool,
+    writer: &Writer,
+    reads: &mut Reads,
+    scratch: &Path,
+) -> Result<(), String> {
+    let out_dir = scratch.join("out");
+    std::fs::create_dir_all(&out_dir)
+        .map_err(|e| format!("cannot create {}: {e}", out_dir.display()))?;
+    let truthy = |k: &str| item.get(k).filter(|v| Value::from((*v).clone()).truthy());
+
+    // `write_helm_values_file`: only when `helm_values` is non-empty.
+    let helm_values_file = match truthy("helm_values") {
+        Some(values) => {
+            let path = scratch.join("values.yml");
+            let opts = DumpOptions {
+                quote_digit_strings: true,
+                ..DumpOptions::pyyaml_default()
+            };
+            let text = dump_yaml(&Node::synthetic(Value::from(values.clone())), &opts);
+            std::fs::write(&path, text)
+                .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+            Some(path.to_string_lossy().into_owned())
+        }
+        None => None,
+    };
+    let mut flags = Map::new();
+    flags.insert("--include-crds".into(), json!(true));
+    flags.insert("--skip-tests".into(), json!(true));
+    // The reference passes kube_version as --api-versions.
+    if let Some(kube_version) = truthy("kube_version") {
+        flags.insert("--api-versions".into(), kube_version.clone());
+    }
+    let helm_values_files: Vec<String> = item
+        .get("helm_values_files")
+        .and_then(Json::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Json::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let req = Request {
+        chart_dir: chart.to_string_lossy().into_owned(),
+        helm_path: item
+            .get("helm_path")
+            .and_then(Json::as_str)
+            .map(str::to_string),
+        helm_params: params.clone(),
+        helm_values_file,
+        helm_values_files: helm_values_files.clone(),
+        helm_flags: Some(flags),
+        parse: false,
+        output_dir: Some(out_dir.to_string_lossy().into_owned()),
+    };
+    let output_file = params.get("output_file").map(py_str);
+    let args = template_args(&req)?;
+    params.shift_remove("name");
+    params.shift_remove("output_file");
+
+    hash_tree(&cwd.join(chart), &mut blake3::Hasher::new(), reads)?;
+    for f in &helm_values_files {
+        reads.file(&cwd.join(f));
+    }
+    let stdout = run_helm(&helm_binary(req.helm_path.as_deref()), &args, cwd)?;
+    if let Some(name) = output_file {
+        let path = out_dir.join(name);
+        std::fs::write(&path, stdout)
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    }
+
+    let mut files = Vec::new();
+    walk_files(&out_dir, &mut files)?;
+    for file in files {
+        let text = std::fs::read_to_string(&file)
+            .map_err(|e| format!("cannot read {}: {e}", file.display()))?;
+        let docs: Vec<Node> = parse_documents(&text, SourceId::SYNTHETIC)
+            .map_err(|e| {
+                format!(
+                    "cannot parse the output of helm template for {}: {e}",
+                    file.display()
+                )
+            })?
+            .into_iter()
+            .filter(|n| !n.value.is_null())
+            .collect();
+        let rel = file.strip_prefix(&out_dir).unwrap_or(&file);
+        writer.to_file(
+            OutputType::Auto,
+            OutputType::Yaml,
+            prune,
+            &compile_path.join(rel),
+            Value::List(docs),
+            reads,
+        )?;
+    }
+    Ok(())
+}
+
+fn walk_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    for entry in
+        std::fs::read_dir(dir).map_err(|e| format!("cannot list {}: {e}", dir.display()))?
+    {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.is_dir() {
+            walk_files(&path, out)?;
+        } else {
+            out.push(path);
+        }
+    }
+    Ok(())
 }
 
 /// Render the chart, from the cache when its content, values, flags and
