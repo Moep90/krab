@@ -122,7 +122,8 @@ CLI-11 The exit status MUST be 0 on success and 1 when the command fails or
        Since: 319ca84
 
 CLI-12 Log output MUST go to stderr, filtered by RUST_LOG, with the default
-       filter "warn", or "info" for krab server run.
+       filter "warn", or "info" for krab server run, in the format of
+       CLI-61.
        Test: none
        Since: 319ca84, b3c122e
 
@@ -453,6 +454,16 @@ CLI-59 Each hand-maintained registration list MUST be checked against the
        inventory model.
        Test: none
        Since: not met yet (#228)
+
+CLI-61 Each log line on stderr MUST be logfmt by default (`ts`, `level`,
+       `target`, `msg`, then the event's fields as key=value pairs, values
+       quoted where logfmt requires it). KRAB_LOG_FORMAT=json MUST write
+       one JSON object per line instead, and KRAB_LOG_FORMAT=logfmt the
+       default. Any other value MUST fall back to logfmt with a warning.
+       A daemon started by the CLI MUST use the format of the environment
+       it inherits.
+       Test: none
+       Since: not met yet (#247)
 ```
 
 ## Acceptance criteria
@@ -607,6 +618,7 @@ Branch rules that gate on CI name the single check `CI passed` (CLI-33).
 
 | Requirement | Issue | What `main` does |
 |---|---|---|
+| CLI-61 | #247 | Log lines use tracing-subscriber's human format: the timestamp, level and target are not key/value pairs, values are unquoted, and there is no JSON option |
 | CLI-7, CLI-8, CLI-10, CLI-11 | #41 | There is no `--help-json` (clap rejects it with exit status 2). Exit status distinguishes only success (0), any failure (1) and an argument error (2). Under `--json` diagnostics go to stdout, and non-diagnostic errors and configuration warnings stay plain text on stderr. |
 | CLI-53 | #140 | The 39 diagnostic codes (`interpolation::` 13, `inventory::` 15, `yaml::` 9, `server::` 1, `resolver::` 1) and the names of the registered resolvers are documented nowhere; only `inventory::conflicting_targets` appears in docs/. |
 | CLI-21 | #141 | The reference version 0.36.3 also appears in Rust sources (`crates/krab-inventory/tests/fixture.rs`, `crates/krab-compile/src/refs/mod.rs`, two tests in `crates/krab/tests`) and in `ci.yml`, outside the markdown-only check, and README.md lines 201 to 202 wrap between "kapitan" and "0.36.3", so the line-based scan misses it. The check compares copies with each other, not with a source. Stale `kapitan` names remain: `crates/krab-inventory/src/python.rs:142` documents `~/.cache/kapitan` where the code uses `krab`, `crates/krab-compile/src/pyenv.rs:16` documents `$XDG_CACHE_HOME/kapitan/python/<digest>`, and `.claude/skills/krab/SKILL.md:211-212` names the extension `kapicorp.kapitan` with settings `kapitan.path` and `kapitan.python`. |
