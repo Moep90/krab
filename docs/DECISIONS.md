@@ -1,17 +1,23 @@
 # Decisions
 
 Rendering and compiled output are byte-identical to kapitan 0.36.3 with the
-`omegaconf` inventory backend. Everywhere krab behaves differently on purpose,
-it is listed here with the reason. A difference that is not in this list is a
-bug.
+`omegaconf` inventory backend. Everywhere krab behaves differently, it is
+listed here with the reason. A difference that is not in this list is a bug;
+report it with the parity-gap issue template.
 
-Input types and outputs that are not implemented yet are status, not decisions,
-and are listed in [../README.md](../README.md#compatibility).
+Input types and outputs that are not implemented yet are status, not
+decisions, and are listed in [../README.md](../README.md#compatibility).
 
 ## Deviations from the reference
 
 | # | Subject | Reference | krab | Why |
 |---|---|---|---|---|
+| D1 | Class cycles | Recurses until it runs out of stack | Reported as a diagnostic pointing at the cycle | A render that never terminates cannot be debugged |
+| D2 | Unknown YAML tags | PyYAML `safe_load` constructs what it knows and carries the rest | An error | A tag krab does not implement would otherwise render as something else without saying so |
+| D3 | Timestamps | PyYAML resolves them to `datetime` | Stay strings | The reference cannot hold `datetime` values through its own pipeline either |
+| D4 | Dependency whose `output_path` exists | Re-clones every git source and adds files that happen to be missing | Not fetched at all | A repository with everything in place compiles offline |
+| D5 | `force_fetch: true` on a dependency item | Honoured only when neither `--fetch` nor `--force-fetch` is given | Forces that item even under `--fetch` | Otherwise the per-item setting is unreachable in the common invocation |
+| D6 | Boolean resolvers | Python truthiness | Python truthiness, kept on purpose | `${if:nonempty,…}` must stay true; a stricter mode is a planned opt-in rather than a silent change |
 | D7 | Two target files with one name (`a/x.yml` and `b/x.yml` without `compose-target-name`) | Renders nothing at all, and says nothing: no targets, no diagnostic, exit code 0 | `inventory::conflicting_targets`, naming both files | An inventory that silently produces no targets cannot be debugged |
 | D12 | Digests of an OCI artifact (`source: registry/repo@sha256:...`, index entries, layers) | oras writes whatever manifest and layers the registry returns, checking no digest; an index yields no layers | A digest reference must match the manifest bytes; an index must list exactly one manifest, which must match its entry; every layer must match its `sha256` digest; other algorithms fail | Without the manifest check, a registry answering a pinned digest with another manifest chooses the layers, and they verify against their own digests |
 | D13 | Modules a kadet component imports, across targets | A pool process that compiles a second target keeps them loaded, with the state they built for the first (`inventory()` read at import time, generators registered for that target). Which targets share a process depends on scheduling | The native backend gives each target its own evaluator process; a full compile gives what `compile -t` gives. `--backend python` shares a worker per thread, like the reference | Output must not depend on which targets happened to share a process |
@@ -24,4 +30,5 @@ only the rows.
 ## Adding one
 
 A new deviation needs a row here before the change merges, and the row has to
-say what the reference does.
+say what the reference does. `docs/DESIGN.md` carries the semantics and this
+file carries the decisions, so neither repeats the other.
