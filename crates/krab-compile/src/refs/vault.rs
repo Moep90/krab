@@ -82,10 +82,11 @@ pub fn param_str(params: &Json, key: &str) -> Option<String> {
 /// target's `parameters.kapitan.secrets.vault*`) or by `VAULT_SKIP_VERIFY`.
 /// A ref file always carries the value, so it never counts.
 pub fn skip_verify_explicit(inventory: Option<&Json>) -> bool {
-    inventory
-        .and_then(|i| i.get("skip_verify"))
-        .is_some_and(|v| !v.is_null())
-        || std::env::var_os("VAULT_SKIP_VERIFY").is_some()
+    // Only a request to skip counts: `false` asks for verification, and a
+    // ref file's `skip_verify: true` must not silence the warning for it.
+    let truthy = |v: &str| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes");
+    inventory.is_some_and(|i| param_bool(i, "skip_verify"))
+        || std::env::var("VAULT_SKIP_VERIFY").is_ok_and(|v| truthy(&v))
 }
 
 pub fn param_bool(params: &Json, key: &str) -> bool {
@@ -815,6 +816,9 @@ xQZIUmvj2F3GgmMg0Jaz4TzO+wQYbCFn/kuxqTMTeVPfrFFvUq8kmnu7
         );
         assert!(!skip_verify_explicit(Some(&raw)));
         assert!(skip_verify_explicit(Some(&json!({"skip_verify": true}))));
+        // Asking for verification never counts as an explicit skip, even
+        // when the ref file still carries `skip_verify: true`.
+        assert!(!skip_verify_explicit(Some(&json!({"skip_verify": false}))));
         let client = VaultClient::connect(&params, false).unwrap();
         let warning = client.tls_warning.as_deref().unwrap_or_default();
         assert!(
