@@ -274,7 +274,6 @@ pub fn compile(
                     name,
                     &all_digests[name],
                     manifest.targets.get(name),
-                    &manifest.files,
                     &engine,
                     &config_digest,
                     &digests,
@@ -399,8 +398,6 @@ pub fn compile(
 
         manifest.engine = engine.clone();
         manifest.version = MANIFEST_VERSION;
-        // Item reuse checks files against what the last compile saw, like `why_stale`.
-        let files_before = manifest.files.clone();
         let manifest = Arc::new(Mutex::new(manifest));
         let queue: Arc<Mutex<VecDeque<(TargetPlan, String)>>> =
             Arc::new(Mutex::new(stale.into_iter().collect()));
@@ -416,7 +413,6 @@ pub fn compile(
             config_digest: &config_digest,
             target_paths: &target_paths,
             manifest_path: &manifest_path,
-            files_before: &files_before,
             digests: &digests,
         };
 
@@ -463,7 +459,6 @@ pub fn compile(
         manifest
             .targets
             .retain(|name, _| all_digests.contains_key(name));
-        manifest.prune_files();
         manifest.save(&manifest_path).map_err(|e| e.to_string())?;
     }
 
@@ -542,7 +537,6 @@ struct Ctx<'a> {
     config_digest: &'a str,
     target_paths: &'a BTreeSet<String>,
     manifest_path: &'a Path,
-    files_before: &'a BTreeMap<String, String>,
     digests: &'a Digests,
 }
 
@@ -573,7 +567,6 @@ fn run_one(
             .unwrap_or_default();
         let items = ItemContext {
             previous: &previous,
-            files: ctx.files_before,
             all_digests: ctx.all_digests,
             everything_digest: ctx.everything_digest,
             compiled_dir: ctx.compiled_dir,
@@ -818,7 +811,7 @@ fn install_and_record(
         doc_digest: plan.doc_digest.clone(),
         config_digest: ctx.config_digest.to_string(),
         engine: ctx.engine.to_string(),
-        deps: deps.keys().cloned().collect(),
+        deps,
         globals,
         output_digest,
         compiled_at: SystemTime::now()
@@ -829,7 +822,6 @@ fn install_and_record(
         items,
     };
     let mut m = manifest.lock();
-    m.files.extend(deps);
     m.targets.insert(plan.name.clone(), record);
     m.save(ctx.manifest_path)
         .map_err(|e| format!("cannot save manifest: {e}"))
@@ -840,7 +832,6 @@ fn why_stale(
     name: &str,
     doc_digest: &str,
     record: Option<&TargetRecord>,
-    manifest_files: &BTreeMap<String, String>,
     engine: &str,
     config_digest: &str,
     digests: &Digests,
@@ -862,8 +853,8 @@ fn why_stale(
     if record.config_digest != config_digest {
         return Some("compile settings changed".into());
     }
-    for rel in &record.deps {
-        let fp = manifest_files.get(rel).map(String::as_str).unwrap_or("?");
+    for (rel, fp) in &record.deps {
+        let fp = fp.as_str();
         let now = digests.fingerprint(&opts.repo_root.join(rel));
         if now != fp {
             return Some(match (fp, now.as_str()) {
