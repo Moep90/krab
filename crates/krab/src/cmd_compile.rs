@@ -168,13 +168,11 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
     } else {
         repo_root.join(refs_path)
     };
-    // The reference resolves the multiline style from the *inventory* section
-    // (its compile flag is shadowed); default is double quotes.
     let multiline = app
         .dot
-        .inventory_str("multiline-string-style")
+        .compile_str("yaml-multiline-string-style")
         .and_then(|s| krab_compile::native::parse_style(&s))
-        .unwrap_or(MultilineStyle::DoubleQuotes);
+        .unwrap_or(MultilineStyle::Literal);
     let native = NativeOptions {
         repo_root: repo_root.clone(),
         search_paths: search_paths.clone(),

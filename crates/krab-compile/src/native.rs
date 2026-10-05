@@ -215,7 +215,7 @@ impl NativeCompiler {
                             let mut outputs = BTreeMap::new();
                             if let Json::Object(files) = output {
                                 for (key, value) in files {
-                                    let written = writer.to_file(
+                                    let path = writer.to_file(
                                         output_type,
                                         OutputType::Yaml,
                                         item.prune,
@@ -223,12 +223,10 @@ impl NativeCompiler {
                                         Value::from(value),
                                         &mut item_reads,
                                     )?;
-                                    if let Some(path) = written {
-                                        outputs.insert(
-                                            relative(&path, compile_root),
-                                            Digests::new().fingerprint(&path),
-                                        );
-                                    }
+                                    outputs.insert(
+                                        relative(&path, compile_root),
+                                        Digests::new().fingerprint(&path),
+                                    );
                                 }
                             }
                             item_record(&item_digest, plan, &item_reads, outputs, ctx)
