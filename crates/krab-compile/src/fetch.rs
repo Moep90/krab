@@ -1245,8 +1245,27 @@ mod tests {
         assert!(!unpack_file(&zf, &dir.join("out5"), Some("text/plain")).unwrap());
     }
 
+    /// git for the fixture repositories, with the user's configuration out of
+    /// the way: `tag.gpgsign` turns `git tag v1` into an annotated tag that
+    /// wants a message, `commit.gpgsign` needs a usable key and
+    /// `init.templatedir` copies hooks into every repository built here. The
+    /// production helper keeps that configuration, which real fetches need for
+    /// credentials and `url.*.insteadOf`.
     fn git_ok(args: &[&str], cwd: &Path) {
-        git(args, Some(cwd)).unwrap_or_else(|e| panic!("git {args:?}: {e}"));
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap_or_else(|e| panic!("git {args:?}: cannot run git: {e}"));
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
 
     fn make_repo(dir: &Path) -> String {
@@ -1647,5 +1666,118 @@ mod tests {
         .unwrap();
         let out = fetch(deps, &opts(&root, true, false));
         assert!(out[0].warnings[0].contains("subpath: gen"), "{out:?}");
+    }
+
+    /// A registry on localhost without authentication serving `routes`
+    /// (path, body); anything else is 404.
+    fn serve_paths(routes: Vec<(String, Vec<u8>)>) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { break };
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let path = req.split_whitespace().nth(1).unwrap_or("");
+                let (status, body) = match routes.iter().find(|(p, _)| p == path) {
+                    Some((_, body)) => ("200 OK", body.clone()),
+                    None => ("404 Not Found", b"no".to_vec()),
+                };
+                let head = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                s.write_all(head.as_bytes()).unwrap();
+                s.write_all(&body).unwrap();
+            }
+        });
+        addr.to_string()
+    }
+
+    #[test]
+    fn oci_manifest_is_verified_against_its_digest() {
+        let dir = tmp("oci-digest");
+        let root = dir.join("repo");
+        std::fs::create_dir_all(&root).unwrap();
+        let d = |b: &[u8]| format!("sha256:{}", hex::encode(Sha256::digest(b)));
+        let manifest = |layer_digest: &str| {
+            serde_json::to_vec(&json!({"schemaVersion": 2, "layers": [
+                {"mediaType": "text/plain", "digest": layer_digest, "size": 4,
+                 "annotations": {"org.opencontainers.image.title": "file.txt"}}]}))
+            .unwrap()
+        };
+        let index = |entries: &[&str]| {
+            let manifests: Vec<_> = entries
+                .iter()
+                .map(|d| {
+                    json!({"mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": d,
+                                "platform": {"os": "linux", "architecture": "amd64"}})
+                })
+                .collect();
+            serde_json::to_vec(&json!({"schemaVersion": 2, "manifests": manifests})).unwrap()
+        };
+        let good = manifest(&d(b"GOOD"));
+        let evil = manifest(&d(b"EVIL"));
+        let sha512 = manifest(&format!("sha512:{}", "0".repeat(128)));
+        let m = |r: &str| format!("/v2/art/manifests/{r}");
+        let reg = serve_paths(vec![
+            // The digest of `good` answered with `evil`.
+            (m(&d(&good)), evil.clone()),
+            (m(&d(&evil)), evil.clone()),
+            (m("one-bad"), index(&[&d(&good)])),
+            (m("one-ok"), index(&[&d(&evil)])),
+            (m("two"), index(&[&d(&good), &d(&evil)])),
+            (m("sha512"), sha512),
+            (format!("/v2/art/blobs/{}", d(b"EVIL")), b"EVIL".to_vec()),
+            (
+                format!("/v2/art/blobs/sha512:{}", "0".repeat(128)),
+                b"EVIL".to_vec(),
+            ),
+        ]);
+        let substituted = format!("expected {}, downloaded {}", d(&good), d(&evil));
+        // (name, reference, parts of the error; none when the pull succeeds)
+        let cases: [(&str, String, Vec<String>); 6] = [
+            (
+                "pinned-bad",
+                format!("@{}", d(&good)),
+                vec![substituted.clone()],
+            ),
+            ("pinned-ok", format!("@{}", d(&evil)), vec![]),
+            ("one-bad", ":one-bad".into(), vec![substituted]),
+            ("one-ok", ":one-ok".into(), vec![]),
+            ("two", ":two".into(), vec![d(&good), d(&evil)]),
+            (
+                "sha512",
+                ":sha512".into(),
+                vec!["unsupported digest sha512:".into()],
+            ),
+        ];
+        let items: Vec<_> = cases
+            .iter()
+            .map(|(name, r, _)| {
+                json!({"type": "oci", "source": format!("{reg}/art{r}"),
+                                        "output_path": format!("vendor/{name}"), "insecure": true})
+            })
+            .collect();
+        let deps = dependencies("t", &json!(items), &root).unwrap();
+        let out = fetch(deps, &opts(&root, true, false));
+        for (name, _, needles) in &cases {
+            let o = out
+                .iter()
+                .find(|o| o.output_path == format!("vendor/{name}"))
+                .unwrap();
+            let file = root.join(format!("vendor/{name}/file.txt"));
+            if needles.is_empty() {
+                assert!(!o.failed(), "{name}: {o:?}");
+                assert_eq!(read(&file), "EVIL");
+            } else {
+                assert!(
+                    matches!(&o.status, FetchStatus::Failed { error } if needles.iter().all(|n| error.contains(n.as_str()))),
+                    "{name}: {o:?}"
+                );
+                assert!(!file.exists(), "{name}");
+            }
+        }
     }
 }

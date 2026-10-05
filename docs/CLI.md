@@ -33,8 +33,10 @@ Show the rendered inventory. Without a subcommand it prints target documents.
 | `--format yaml\|json` | output format (default `yaml`) |
 | `-i, --indent <N>` | YAML indentation (default: `inventory.indent` from `.kapitan`, else 2) |
 
-Target names are the dotted path of the target file under `targets/`
-without the extension: `targets/a/b/c.yml` is `a.b.c`.
+A target is named after its file: `targets/a/b/c.yml` is `c`. With
+`compose-target-name` it is named after the path (`a.b.c`), which is also what
+the compiled directory follows. Both spellings select it, so `-t a.b.c` works
+either way.
 
 ### `inventory targets`
 
@@ -127,7 +129,8 @@ not fetched at all, so a repository with everything in place compiles
 offline. Without `--fetch` only items marked `force_fetch: true` are
 fetched (and overwritten). `--dry-run` lists what would be fetched.
 `type: oci` pulls an artifact (what `oras push` produces) from `source`, a
-bare `registry/repository:tag` or `@digest` reference, with the registry
+bare `registry/repository:tag` or `@digest` reference (a digest must match
+the manifest, and an index must list exactly one manifest), with the registry
 distribution API: layers are saved under their title annotation, tar blobs
 are extracted, and the artifact or its `subpath` is copied; `media_type`
 keeps only matching layers, `insecure: true` uses plain http, `tls_verify`
@@ -146,7 +149,7 @@ manifest. `--reveal` decrypts refs into the output instead, and makes the
 `.kapitan` keys used: `compile.search-paths`, `compile.output-path`,
 `compile.indent`, `compile.fetch`, `compile.force-fetch`, `compile.refs-path`,
 `compile.embed-refs`, `compile.reveal`, `compile.python-requirements`,
-`inventory.multiline-string-style`, `inventory.python-resolvers`.
+`compile.yaml-multiline-string-style`, `inventory.python-resolvers`.
 
 `compile.python-requirements` (a list of pip specifiers, or the path of a
 requirements file) names what kadet components import besides `kadet` and
@@ -272,14 +275,14 @@ itself uses:
 | key | section(s) | use |
 |---|---|---|
 | `inventory-path` | `compile`, `inventory`, `global` | inventory directory |
-| `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout |
+| `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout (default: off) |
 | `inventory-backend` | `global` | informational; only `omegaconf` semantics are implemented |
 | `indent` | `inventory` | YAML indentation for `krab inventory` |
 | `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for krab compile |
 | `refs-path`, `embed-refs`, `reveal` | `compile` | where ref files live, embed them, reveal them |
 | `python-requirements` | `compile` | packages kadet components import; installed into krab's own venv |
 | `refs-path` | `refs` | where `krab refs` looks for ref files |
-| `multiline-string-style` | `inventory` | multiline string style for compiled YAML |
+| `yaml-multiline-string-style` | `compile` | multiline string style for compiled YAML (default `literal`) |
 
 ## JSON output
 

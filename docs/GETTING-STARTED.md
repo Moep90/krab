@@ -28,7 +28,7 @@ Run every command from the directory holding `.kapitan` (the same place you
 run the Python `kapitan` from). krab reads the same keys of `.kapitan`:
 `inventory-path`, `compose-target-name`, `compile.search-paths`,
 `compile.output-path`, `compile.indent` and
-`inventory.multiline-string-style`. Without a `.kapitan` the inventory is
+`compile.yaml-multiline-string-style`. Without a `.kapitan` the inventory is
 `./inventory` and the output goes to `./compiled`.
 
 ```sh
@@ -53,9 +53,10 @@ identical either way, which is also how you check the daemon is fresh.
 
 ## 3. Look at the inventory
 
-Target names are the dotted path of the target file under
-`inventory/targets`: `inventory/targets/gcp/prod/cluster.yml` is
-`gcp.prod.cluster`.
+A target is named after its file: `inventory/targets/gcp/prod/cluster.yml` is
+`cluster`. Set `compose-target-name` in `.kapitan` to name it after the path
+(`gcp.prod.cluster`) and have `compiled/` follow the same layout. The dotted
+path selects the target either way.
 
 ```sh
 krab inventory targets                       # table: name, labels, classes, compile inputs, status
@@ -187,8 +188,8 @@ which provides the API components import (`kapitan.inputs.kadet`,
 targets from the daemon on demand and reports which files and modules it
 read so the next compile knows exactly what to invalidate.
 
-For input types that are not native yet (`jsonnet`, `helm` as a direct
-input, `kustomize`, `cuelang`) run `krab compile --backend python`,
+For input types that are not native yet (`jsonnet`, `kustomize`,
+`cuelang`) run `krab compile --backend python`,
 which drives kapitan's own input types in a worker process with the same
 incremental bookkeeping, or use the Python `kapitan` for those targets.
 

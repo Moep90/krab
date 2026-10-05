@@ -1,0 +1,29 @@
+parameters:
+  kapitan:
+    vars:
+      target: charts
+    compile:
+      - input_type: helm
+        input_paths:
+          - charts/demo
+          - charts/demo2
+        output_path: rendered
+        helm_params:
+          name: rel
+          namespace: ns1
+        helm_values:
+          replicas: 3
+          a: "1e3"
+          b: "03190301"
+          c: "1234567"
+          secret: ?{base64:h/s}
+        helm_values_files:
+          - values/extra.yaml
+        kube_version: "1.29"
+      - input_type: helm
+        input_paths:
+          - charts/demo2
+        output_path: single
+        helm_params:
+          output_file: all.yaml
+          include_crds: false

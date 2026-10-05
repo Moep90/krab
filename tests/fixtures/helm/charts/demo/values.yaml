@@ -1,0 +1,8 @@
+replicas: 1
+flag: false
+secret: none
+labels:
+  empty: {}
+a: ""
+b: ""
+c: ""

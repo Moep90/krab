@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rel-keep
+stringData:
+  keep: |+
+    trailing blank lines kept
+
+
+---
+apiVersion: v1
+data:
+  leading_space: |2
+     indented first line
+    next
+  literal: |
+    line one
+    line two
+  strip: |-
+    no final newline
+    second line
+  trailing_space: "ends in a space\nlast "
+kind: ConfigMap
+metadata:
+  name: rel-multiline

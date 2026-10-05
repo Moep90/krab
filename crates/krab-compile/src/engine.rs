@@ -87,8 +87,10 @@ impl CompileOptions {
 
     fn engine_identity(&self, versions: &str) -> String {
         match self.backend {
+            // `evaluator-per-target`: output written while targets shared
+            // kadet evaluators (#179) is compiled again.
             Backend::Native => format!(
-                "krab {} native {} {versions}",
+                "krab {} native {} evaluator-per-target {versions}",
                 env!("CARGO_PKG_VERSION"),
                 kadet_runner_digest()
             ),
