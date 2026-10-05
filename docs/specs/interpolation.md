@@ -403,9 +403,9 @@ These requirements describe the behaviour krab is meant to have. `main` does
 not meet them yet; the open deviations below say what it does instead.
 
 ```
-RES-65 Native `truncate` MUST give what the Python original gives for
-       every length, including lengths below 5 (`truncate:abcdef,3` is
-       `abcd-e80b`).
+RES-65 Native `truncate` with a `length` below 5 MUST fail the target
+       with a diagnostic saying that the Python original returns a value
+       longer than `length` there; lengths of 5 and more follow RES-53.
        Test: none
        Since: not met yet (#165)
 
@@ -416,14 +416,18 @@ RES-66 An unquoted dotted path with a numeric segment in a resolver
        Since: not met yet (#167)
 
 RES-67 A `resolvers.py` that cannot be imported, or lacks
-       `pass_resolvers()`, MUST produce a warning and leave the built-in
-       resolvers working, so targets that do not use the missing names
-       render.
+       `pass_resolvers()`, MUST produce a diagnostic carrying the real
+       exception while every target renders with the built-in resolvers,
+       so that a target fails only where it calls a resolver that is
+       missing.
        Test: none
        Since: not met yet (#121)
 
-RES-68 A resolver the reference does not provide SHOULD NOT be accepted
-       silently, since such an inventory does not render on kapitan.
+RES-68 A `contrib` resolver used without `.kapitan`
+       `inventory.contrib-resolvers: true` MUST produce the warning "krab
+       extension; kapitan 0.36.3 fails with Unsupported interpolation
+       type" and leave the rendered value unchanged. With the key set it
+       MUST NOT warn.
        Test: none
        Since: not met yet (#122)
 
@@ -523,7 +527,7 @@ Diagnostic codes of this area: `interpolation::syntax`, `bad_key`,
 
 | Requirement | Issue | What `main` does |
 |---|---|---|
-| RES-65 | #165 | The kept prefix is clamped to empty (`contrib.rs:89`), giving `-e80b` |
+| RES-65 | #165 | The kept prefix is clamped to empty (`contrib.rs:89`): `truncate:abcdef,3` gives `-e80b` without a diagnostic |
 | RES-66 | #167 | `.1` is parsed as a float and the argument becomes `l0.1.z`, which is not found; `write` destinations are affected the same way |
 | RES-67 | #121 | The whole inventory fails with `inventory::python_resolvers` |
 | RES-68 | #122 | The `contrib` set (RES-50) is always registered without notice |

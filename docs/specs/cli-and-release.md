@@ -418,6 +418,40 @@ CLI-53 Every diagnostic code krab can emit and every registered resolver
        SHOULD be documented under docs/, with what triggers it.
        Test: none
        Since: not met yet (#140)
+
+CLI-54 The release MUST publish a `krab` wheel to PyPI, built with maturin
+       `bindings = "bin"` and uploaded by trusted publishing, from which
+       `python -m krab` runs the binary.
+       Test: none
+       Since: not met yet (#226)
+
+CLI-55 The Linux release binaries MUST need at most glibc 2.17, the release
+       job MUST fail when a binary needs a newer symbol version, and
+       README.md MUST state the floor.
+       Test: none
+       Since: not met yet (#225)
+
+CLI-57 docs/ARCHITECTURE.md MUST name in its code map every file an
+       extension goes through, and MUST list, for each kind of extension
+       (resolver, input type, output type, fetch kind, RPC method, LSP
+       capability, subcommand, `.kapitan` key, diagnostic code), the files
+       to change.
+       Test: none
+       Since: not met yet (#228)
+
+CLI-58 A test that skips because Python packages or helm are missing MUST
+       fail instead when the environment variable `CI` is set, and
+       CONTRIBUTING.md MUST give the pip command that installs what these
+       tests need, with the pins ci.yml uses.
+       Test: none
+       Since: not met yet (#228)
+
+CLI-59 Each hand-maintained registration list MUST be checked against the
+       code by a test: resolvers used in the fixture inventory, RPC methods
+       in docs/CLI.md, embedded runner files, and fetch kinds in the
+       inventory model.
+       Test: none
+       Since: not met yet (#228)
 ```
 
 ## Acceptance criteria
@@ -579,4 +613,9 @@ Branch rules that gate on CI name the single check `CI passed` (CLI-33).
 | CLI-33 | #171 | The ruleset for `main` has enforcement disabled and there is no classic branch protection, so no check, `CI passed` included, is required before a merge. Needs an admin action. |
 | CLI-52 | #172 | The crate name `krab` on crates.io belongs to an unrelated project. Needs a decision on the published name, if any. |
 | CLI-52 | #43 | The crates are not published (`publish = false`), so there is no library release. |
+| CLI-54 | #226 | No wheel is published; krab ships as release archives only |
+| CLI-55 | #225 | The Linux binaries are built on ubuntu-22.04 (CLI-41) and need `GLIBC_2.34`; README.md says 2.35 |
+| CLI-57 | #228 | The code map omits `fetch.rs`, `oci.rs`, `native.rs`, `output.rs`, `resolvers/`, `rpc.rs`, `client.rs`, the LSP `server.rs`, `dotkapitan.rs` and the runner scripts; no document says which files an extension touches |
+| CLI-58 | #228 | The kadet, helm and corpus tests print a skip message and pass when their tool is missing; the pip command with pins is only in ci.yml |
+| CLI-59 | #228 | Only the CLI flags (CLI-20) and the reference version (CLI-21) are checked by a test; 11 registered resolver names do not appear in `tests/fixtures/inventory` and `inventory.class_usage` is missing from docs/CLI.md |
 | CLI-41 | #44 | No Homebrew formula and no `cargo binstall` metadata; release archives are the only install path. |

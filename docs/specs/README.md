@@ -6,6 +6,9 @@ shaped the way it is, `DECISIONS.md` lists where krab deliberately differs from
 kapitan, and `CLI.md` lists the flags. A spec links to those documents instead
 of repeating them.
 
+A requirement that copies kapitan's behaviour or departs from it follows the
+surfaces rule in [DECISIONS.md](../DECISIONS.md).
+
 The first versions were written after the code, from the commit history, the
 pull requests and the tests on `main` at `a4fb9c4`. They record what krab does
 and what it is known not to do yet. From here on a change starts by editing the

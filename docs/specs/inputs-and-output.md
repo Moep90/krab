@@ -339,6 +339,12 @@ OUT-41 A list MUST be written as PyYAML's `dump_all`: one document per
        scalar ends with `...`.
        Test: crates/krab-inventory/src/emit/yaml.rs::tests::dump_all_writes_document_markers_like_pyyaml
        Since: #182
+
+OUT-45 A folded scalar MUST read back as the string it was written from.
+       When folding per OUT-40 would change the value, the string MUST fall
+       back to double quotes.
+       Test: none
+       Since: not met yet (#218)
 ```
 
 ### kadet output shapes
@@ -357,8 +363,9 @@ OUT-43 A file's value MUST be written per OUT-41: a mapping as one document,
        Test: crates/krab/tests/kadet_isolation.rs::a_full_compile_gives_each_target_its_own_evaluator
        Since: 1b9c9c5
 
-OUT-44 A file whose value is a string MUST be written as kapitan writes it,
-       one YAML document per character.
+OUT-44 A file whose value is a string, under the `yaml` or `json` output
+       type, MUST be written as one scalar and MUST produce a warning that
+       suggests `output_type: plain`.
        Test: none
        Since: not met yet (#126)
 ```
@@ -478,5 +485,6 @@ package and its modules are listed in the Compile section of
 |---|---|---|
 | OUT-3 | #11 | jsonnet, kustomize and cuelang are not native and need `--backend python`. helm is native since #176 |
 | OUT-29 | #12 | `output_type: toml` fails the item (`output.rs:159`); the jinja2 `toml` filter fails too |
-| OUT-44 | #126 | A kadet file value that is a string (a BaseObj whose root is a string) is written as one scalar document; the reference writes one document per character |
+| OUT-44 | #126 | A kadet file value that is a string (a BaseObj whose root is a string) is written as one scalar document without a warning |
+| OUT-45 | #218 | A line that starts with a space and runs past column 80 is folded as PyYAML folds it (`emit/yaml.rs:1154-1172`), and the file reads back without the line break before the next line and with a new one at the fold |
 | OUT-36 | #202 | `0o644` is read as a string and written unquoted; kapitan reads it as the integer 420 and quotes the string `'0o644'`, an import side effect of yamllint in the reference |

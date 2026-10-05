@@ -424,6 +424,15 @@ REF-49 Every backend MUST pass one shared contract test suite that runs
        without `gpg`, `aws`, `az`, `gcloud` or network access.
        Test: none
        Since: not met yet (#144)
+
+REF-50 When neither the inventory nor `VAULT_SKIP_VERIFY` sets
+       `skip_verify`, Vault requests MUST verify the server certificate
+       against the system roots and, when verification fails, warn and
+       continue unverified. An explicit `skip_verify: true` MUST skip
+       verification without a warning. The ref file keeps the
+       `skip_verify` default of REF-32.
+       Test: none
+       Since: not met yet (#216)
 ```
 
 ## Acceptance criteria
@@ -507,7 +516,7 @@ REF-49 Every backend MUST pass one shared contract test suite that runs
 
 ## Open deviations
 
-The plan for all rows is
+The plan for the #144 rows is
 [docs/exec-plans/144-secrets-backend-contract.md](../exec-plans/144-secrets-backend-contract.md).
 
 | Requirement | Issue | What `main` does |
@@ -517,3 +526,4 @@ The plan for all rows is
 | REF-47 | #144 | `aws_encrypt` writes the plaintext to a mode 0600 temp file in `TMPDIR`, removed on `Drop`, which does not run on `SIGKILL` or `panic=abort`. (F8) |
 | REF-48 | #144 | `write_vaultkv` writes to Vault, then `create()` writes the ref file; a failed file write orphans the Vault value. (F15) |
 | REF-49 | #144 | `gkms`, `awskms` and `azkms` have no tests beyond the `mock` key; `gpg` and Vault tests depend on a local keyring and a mock server. |
+| REF-50 | #216 | An unset `skip_verify` takes kapitan's default `true` (`refs/vault.rs:41-46,142`), so every Vault request skips certificate verification without a word; the system roots are never used |
