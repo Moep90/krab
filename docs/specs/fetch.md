@@ -104,8 +104,8 @@ FET-9  A failure MUST be reported for each affected destination; a failure
 FET-10 An unforced copy MUST follow kapitan's `safe_copy_tree`: it never
        overwrites an existing file and skips entries whose name starts with
        `.`. A forced copy MUST follow `copy_tree(clobber_files=True)`: it
-       copies everything, dot entries included, and replaces existing
-       files.
+       replaces existing files. Dot entries in a forced copy follow
+       FET-32.
        Test: crates/krab-compile/src/fetch.rs::safe_copy_never_overwrites_and_skips_dotfiles
        Since: #62
 
@@ -277,6 +277,11 @@ FET-31 A `git` fetch SHOULD NOT transfer the repository's full history
        when a ref or subdir is all it needs.
        Test: none
        Since: not met yet (#64)
+
+FET-32 A forced copy MUST skip entries whose name starts with `.`, as an
+       unforced copy does, and MUST report the skipped names once.
+       Test: none
+       Since: not met yet (#217)
 ```
 
 ## Acceptance criteria
@@ -359,3 +364,4 @@ FET-31 A `git` fetch SHOULD NOT transfer the repository's full history
 | FET-29 | #145 | `download` (`fetch.rs:523`) and `Registry::new` (`oci.rs:254`) set only `timeout_connect(30s)`; bodies are read with `.limit(u64::MAX)` (`fetch.rs:543`, `oci.rs:294`); `unpack_file` and `tar_bytes` hold whole archives in memory. |
 | FET-30 | #146 | `safe_copy_tree` and `copy_tree` (`fetch.rs:1009-1047`) use `is_dir` and `std::fs::copy`, which follow links, so a link entry in an archive, repository or artifact copies the target's contents (or a whole directory) into the destination. |
 | FET-31 | #64 | `fetch_git` runs a full `git clone` per run. |
+| FET-32 | #217 | A forced copy copies dot entries too (`fetch.rs:505-508,1019-1021`): a `type: git` dependency without `subdir` leaves `.git` in the dependency path, which `git add` then treats as an embedded repository. |

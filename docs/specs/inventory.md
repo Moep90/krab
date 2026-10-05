@@ -69,9 +69,10 @@ INV-5  Timestamps MUST stay strings (D3).
        Since: 319ca84
 
 INV-6  A tag other than the core `!!str`, `!!int`, `!!float`, `!!bool` and
-       `!!null` MUST fail with `yaml::unknown_tag` (D2).
+       `!!null` MUST fail with `yaml::unknown_tag` (D2), on a scalar, a
+       mapping or a sequence, with the message printing the tag as written.
        Test: none
-       Since: 319ca84
+       Since: 319ca84 (scalars), not met yet for mappings and sequences (#219)
 
 INV-7  A class or target file MUST be read as the sections `classes`,
        `parameters`, `applications` and `exports`. An empty file or a
@@ -317,11 +318,15 @@ INV-39 When `enable-class-wildcards` is set (`--enable-class-wildcards`,
        Since: not met yet (#69)
 
 INV-40 A `.kapitan` `version:` that kapitan 0.36.3 does not satisfy MUST
-       stop the run, as the reference refuses to compile.
+       stop the run, as the reference refuses to compile. When the value is
+       a YAML float, the message MUST say it was read as a number and
+       should be quoted.
        Test: none
        Since: not met yet (#119)
 
-INV-41 An unknown `.kapitan` key MUST be reported.
+INV-41 An unknown `.kapitan` key MUST be reported. `init.*` keys MUST be
+       reported as settings of `kapitan init`, a command krab does not
+       have, not as unknown.
        Test: none
        Since: not met yet (#142)
 
@@ -339,9 +344,25 @@ INV-44 An inventory that kapitan renders with reclass SHOULD NOT render
        Test: none
        Since: not met yet (#118)
 
-INV-45 `compose-target-name` MUST be resolved in the order of INV-11.
+INV-45 `compose-target-name` MUST be resolved in the order of INV-11, and
+       a `compose-target-name` or `compose-node-name` key in a section
+       kapitan does not read it from MUST produce a warning.
        Test: none
-       Since: not met yet (tbd)
+       Since: not met yet (#220)
+
+INV-46 A class resolved through one of the two reclass compatibility
+       fallbacks of INV-16 MUST produce a warning naming the file used and
+       the paths expected. When that file is `classes/init.yml` or
+       `<inventory>/classes.yml` (the dropped parts leave nothing), the
+       class MUST fail with `inventory::class_not_found` instead.
+       Test: none
+       Since: not met yet (#214)
+
+INV-47 A top-level key in a class or target file other than the sections
+       of INV-7 MUST produce a warning, with a "did you mean" naming the
+       section within edit distance 2 when there is one.
+       Test: none
+       Since: not met yet (#215)
 ```
 
 ## Acceptance criteria
@@ -428,10 +449,13 @@ The library entry points other crates use are `Inventory::new`,
 
 | Requirement | Issue | What `main` does |
 |---|---|---|
+| INV-6 | #219 | A tag on a mapping or sequence (`!!omap`, `!!set`, `!custom`) is dropped and the value renders as a plain mapping or list; `!foo` on a scalar is reported as `!!foo` |
 | INV-39 | #69 | No `enable-class-wildcards` setting; a pattern is always taken literally and fails with `inventory::class_not_found` |
 | INV-40 | #119 | `version` is not read |
 | INV-41 | #142 | Unknown keys are accepted and have no effect, without a word |
 | INV-42 | #164 | `DotKapitan::compile_*` read the `compile` section only |
 | INV-43 | #8 | The last value wins silently |
 | INV-44 | #118 | krab renders it with omegaconf semantics and prints the INV-36 warning; the refusal is not implemented |
-| INV-45 | tbd | `dotkapitan.rs:114-115` reads `compose-node-name` before `compose-target-name`, each from `compile`, `inventory` or `global`, so the two disagree when both keys are set with different values or when `compose-target-name` is written outside `global` |
+| INV-45 | #220 | `dotkapitan.rs:114-115` reads `compose-node-name` before `compose-target-name`, each from `compile`, `inventory` or `global`, so the two disagree when both keys are set with different values or when `compose-target-name` is written outside `global`; no warning names a key in a section kapitan ignores |
+| INV-46 | #214 | A fallback hit loads without a diagnostic: `componets.nginx` loads `classes/init.yml` |
+| INV-47 | #215 | Other top-level keys are ignored without a diagnostic: `paramters: {replicas: 3}` is dropped |
