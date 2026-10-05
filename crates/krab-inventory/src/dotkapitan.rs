@@ -72,6 +72,8 @@ impl PythonResolverSettings {
 pub struct DotKapitan {
     /// The top-level `version:` as Python's `str()` prints it, unless falsy.
     pub version: Option<String>,
+    /// `version:` is a YAML float, so `0.30` arrives as `0.3`.
+    pub version_is_float: bool,
     pub inventory_path: Option<PathBuf>,
     pub compose_target_name: Option<bool>,
     pub inventory_backend: Option<String>,
@@ -106,6 +108,10 @@ impl DotKapitan {
                 .get("version")
                 .filter(|n| n.value.truthy())
                 .map(|n| n.value.py_str()),
+            version_is_float: matches!(
+                node.get("version").map(|n| &n.value),
+                Some(Value::Float(_))
+            ),
             compile: node
                 .get("compile")
                 .and_then(Node::as_map)
@@ -186,8 +192,13 @@ impl DotKapitan {
     pub fn version_mismatch(&self) -> Option<String> {
         let pin = self.version.as_deref()?;
         (!same_version(pin, REFERENCE_VERSION)).then(|| {
+            let number = if self.version_is_float {
+                format!(" `version` is read as the number {pin}; quote it to keep it as written.")
+            } else {
+                String::new()
+            };
             format!(
-                "`.kapitan` pins kapitan {pin}, krab matches kapitan {REFERENCE_VERSION}. Update `version` in `.kapitan`, or skip this check with `--ignore-version-check` (`compile.ignore-version-check: true` in `.kapitan`)"
+                "`.kapitan` pins kapitan {pin}, krab matches kapitan {REFERENCE_VERSION}.{number} Update `version` in `.kapitan`, or skip this check with `--ignore-version-check` (`compile.ignore-version-check: true` in `.kapitan`)"
             )
         })
     }
@@ -313,9 +324,12 @@ mod tests {
         }
         let msg = mismatch("0.30").unwrap();
         assert!(
-            msg.contains("kapitan 0.3,") && msg.contains("--ignore-version-check"),
+            msg.contains("kapitan 0.3,")
+                && msg.contains("read as the number 0.3; quote it")
+                && msg.contains("--ignore-version-check"),
             "{msg}"
         );
+        assert!(!mismatch("'0.30'").unwrap().contains("number"));
         let _ = std::fs::remove_dir_all(dir);
     }
 
