@@ -14,7 +14,7 @@ use crate::digest::{Digests, digest_str};
 use crate::docs::SharedDocs;
 use crate::inputs::jinja::JinjaContext;
 use crate::inputs::kadet::KadetPool;
-use crate::inputs::{Item, Reads, copy, external, jinja, remove, resolve_input_paths};
+use crate::inputs::{Item, Reads, copy, external, helm, jinja, remove, resolve_input_paths};
 use crate::manifest::ItemRecord;
 use crate::output::{OutputType, Writer, WriterOptions};
 use crate::plan::TargetPlan;
@@ -296,6 +296,26 @@ impl NativeCompiler {
             "external" => {
                 for input in inputs {
                     external::compile(&input, target_compile_path, &item.raw)?;
+                }
+            }
+            "helm" => {
+                let mut params = item
+                    .raw
+                    .get("helm_params")
+                    .and_then(Json::as_object)
+                    .cloned()
+                    .unwrap_or_default();
+                for input in inputs {
+                    helm::compile_input(
+                        &input,
+                        &item.raw,
+                        &mut params,
+                        target_compile_path,
+                        &self.opts.repo_root,
+                        item.prune,
+                        writer,
+                        reads,
+                    )?;
                 }
             }
             other => {

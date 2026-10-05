@@ -19,6 +19,10 @@ pub struct DumpOptions {
     pub multiline: Option<super::ryml::MultilineStyle>,
     /// Emit `null` as an empty scalar (`--yaml-dump-null-as-empty`).
     pub null_as_empty: bool,
+    /// kapitan's `_helm_str_representer` for helm values files: quote
+    /// digit-only strings that start with `0` or are longer than 6
+    /// characters, so helm's YAML parser keeps them strings.
+    pub quote_digit_strings: bool,
 }
 
 impl Default for DumpOptions {
@@ -31,6 +35,7 @@ impl Default for DumpOptions {
             allow_unicode: false,
             multiline: None,
             null_as_empty: false,
+            quote_digit_strings: false,
         }
     }
 }
@@ -310,7 +315,15 @@ impl Emitter {
                 }
             }
             scalar => {
-                let s = represent(scalar, self.opts.null_as_empty);
+                let mut s = represent(scalar, self.opts.null_as_empty);
+                if self.opts.quote_digit_strings
+                    && let Value::Str(t) = scalar
+                    && t.chars().count() > 1
+                    && t.chars().all(|c| c.is_ascii_digit())
+                    && (t.starts_with('0') || t.chars().count() > 6)
+                {
+                    s.implicit = false;
+                }
                 let forced = match scalar {
                     Value::Str(t) if t.contains('\n') => self.opts.multiline,
                     _ => None,
@@ -967,6 +980,31 @@ mod tests {
     #[test]
     fn default_dumper_is_indentless() {
         assert_eq!(dump("b: [1, 2]\n", false), "b:\n- 1\n- 2\n");
+    }
+
+    #[test]
+    fn helm_values_quote_digit_strings() {
+        let mut m = crate::value::Map::new();
+        for (k, v) in [
+            ("a", "03190301"),
+            ("b", "1234567"),
+            ("c", "123"),
+            ("d", "0"),
+            ("e", "1e3"),
+            ("f", "007"),
+            ("g", "12"),
+        ] {
+            m.insert(k.into(), Node::synthetic(Value::Str(v.into())));
+        }
+        let opts = DumpOptions {
+            quote_digit_strings: true,
+            ..DumpOptions::pyyaml_default()
+        };
+        // PyYAML SafeDumper with kapitan's `_helm_str_representer`.
+        assert_eq!(
+            dump_yaml(&Node::synthetic(Value::Map(m)), &opts),
+            "a: '03190301'\nb: '1234567'\nc: '123'\nd: '0'\ne: 1e3\nf: '007'\ng: '12'\n"
+        );
     }
 
     #[test]
