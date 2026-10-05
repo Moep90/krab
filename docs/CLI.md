@@ -169,6 +169,7 @@ from `.kapitan`, else `./refs`). Types: `plain`, `base64`, `env`, `gkms`,
 | flag | meaning |
 |---|---|
 | `-w, --write <type:path>` | write a ref from `--file` (`-` reads stdin); `--base64` encodes the content first, `--binary` accepts non-text content |
+| `--force` | with `--write`, replace a ref file that already exists |
 | `-r, --reveal` | reveal the tags in `--file` (a file, or a directory whose YAML files are concatenated; `-` reads stdin), the ref in `--ref-file`, or the string given as `--tag` |
 | `--update <type:path>` | re-encrypt a ref for new `--recipients` (gpg) or a new `--key` (gkms, awskms, azkms) |
 | `--update-targets` | re-encrypt every ref under `<refs-path>/<target>/...` with what that target's `parameters.kapitan.secrets` declares |

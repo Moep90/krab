@@ -39,6 +39,10 @@ pub struct RefsArgs {
     #[arg(long)]
     validate_targets: bool,
 
+    /// With --write: replace a ref file that already exists
+    #[arg(long)]
+    force: bool,
+
     /// Base64-encode the file content before storing it
     #[arg(long, alias = "b64")]
     base64: bool,
@@ -291,6 +295,13 @@ fn write(app: &App, args: &RefsArgs, rc: &RefController, token: &str) -> Result<
         None => TargetSecrets::default(),
     };
     let (type_name, path) = split_token(token)?;
+    let existing = rc.refs_path.join(path);
+    if existing.symlink_metadata().is_ok() && !args.force {
+        return Err(Failure::Message(format!(
+            "{} already exists; pass --force to replace it",
+            existing.display()
+        )));
+    }
     let (payload, encoding) = if args.base64 {
         (b64_encode(&data).into_bytes(), "base64")
     } else {
