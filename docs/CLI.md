@@ -299,7 +299,7 @@ says whether kapitan reads it:
 | `version` | top level | `krab compile` refuses to run unless it matches kapitan 0.36.3, compared as kapitan compares it (`0.36` matches) |
 | `ignore-version-check` | `compile` | skip that check |
 | `inventory-path` | `compile`, `inventory`, `global` | inventory directory |
-| `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout (default: off) |
+| `compose-target-name` / `compose-node-name` | `global.compose-target-name`, else `compile.compose-node-name`, else `global.compose-node-name` | dotted target names from the directory layout (default: off) |
 | `inventory-backend` | `inventory_backend`, `global` | only `omegaconf` is implemented; any other value, or none, prints a warning because kapitan would render with reclass |
 | `indent` | `inventory` | YAML indentation for `krab inventory` |
 | `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for krab compile |

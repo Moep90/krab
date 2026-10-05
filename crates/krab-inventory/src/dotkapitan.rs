@@ -143,7 +143,6 @@ const KRAB_KEYS: &[(&str, &[&str])] = &[
         &[
             "inventory-path",
             "compose-node-name",
-            "compose-target-name",
             "search-paths",
             "output-path",
             "indent",
@@ -161,13 +160,7 @@ const KRAB_KEYS: &[(&str, &[&str])] = &[
     ),
     (
         "inventory",
-        &[
-            "inventory-path",
-            "compose-node-name",
-            "compose-target-name",
-            "indent",
-            "python-resolvers",
-        ],
+        &["inventory-path", "indent", "python-resolvers"],
     ),
     ("refs", &["refs-path"]),
 ];
@@ -343,10 +336,13 @@ impl DotKapitan {
         if let Some(Value::Str(s)) = get(&["compile", "inventory", "global"], "inventory-path") {
             cfg.inventory_path = Some(PathBuf::from(s));
         }
-        if let Some(Value::Bool(b)) = get(&["compile", "inventory", "global"], "compose-node-name")
-            .or_else(|| get(&["compile", "inventory", "global"], "compose-target-name"))
+        // kapitan: `from_dot_kapitan("global", "compose-target-name",
+        // from_dot_kapitan("compile", "compose-node-name", False))`; the first
+        // key present decides, by Python truthiness.
+        if let Some(v) = get(&["global"], "compose-target-name")
+            .or_else(|| get(&["compile", "global"], "compose-node-name"))
         {
-            cfg.compose_target_name = Some(b);
+            cfg.compose_target_name = Some(v.truthy());
         }
         // kapitan: `from_dot_kapitan("inventory_backend", "inventory-backend", ...)`,
         // the `inventory_backend` section first, then `global`.
@@ -535,6 +531,40 @@ mod tests {
             "{msg}"
         );
         assert!(!mismatch("'0.30'").unwrap().contains("number"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn compose_target_name_is_read_in_kapitans_order() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-compose-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let load = |text: &str| {
+            std::fs::write(dir.join(".kapitan"), text).unwrap();
+            DotKapitan::load(&dir).unwrap()
+        };
+        let compose = |text: &str| load(text).compose_target_name;
+        // `global.compose-target-name`, then `compile.compose-node-name`,
+        // then `global.compose-node-name`; nothing else.
+        assert_eq!(
+            compose("global:\n  compose-target-name: true\ncompile:\n  compose-node-name: false\n"),
+            Some(true)
+        );
+        assert_eq!(
+            compose("compile:\n  compose-node-name: false\nglobal:\n  compose-node-name: true\n"),
+            Some(false)
+        );
+        assert_eq!(compose("global:\n  compose-node-name: true\n"), Some(true));
+        assert_eq!(compose("compile:\n  compose-target-name: true\n"), None);
+        assert_eq!(compose("inventory:\n  compose-node-name: true\n"), None);
+        let dot =
+            load("compile:\n  compose-target-name: true\ninventory:\n  compose-node-name: true\n");
+        assert_eq!(
+            dot.key_warnings,
+            [
+                "`.kapitan`: unknown key `compile.compose-target-name`, kapitan does not read it either",
+                "`.kapitan`: unknown key `inventory.compose-node-name`, kapitan does not read it either",
+            ]
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
