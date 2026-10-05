@@ -414,8 +414,13 @@ CLI-52 Every crate MUST be publish = false while [patch.crates-io] replaces
 ### Not met yet
 
 ```
-CLI-53 Every diagnostic code krab can emit and every registered resolver
-       SHOULD be documented under docs/, with what triggers it.
+CLI-53 Every diagnostic code krab can emit MUST be documented in
+       docs/diagnostics.md, with what triggers it.
+       Test: crates/krab/tests/docs_consistency.rs::every_diagnostic_code_is_documented
+       Since: #240
+
+CLI-60 Every registered resolver SHOULD be documented under docs/, with
+       its arguments and result.
        Test: none
        Since: not met yet (#140)
 
@@ -436,22 +441,22 @@ CLI-57 docs/ARCHITECTURE.md MUST name in its code map every file an
        (resolver, input type, output type, fetch kind, RPC method, LSP
        capability, subcommand, `.kapitan` key, diagnostic code), the files
        to change.
-       Test: none
-       Since: not met yet (#228)
+       Test: none (reviewed, no automated check)
+       Since: #240
 
 CLI-58 A test that skips because Python packages or helm are missing MUST
        fail instead when the environment variable `CI` is set, and
        CONTRIBUTING.md MUST give the pip command that installs what these
        tests need, with the pins ci.yml uses.
-       Test: none
-       Since: not met yet (#228)
+       Test: none (the skip helpers in crates/krab/tests/helm_input.rs, kadet_isolation.rs, crates/krab-compile/tests/kadet_runner.rs and crates/krab-inventory/tests/python_resolvers.rs; checked by hand with CI=1)
+       Since: #240
 
 CLI-59 Each hand-maintained registration list MUST be checked against the
        code by a test: resolvers used in the fixture inventory, RPC methods
        in docs/CLI.md, embedded runner files, and fetch kinds in the
        inventory model.
-       Test: none
-       Since: not met yet (#228)
+       Test: crates/krab-inventory/tests/fixture.rs::every_registered_resolver_is_called_by_the_fixture, crates/krab/tests/docs_consistency.rs::every_rpc_method_is_documented, crates/krab-compile/src/inputs/kadet.rs::every_bundled_kapitan_module_is_listed, crates/krab-compile/src/fetch.rs::every_kind_is_accepted_by_the_inventory_model
+       Since: #240
 ```
 
 ## Acceptance criteria
@@ -607,7 +612,7 @@ Branch rules that gate on CI name the single check `CI passed` (CLI-33).
 | Requirement | Issue | What `main` does |
 |---|---|---|
 | CLI-7, CLI-8, CLI-10, CLI-11 | #41 | There is no `--help-json` (clap rejects it with exit status 2). Exit status distinguishes only success (0), any failure (1) and an argument error (2). Under `--json` diagnostics go to stdout, and non-diagnostic errors and configuration warnings stay plain text on stderr. |
-| CLI-53 | #140 | The 39 diagnostic codes (`interpolation::` 13, `inventory::` 15, `yaml::` 9, `server::` 1, `resolver::` 1) and the names of the registered resolvers are documented nowhere; only `inventory::conflicting_targets` appears in docs/. |
+| CLI-60 | #140 | The registered resolvers are documented only by name in DESIGN.md and in the specs' resolver table |
 | CLI-21 | #141 | The reference version 0.36.3 also appears in Rust sources (`crates/krab-inventory/tests/fixture.rs`, `crates/krab-compile/src/refs/mod.rs`, two tests in `crates/krab/tests`) and in `ci.yml`, outside the markdown-only check, and README.md lines 201 to 202 wrap between "kapitan" and "0.36.3", so the line-based scan misses it. The check compares copies with each other, not with a source. Stale `kapitan` names remain: `crates/krab-inventory/src/python.rs:142` documents `~/.cache/kapitan` where the code uses `krab`, `crates/krab-compile/src/pyenv.rs:16` documents `$XDG_CACHE_HOME/kapitan/python/<digest>`, and `.claude/skills/krab/SKILL.md:211-212` names the extension `kapicorp.kapitan` with settings `kapitan.path` and `kapitan.python`. |
 | CLI-52 | #112 | `cargo install` cannot work while `[patch.crates-io]` (Cargo.toml:75) replaces `saphyr-parser` with the vendored fork. Needs a decision: upstream the patches, publish the fork under its own name, or stay binary-only. |
 | CLI-33 | #171 | The ruleset for `main` has enforcement disabled and there is no classic branch protection, so no check, `CI passed` included, is required before a merge. Needs an admin action. |
@@ -615,7 +620,4 @@ Branch rules that gate on CI name the single check `CI passed` (CLI-33).
 | CLI-52 | #43 | The crates are not published (`publish = false`), so there is no library release. |
 | CLI-54 | #226 | No wheel is published; krab ships as release archives only |
 | CLI-55 | #225 | The Linux binaries are built on ubuntu-22.04 (CLI-41) and need `GLIBC_2.34`; README.md says 2.35 |
-| CLI-57 | #228 | The code map omits `fetch.rs`, `oci.rs`, `native.rs`, `output.rs`, `resolvers/`, `rpc.rs`, `client.rs`, the LSP `server.rs`, `dotkapitan.rs` and the runner scripts; no document says which files an extension touches |
-| CLI-58 | #228 | The kadet, helm and corpus tests print a skip message and pass when their tool is missing; the pip command with pins is only in ci.yml |
-| CLI-59 | #228 | Only the CLI flags (CLI-20) and the reference version (CLI-21) are checked by a test; 11 registered resolver names do not appear in `tests/fixtures/inventory` and `inventory.class_usage` is missing from docs/CLI.md |
 | CLI-41 | #44 | No Homebrew formula and no `cargo binstall` metadata; release archives are the only install path. |
