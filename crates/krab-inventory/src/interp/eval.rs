@@ -90,6 +90,17 @@ impl<'a> Evaluator<'a> {
         self.root
     }
 
+    /// Whether the node at `path` still holds `expr`: a `write` resolver may
+    /// have replaced it, or a container above it, while it was evaluated.
+    fn still_holds(&self, path: &KeyPath, expr: &str) -> bool {
+        get(self.root, path).is_some_and(|n| n.as_str() == Some(expr))
+    }
+
+    /// Forget memoised results after the tree was changed underneath them.
+    pub(crate) fn invalidate(&mut self) {
+        self.cache.clear();
+    }
+
     /// Run `passes` full resolution passes over the tree.
     pub fn resolve_all(&mut self, passes: usize) -> Result<()> {
         for _ in 0..passes {
@@ -146,12 +157,17 @@ impl<'a> Evaluator<'a> {
         let source = match resolved {
             Resolved::At(q) => {
                 self.resolve_subtree(&q)?;
-                let value = get(self.root, &q).unwrap().value.clone();
-                *get_mut(self.root, path).unwrap() = Node::new(value, origin);
+                if let Some(value) = get(self.root, &q).map(|n| n.value.clone())
+                    && self.still_holds(path, &expr)
+                {
+                    *get_mut(self.root, path).unwrap() = Node::new(value, origin);
+                }
                 Some(q)
             }
             Resolved::Owned(value) => {
-                *get_mut(self.root, path).unwrap() = Node::new(value, origin);
+                if self.still_holds(path, &expr) {
+                    *get_mut(self.root, path).unwrap() = Node::new(value, origin);
+                }
                 None
             }
         };
