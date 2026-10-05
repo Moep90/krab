@@ -58,30 +58,40 @@ pub fn run_stdio(
     // Diagnostics: publish now and after every change the daemon renders.
     let published: Arc<Mutex<HashSet<Url>>> = Arc::new(Mutex::new(HashSet::new()));
     publish_diagnostics(&connection.sender, &backend, &published, &state.lock());
+    // Emptied on exit: the writer thread, and so `io_threads.join()`, ends
+    // only once every sender is dropped.
+    let diagnostics_sender = Arc::new(Mutex::new(Some(connection.sender.clone())));
     {
-        let sender = connection.sender.clone();
+        let sender = diagnostics_sender.clone();
         let backend = backend.clone();
         let published = published.clone();
         let state = state.clone();
         std::thread::spawn(move || {
-            let mut generation = 0u64;
-            loop {
-                let Ok(mut client) = backend.wait_client() else {
-                    std::thread::sleep(std::time::Duration::from_secs(5));
-                    continue;
-                };
-                while let Ok(r) = client.call::<_, WaitResult>(
-                    "inventory.wait",
-                    WaitParams {
-                        generation,
-                        timeout_ms: Some(60_000),
-                    },
-                ) {
-                    if !r.timed_out {
-                        publish_diagnostics(&sender, &backend, &published, &state.lock());
+            let mut generation;
+            let mut delay = std::time::Duration::from_secs(1);
+            while sender.lock().is_some() {
+                if let Ok(mut client) = backend.wait_client() {
+                    // A restarted daemon counts generations from zero again.
+                    generation = 0;
+                    while let Ok(r) = client.call::<_, WaitResult>(
+                        "inventory.wait",
+                        WaitParams {
+                            generation,
+                            timeout_ms: Some(60_000),
+                        },
+                    ) {
+                        delay = std::time::Duration::from_secs(1);
+                        if !r.timed_out {
+                            let Some(sender) = sender.lock().clone() else {
+                                return;
+                            };
+                            publish_diagnostics(&sender, &backend, &published, &state.lock());
+                        }
+                        generation = r.generation;
                     }
-                    generation = r.generation;
                 }
+                std::thread::sleep(delay);
+                delay = (delay * 2).min(std::time::Duration::from_secs(60));
             }
         });
     }
@@ -99,6 +109,8 @@ pub fn run_stdio(
             Message::Response(_) => {}
         }
     }
+    diagnostics_sender.lock().take();
+    drop(connection);
     io_threads.join()?;
     Ok(())
 }

@@ -238,8 +238,10 @@ only when, one of these changed since its last compile:
 5. the compiled output itself (a tree digest, so manual edits or a `git
    checkout` are noticed).
 
-Everything is stored in `compiled/.krab-manifest.json`. `--explain` and
-`--dry-run` print the reason per target.
+Everything is stored in `compiled/.krab-manifest.json`. Each target, and
+each kadet item, keeps the fingerprint of every path it read as it was when
+it compiled, so compiling one target never makes another look current.
+`--explain` and `--dry-run` print the reason per target.
 
 Within a stale target, kadet items are reused rather than evaluated when
 their own inputs did not change. The evaluator hands a component its target
@@ -281,8 +283,8 @@ directories that belong to no target.
   state, and importing any other `kapitan.*` module is an error rather than
   a fall-through to an installed kapitan. The interpreter therefore only
   needs `kadet` (and `jinja2` for templates), not the Python kapitan.
-  `HelmChart`
-  renders inside a component go through the host: mid-evaluation the runner
+  `HelmChart` renders inside a component go through the host: mid-evaluation
+  the runner
   sends a `helm` request on its stdout (`worker.rs` answers host requests
   between the eval request and its reply) and `inputs/helm.rs` builds the
   `helm template` arguments the way kapitan's `render_chart` does, hashes
