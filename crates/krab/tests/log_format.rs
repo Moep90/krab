@@ -69,3 +69,12 @@ fn an_unknown_format_falls_back_to_logfmt_with_a_warning() {
         "{lines:?}"
     );
 }
+
+#[test]
+fn an_empty_format_is_the_default_without_a_warning() {
+    let lines = log_lines(Some(""));
+    assert!(
+        !lines.iter().any(|l| l.contains("unknown KRAB_LOG_FORMAT")),
+        "{lines:?}"
+    );
+}
