@@ -221,6 +221,8 @@ struct Registry {
     agent: ureq::Agent,
     base: String,
     credentials: Option<(String, String)>,
+    /// `tls_verify` is not `false`.
+    tls_verified: bool,
     /// `Authorization` header value once a challenge was answered.
     auth: Option<String>,
 }
@@ -261,6 +263,7 @@ impl Registry {
                 reference.registry
             ),
             credentials: opts.credentials.clone(),
+            tls_verified: *opts.tls_verify != TlsVerify::Bool(false),
             auth: None,
         })
     }
@@ -322,8 +325,15 @@ impl Registry {
 
     /// Answer a `WWW-Authenticate` challenge: fetch a bearer token from the
     /// realm (with basic credentials when there are any) or fall back to
-    /// basic authentication.
+    /// basic authentication. Credentials never go over plain http, and to a
+    /// realm on another origin only with TLS verification.
     fn authenticate(&mut self, challenge: &str) -> Result<(), String> {
+        if self.credentials.is_some() && self.base.starts_with("http://") {
+            return Err(format!(
+                "{} asks for authentication; OCI_USERNAME / OCI_PASSWORD are not sent over plain http (`insecure: true`)",
+                self.base
+            ));
+        }
         let (scheme, params) = challenge.split_once(' ').unwrap_or((challenge, ""));
         if scheme.eq_ignore_ascii_case("basic") {
             self.auth = Some(self.basic().ok_or_else(|| {
@@ -344,6 +354,21 @@ impl Registry {
         let realm = params
             .get("realm")
             .ok_or_else(|| format!("{} sent a bearer challenge without realm", self.base))?;
+        let same_origin = realm
+            .strip_prefix(&self.base)
+            .is_some_and(|r| r.is_empty() || r.starts_with(['/', '?']));
+        let refused = if same_origin {
+            None
+        } else if !realm.starts_with("https://") {
+            Some("a realm on another origin must use https")
+        } else if self.credentials.is_some() && !self.tls_verified {
+            Some("credentials are not sent to another origin with `tls_verify: false`")
+        } else {
+            None
+        };
+        if let Some(reason) = refused {
+            return Err(format!("{} names token realm {realm}: {reason}", self.base));
+        }
         let mut url = realm.clone();
         let mut sep = if url.contains('?') { '&' } else { '?' };
         for key in ["service", "scope"] {
@@ -487,5 +512,100 @@ mod tests {
         assert_eq!(safe_join(root, "../x"), None);
         assert_eq!(safe_join(root, "/etc/passwd"), None);
         assert_eq!(safe_join(root, "."), None);
+    }
+
+    /// A listener on 127.0.0.1 answering every connection with `response`;
+    /// returns its address and what it received.
+    fn listen(response: String) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = log.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { break };
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).unwrap_or(0);
+                seen.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase());
+                let _ = s.write_all(response.as_bytes());
+            }
+        });
+        (addr, log)
+    }
+
+    const TOKEN: &str =
+        "HTTP/1.1 200 OK\r\nContent-Length: 14\r\nConnection: close\r\n\r\n{\"token\":\"t\"}";
+
+    fn with_credentials(insecure: bool, tls_verify: &TlsVerify) -> PullOptions<'_> {
+        PullOptions {
+            insecure,
+            tls_verify,
+            allowed_media_types: None,
+            credentials: Some(("alice".into(), "s3cret".into())),
+        }
+    }
+
+    #[test]
+    fn credentials_are_not_sent_over_plain_http() {
+        let (realm, realm_log) = listen(TOKEN.into());
+        let (registry, registry_log) = listen(format!(
+            "HTTP/1.1 401 Unauthorized\r\nWww-Authenticate: Bearer realm=\"http://{realm}/token\",service=\"x\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        ));
+        let err = pull(
+            &format!("{registry}/art:v1"),
+            &std::env::temp_dir().join("krab-oci-never-created"),
+            &with_credentials(true, &TlsVerify::Bool(true)),
+        )
+        .unwrap_err();
+        let realm_log = realm_log.lock().unwrap();
+        assert!(realm_log.is_empty(), "{realm_log:?}");
+        let registry_log = registry_log.lock().unwrap();
+        assert!(
+            !registry_log
+                .iter()
+                .any(|r| r.contains("authorization: basic")),
+            "{registry_log:?}"
+        );
+        assert!(
+            err.contains("insecure") && err.contains("OCI_USERNAME"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn token_realms_on_another_origin() {
+        let reference = parse_reference("127.0.0.1:1/art").unwrap();
+        // (realm scheme, tls_verify, credentials, request expected)
+        for (scheme, verify, credentials, sent) in [
+            ("http", true, true, false),
+            ("https", false, true, false),
+            ("https", true, true, true),
+            ("http", true, false, false),
+            ("https", false, false, true),
+        ] {
+            let (addr, log) = listen(TOKEN.into());
+            let tls_verify = TlsVerify::Bool(verify);
+            let mut opts = with_credentials(false, &tls_verify);
+            if !credentials {
+                opts.credentials = None;
+            }
+            let realm = format!("{scheme}://{addr}/token");
+            let result = Registry::new(&reference, &opts)
+                .unwrap()
+                .authenticate(&format!("Bearer realm=\"{realm}\",service=\"x\""));
+            let log = log.lock().unwrap();
+            let case = format!("{realm} tls_verify={verify} credentials={credentials}");
+            assert_eq!(!log.is_empty(), sent, "{case}: {log:?}");
+            if !sent {
+                let err = result.unwrap_err();
+                assert!(
+                    err.contains(&realm) && err.contains("127.0.0.1:1"),
+                    "{case}: {err}"
+                );
+            }
+        }
     }
 }
