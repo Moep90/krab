@@ -1,0 +1,6 @@
+{{- if .Values.flag }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: only-when-flag
+{{- end }}

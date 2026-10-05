@@ -9,7 +9,6 @@
 
 use std::path::{Path, PathBuf};
 
-use parking_lot::Mutex;
 use serde_json::{Value as Json, json};
 
 use super::{Reads, helm};
@@ -115,14 +114,15 @@ pub fn materialize_kadet_runner() -> std::io::Result<PathBuf> {
     Ok(base.join("kadet_runner.py"))
 }
 
-/// A pool of evaluator processes, created lazily, one per concurrent caller.
+/// Starts evaluator processes. The caller keeps one per target and never
+/// hands it to another: modules a component imports stay loaded, with the
+/// state they built from the target that imported them first.
 pub struct KadetPool {
     python: PythonCmd,
     script: PathBuf,
     init: Json,
     /// The evaluator's working directory (the repository root).
     cwd: PathBuf,
-    idle: Mutex<Vec<Worker>>,
 }
 
 impl KadetPool {
@@ -138,24 +138,15 @@ impl KadetPool {
                 .map(PathBuf::from)
                 .unwrap_or_default(),
             init,
-            idle: Mutex::new(Vec::new()),
         })
     }
 
-    fn take(&self) -> Result<Worker, WorkerError> {
-        if let Some(w) = self.idle.lock().pop() {
-            return Ok(w);
-        }
-        Worker::spawn(&self.python, &self.script, self.init.clone())
-    }
-
-    fn give_back(&self, w: Worker) {
-        self.idle.lock().push(w);
-    }
-
-    /// Run `main()` of the component at `input_path` for `target`.
+    /// Run `main()` of the component at `input_path` for `target` in
+    /// `evaluator`, the target's own, started here when empty.
+    #[allow(clippy::too_many_arguments)]
     pub fn eval(
         &self,
+        evaluator: &mut Option<Worker>,
         target: &str,
         input_path: &Path,
         input_params: &Json,
@@ -163,9 +154,13 @@ impl KadetPool {
         temp_dir: &Path,
         reads: &mut Reads,
     ) -> Result<Json, String> {
-        let mut worker = self
-            .take()
-            .map_err(|e| format!("cannot start the kadet evaluator: {e}"))?;
+        if evaluator.is_none() {
+            *evaluator = Some(
+                Worker::spawn(&self.python, &self.script, self.init.clone())
+                    .map_err(|e| format!("cannot start the kadet evaluator: {e}"))?,
+            );
+        }
+        let worker = evaluator.as_mut().unwrap();
         let req = json!({
             "op": "eval",
             "target": target,
@@ -192,7 +187,6 @@ impl KadetPool {
         reads.extend(helm_reads);
         match result {
             Ok(resp) => {
-                self.give_back(worker);
                 for key in ["files", "dirs"] {
                     for p in resp
                         .get(key)
@@ -223,14 +217,14 @@ impl KadetPool {
                 }
                 Ok(resp.get("output").cloned().unwrap_or(Json::Null))
             }
-            Err(WorkerError::Failed { error, traceback }) => {
-                self.give_back(worker);
-                Err(match traceback {
-                    Some(tb) => format!("{error}\n{tb}"),
-                    None => error,
-                })
+            Err(WorkerError::Failed { error, traceback }) => Err(match traceback {
+                Some(tb) => format!("{error}\n{tb}"),
+                None => error,
+            }),
+            Err(e) => {
+                *evaluator = None;
+                Err(format!("kadet evaluator died: {e}"))
             }
-            Err(e) => Err(format!("kadet evaluator died: {e}")),
         }
     }
 }

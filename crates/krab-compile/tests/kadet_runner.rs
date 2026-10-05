@@ -54,6 +54,7 @@ fn evaluates_a_component_without_the_python_kapitan() {
     let mut reads = Reads::default();
     let output = pool
         .eval(
+            &mut None,
             "app.web",
             &root.join("components/greeter"),
             &json!({ "flavour": "plain" }),
@@ -159,6 +160,7 @@ fn undeclared_topic_is_a_compile_error() {
     // app.api produces the topic but does not declare `consume: true`.
     let err = pool
         .eval(
+            &mut None,
             "app.api",
             &root.join("components/greeter"),
             &json!({}),

@@ -54,9 +54,9 @@ pub type ResolverFn = dyn Fn(&mut Ctx, &[Value]) -> ResolverResult + Send + Sync
 #[derive(Clone, Default)]
 pub struct Registry {
     map: BTreeMap<String, Arc<ResolverFn>>,
-    /// Files the registry was built from (a `resolvers.py` and what it
-    /// imports); when one changes the registry must be rebuilt, so the
-    /// daemon restarts.
+    /// Files the registry was built from (`.kapitan`, a `resolvers.py` and
+    /// what it imports); when one changes the registry must be rebuilt, so
+    /// the daemon restarts.
     sources: Vec<PathBuf>,
     /// Where the non-native resolvers came from, for diagnostics
     /// (`12 Python resolvers from resolvers.py via python3`).
@@ -157,12 +157,15 @@ impl Ctx<'_, '_> {
 
     /// Key of the node being resolved (`${key:}`), `None` at the root.
     pub fn key(&self) -> Option<Key> {
-        self.at.last().cloned()
+        self.ev.anchored(&self.at).last().cloned()
     }
 
     /// Key of the container holding the node (`${parentkey:}`).
     pub fn parent_key(&self) -> Option<Key> {
-        self.at.parent().and_then(|p| p.last().cloned())
+        self.ev
+            .anchored(&self.at)
+            .parent()
+            .and_then(|p| p.last().cloned())
     }
 
     pub fn root(&self) -> &Node {
@@ -253,7 +256,7 @@ impl Ctx<'_, '_> {
 
     /// Full OmegaConf-style key of the node (`a.b[0].c`).
     pub fn full_key(&self) -> String {
-        self.at.to_omegaconf()
+        self.ev.anchored(&self.at).to_omegaconf()
     }
 }
 
