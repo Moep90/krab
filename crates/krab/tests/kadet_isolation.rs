@@ -80,9 +80,9 @@ fn a_full_compile_gives_each_target_its_own_evaluator() {
         );
         let deps = &manifest["targets"][t]["deps"];
         assert!(
-            deps.as_array()
+            deps.as_object()
                 .unwrap()
-                .contains(&"components/shared/state.py".into()),
+                .contains_key("components/shared/state.py"),
             "target {t} deps: {deps}"
         );
     }
