@@ -512,6 +512,15 @@ matching the workspace version, when it is pushed, then the GitHub release is
 a pre-release with the four archives, the `.vsix` and `SHA256SUMS`. Test:
 none; observed on the published v2.0.0-alpha.5 release.
 
+AC-8 Log format (CLI-61, CLI-12). Given the fixture inventory with its
+`resolvers.py` and `RUST_LOG=info`, when `krab --no-daemon inventory targets`
+runs without KRAB_LOG_FORMAT, then the stderr line for "Python resolvers
+configured" starts with `ts=` and holds `level=info target=krab::app
+message="Python resolvers configured"`; with KRAB_LOG_FORMAT=json the same
+event is one JSON object with `level` INFO, `target` and `message`. Test:
+crates/krab/tests/log_format.rs::logs_are_logfmt_by_default_and_json_on_request
+(#248).
+
 ## Edge cases
 
 CLI-EC-1 No inventory. When `<inventory-path>/targets` is not a directory,
@@ -550,6 +559,17 @@ CLI-EC-10 Rate-limited or bot-blocking links. The link check accepts HTTP 200,
 206, 403 and 429 and retries 3 times with a 20 s timeout. It excludes vendored
 and generated paths, release download URLs, crates.io and the private roadmap
 board.
+
+CLI-EC-11 Unknown or empty log format. KRAB_LOG_FORMAT=yaml logs a logfmt
+warning naming the value (`value=yaml`) and continues in logfmt; an empty
+value is the default without a warning (CLI-61). Test:
+crates/krab/tests/log_format.rs::an_unknown_format_falls_back_to_logfmt_with_a_warning
+covers the unknown value; the empty value: none.
+
+CLI-EC-12 Daemon started by the CLI. The daemon inherits KRAB_LOG_FORMAT from
+the process that spawns it, so its log file uses that format; a daemon
+already running keeps the format it was started with until it exits
+(CLI-61). Test: none.
 
 ## Interfaces
 
