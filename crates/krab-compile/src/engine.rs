@@ -182,13 +182,17 @@ pub enum Event<'a> {
     Removed(&'a Path),
     /// A dependency was fetched, skipped or failed (before `Planned`).
     Fetched(&'a FetchOutcome),
+    /// Unselected targets that fail to render and were left out (before `Planned`).
+    Unrendered(&'a [String]),
 }
 
 /// Where rendered target documents come from (the inventory server or a
 /// local render). Documents are only fetched for targets that will compile.
 pub trait DocSource: Sync {
-    /// Every target with the digest of its rendered document.
-    fn digests(&self) -> Result<BTreeMap<String, String>, String>;
+    /// Every rendered target with the digest of its document, and every
+    /// target that fails to render with its error.
+    #[allow(clippy::type_complexity)]
+    fn digests(&self) -> Result<(BTreeMap<String, String>, Vec<(String, String)>), String>;
     /// Rendered documents of the named targets.
     fn docs(&self, names: &[String]) -> Result<BTreeMap<String, Value>, String>;
     /// Rendered documents of every target (workers need the global inventory).
@@ -235,10 +239,30 @@ pub fn compile(
     let digests = Digests::new();
     let compiled_dir = opts.compiled_dir();
 
-    let all_digests = source.digests()?;
+    let (all_digests, unrendered) = source.digests()?;
+    // Only an explicit target selection compiles past targets that fail to render.
+    let blocking: Vec<&(String, String)> = unrendered
+        .iter()
+        .filter(|(n, _)| selection.targets.is_empty() || selection.targets.contains(n))
+        .collect();
+    if let Some((_, e)) = blocking.first() {
+        return Err(format!(
+            "{} target(s) fail to render; first error: {e}",
+            blocking.len()
+        ));
+    }
+    let unrendered: Vec<String> = unrendered.into_iter().map(|(n, _)| n).collect();
+    if !unrendered.is_empty() {
+        on_event(Event::Unrendered(&unrendered));
+    }
     let everything_digest =
         digest_str(&all_digests.values().cloned().collect::<Vec<_>>().join("\n"));
-    let target_paths: BTreeSet<String> = all_digests.keys().map(|n| n.replace('.', "/")).collect();
+    // Targets that fail to render still own their directory under `compiled/`.
+    let target_paths: BTreeSet<String> = all_digests
+        .keys()
+        .chain(&unrendered)
+        .map(|n| n.replace('.', "/"))
+        .collect();
 
     // Candidates: by name, by label (needs the documents), or everything.
     let mut candidates: Vec<String> = all_digests.keys().cloned().collect();
@@ -427,6 +451,7 @@ pub fn compile(
             target_paths: &target_paths,
             manifest_path: &manifest_path,
             digests: &digests,
+            unrendered: &unrendered,
         };
 
         std::thread::scope(|scope| {
@@ -551,6 +576,7 @@ struct Ctx<'a> {
     target_paths: &'a BTreeSet<String>,
     manifest_path: &'a Path,
     digests: &'a Digests,
+    unrendered: &'a [String],
 }
 
 fn run_one(
@@ -788,6 +814,18 @@ fn install_and_record(
     manifest: &Mutex<Manifest>,
     started: Instant,
 ) -> Result<(), String> {
+    if let Some(g) = reads
+        .globals
+        .iter()
+        .find(|g| *g == "*" || ctx.unrendered.contains(g))
+    {
+        let read = if g == "*" { "every target" } else { g };
+        return Err(format!(
+            "read {read} from the global inventory, which is incomplete: {} target(s) fail to render ({})",
+            ctx.unrendered.len(),
+            ctx.unrendered[..ctx.unrendered.len().min(3)].join(", ")
+        ));
+    }
     let final_dir = ctx.compiled_dir.join(&plan.target_path);
     let children = child_names(&plan.target_path, ctx.target_paths);
     install(temp_target, &final_dir, &children)
