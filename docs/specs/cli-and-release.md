@@ -231,8 +231,9 @@ CLI-25 The lint job MUST run cargo fmt --all --check and cargo clippy
        Since: #72, #107 (CARGO_BUILD_WARNINGS instead of RUSTFLAGS)
 
 CLI-26 The test job MUST run cargo test --locked on ubuntu-latest and
-       macos-latest without fail-fast, with Python 3.12 and pyyaml,
-       omegaconf==2.4.0.dev3, kadet and jinja2 installed.
+       macos-latest without fail-fast, with pyyaml, omegaconf==2.4.0.dev3,
+       kadet and jinja2 installed, on the Python versions CMP-53 requires
+       (3.12 only until #224 lands).
        Test: ci.yml: test
        Since: #72, #107 (macOS), #97 (omegaconf pin)
 
@@ -334,7 +335,7 @@ CLI-41 The release MUST build krab with cargo build --release --locked for
        x86_64-unknown-linux-gnu (ubuntu-22.04), aarch64-unknown-linux-gnu
        (ubuntu-22.04-arm), x86_64-apple-darwin and aarch64-apple-darwin
        (macos-latest), and package each as the archive named under
-       Interfaces. The Linux runners fix the glibc floor at 2.35.
+       Interfaces. The glibc floor of the Linux binaries is CLI-55.
        Test: none
        Since: #72, #103 (native arm runner)
 
