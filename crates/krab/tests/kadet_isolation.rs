@@ -2,6 +2,7 @@
 //! component imports keeps state from the target that first imported it, so
 //! no evaluator may serve two targets. Needs a `python3` with `kadet`
 //! importable, and skips otherwise.
+#![allow(clippy::print_stderr)]
 
 use std::process::Command;
 
