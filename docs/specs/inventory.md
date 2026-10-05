@@ -69,8 +69,9 @@ INV-5  Timestamps MUST stay strings (D3).
        Since: 319ca84
 
 INV-6  A tag other than the core `!!str`, `!!int`, `!!float`, `!!bool` and
-       `!!null` MUST fail with `yaml::unknown_tag` (D2), on a scalar, a
-       mapping or a sequence, with the message printing the tag as written.
+       `!!null` on a scalar, `!!map` on a mapping or `!!seq` on a sequence
+       MUST fail with `yaml::unknown_tag` (D2, D22), with the message
+       printing the tag as written.
        Test: none
        Since: 319ca84 (scalars), not met yet for mappings and sequences (#219)
 
