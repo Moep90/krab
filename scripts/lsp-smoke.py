@@ -2,9 +2,9 @@
 # LSP smoke test over stdio: python3 scripts/lsp-smoke.py <repo> <file> <line:col>...
 # (0-based positions). Prints hover and definition results; the live variant
 # exercises completion and diagnostics by editing a class on disk and restoring it.
-import json, subprocess, sys, os, time
+import json, subprocess, sys, os, time, tempfile
 root = sys.argv.pop(1) if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]) else os.getcwd()
-proc = subprocess.Popen(["krab", "lsp"], cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open("/tmp/claude/lsp_stderr.txt", "w"))
+proc = subprocess.Popen(["krab", "lsp"], cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=(err := tempfile.TemporaryFile("w+")))
 nid = 0
 def send(method, params, notify=False):
     global nid
@@ -18,7 +18,7 @@ def recv():
     headers = {}
     while True:
         line = proc.stdout.readline()
-        if not line: raise SystemExit("server closed: " + open("/tmp/claude/lsp_stderr.txt").read())
+        if not line: raise SystemExit("server closed: " + (err.seek(0), err.read())[1])
         if line == b"\r\n": break
         k, v = line.decode().split(":", 1); headers[k.strip()] = v.strip()
     return json.loads(proc.stdout.read(int(headers["Content-Length"])))

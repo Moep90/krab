@@ -38,6 +38,22 @@ reference cannot hold `datetime` values anyway); unknown tags are errors.
 A class or target file is a `ClassDoc { classes, parameters, applications,
 exports }`; `null` sections are empty, unknown top-level keys are ignored.
 
+## Target names
+
+A target is named after its file (`targets/prod/app.yml` is `app`), and
+`compose-target-name` (or the older `compile.compose-node-name`) names it after
+the path instead (`prod.app`). Off by default, as in the reference. The name is
+what `_kapitan_.name.full` / `_reclass_.name.full` report, and what the compiled
+directory follows: `compiled/app/` against `compiled/prod/app/`. `name.path`
+(`prod/app`) and `name.short` (`app`) do not depend on the setting.
+
+`TargetSpec::dotted_path` is the path spelling whether or not it is the name, so
+`-t prod.app` selects the target in both modes.
+
+Two files that end up with one name are an `inventory::conflicting_targets`
+diagnostic naming both. The reference renders nothing at all in that case, and
+says nothing (`docs/DECISIONS.md`, D7).
+
 ## Class resolution
 
 `Inventory::resolve_class_file` mirrors the reference exactly, including its
@@ -79,7 +95,7 @@ evaluating every string containing `${` and writing the result back. A node
 interpolation aliasing a container resolves that container in place first and
 then copies it. Resolver results are written back verbatim, so a resolver that
 returns a string with `${` (e.g. `default`, `relpath`, `oc.dict.values`) is
-evaluated on the next pass — exactly as in the reference. Cycles and references
+evaluated on the next pass, exactly as in the reference. Cycles and references
 to an enclosing container are errors with the full chain of locations.
 
 After the passes, `${escape:x}` markers become literal `${x}`.
@@ -94,8 +110,20 @@ Three sets ship: `oc.*`, kapitan's built-ins (`key`, `parentkey`, `escape`,
 `add`, `default`, …) and `contrib` (`replace`, `json`, `to_yaml`, `sha256`,
 `truncate`, `pluck`, `select_fields`, `filter_keys`, `join`, …).
 
-Boolean resolvers use Python truthiness on purpose (`${if:nonempty,…}` is
-true); a stricter mode is a planned opt-in.
+Boolean resolvers use Python truthiness, so `${if:nonempty,…}` is true
+(D6 in [DECISIONS.md](DECISIONS.md)).
+
+`key`, `parentkey` and `fullkey` answer for the place the value was *written*,
+not the place it currently sits. A container reached through an interpolation -
+an alias, a `${merge:…}` argument - is recorded with where it came from, and
+those three follow that chain (`Evaluator::anchored`). It matters for a
+deferred interpolation: `component_name: \${parentkey:}` in a base class is
+still the string `${parentkey:}` when `${merge:}` copies the class into a
+component, and is evaluated a pass later, by which time it sits under the
+component. The reference gets the same answer from the node metadata
+`OmegaConf.merge` carries over from its first argument. Nothing else uses the
+anchor: an ordinary interpolation, including a relative one produced by
+`${relpath:…}`, is resolved by walking the tree from where the value now is.
 
 A fourth set comes from the user's `resolvers.py` (`resolvers/python.rs`,
 `runner/resolver_runner.py`), the file kapitan's omegaconf backend imported.
@@ -112,8 +140,11 @@ is cached by file digest under `~/.cache/krab/resolvers`, so workers start
 on first use only (at most `workers`, default CPUs capped at 8). Python wins
 over same-named native resolvers unless `prefer-native` is set, because the
 native `contrib` set is a port of one such file and cannot follow its edits.
-The registry records the files it depends on; the daemon exits when one
-changes and the next request starts a fresh one.
+For the same reason `contrib` holds general purpose helpers only; anything
+that encodes one repository's data shape or a cloud's naming belongs in that
+repository's `resolvers.py`.
+The registry records the files it depends on, `.kapitan` among them; the
+daemon exits when one changes and the next request starts a fresh one.
 
 `write` (mutating the tree from a resolver) is not supported and reports why.
 
@@ -262,8 +293,9 @@ directories that belong to no target.
   (`?{type:base64(json(ref)):embedded}`) or hashing, then rapidyaml-compatible
   YAML (`emit/ryml.rs`, verified byte for byte on ~7000 compiled files),
   PyYAML fallback for control characters, and Python-compatible JSON.
-  Multiline strings default to double quotes, matching a quirk of the
-  reference where the compile flag is shadowed by the inventory one.
+  Multiline strings are literal blocks unless the target's
+  `parameters.multiline_string_style` or `compile.yaml-multiline-string-style`
+  says otherwise.
 * References (`refs/`): a port of `kapitan/refs`. `RefController` loads ref
   files (cached), compiles tags (`?{type:path:hash}`, embedded payloads,
   `plain` inlined, `env` always hashed), creates missing refs from their
@@ -298,10 +330,12 @@ kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
 immutable; `--force-fetch` pulls again.
 
 `type: oci` (`oci.rs`) speaks the registry distribution API the way oras
-does: the manifest (an index is followed to its first manifest) lists the
-layers, each is downloaded to the path in its
-`org.opencontainers.image.title` annotation (the digest when there is
-none), verified against its `sha256` digest, and, as in kapitan's
+does: the manifest (checked against the reference when that is a digest;
+an index must list exactly one manifest, which is followed and checked
+against the index entry) lists the layers, each is downloaded to the path
+in its `org.opencontainers.image.title` annotation (the digest when there
+is none), verified against its `sha256` digest (other algorithms fail;
+`docs/DECISIONS.md`, D12), and, as in kapitan's
 `_extract_tar_blobs`, layers that are tar archives (gzipped or not) are
 extracted into the artifact root and removed. Authentication answers one
 `WWW-Authenticate` challenge: a bearer token from the realm (Docker Hub,
@@ -312,12 +346,9 @@ plain http and `tls_verify` disables verification or names a CA bundle
 source are an error and `media_type` filters are unioned, as in the
 reference.
 
-Two deliberate differences from the reference: a dependency whose output
-path already exists is not fetched (kapitan re-clones every git source and
-adds files that happen to be missing), which keeps `fetch: true`
-repositories offline once populated; and `force_fetch: true` on an item
-forces that item even when `--fetch` is given (kapitan only honours it
-when neither flag is set).
+A dependency whose output path already exists is not fetched, and
+`force_fetch: true` on an item forces that item even under `--fetch`
+(D4 and D5 in [DECISIONS.md](DECISIONS.md)).
 
 Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
 output. `--backend python` runs kapitan's Python input types instead.

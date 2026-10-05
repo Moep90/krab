@@ -1,0 +1,9 @@
+apiVersion: v1
+data:
+  a: float64 1000
+  b: string 03190301
+  c: string 1234567
+  secret: ?{base64:h/s:d7299a4d}
+kind: ConfigMap
+metadata:
+  name: rel-types

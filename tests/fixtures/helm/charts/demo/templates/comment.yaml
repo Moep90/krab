@@ -1,0 +1,7 @@
+# only rendered with .Values.flag
+{{- if .Values.flag }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-flag
+{{- end }}
