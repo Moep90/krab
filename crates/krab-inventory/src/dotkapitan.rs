@@ -20,6 +20,178 @@ fn same_version(pin: &str, version: &str) -> bool {
     a[..n] == b[..n] && (n <= 2 || pin.contains("-rc") == version.contains("-rc"))
 }
 
+/// The keys kapitan 0.36.3 reads, by section: every `from_dot_kapitan` call in
+/// `kapitan/cli.py`. `global` is also the fallback for every other section.
+const KAPITAN_KEYS: &[(&str, &[&str])] = &[
+    ("global", &["mp-method", "compose-target-name"]),
+    (
+        "inventory_backend",
+        &["inventory-backend", "migrate", "enable-class-wildcards"],
+    ),
+    ("eval", &["output", "vars", "search-paths"]),
+    (
+        "compile",
+        &[
+            "compose-node-name",
+            "search-paths",
+            "jinja2-filters",
+            "verbose",
+            "prune",
+            "quiet",
+            "output-path",
+            "fetch",
+            "force-fetch",
+            "force",
+            "validate",
+            "parallelism",
+            "indent",
+            "refs-path",
+            "reveal",
+            "embed-refs",
+            "inventory-path",
+            "inventory-pool-cache",
+            "cache",
+            "ignore-version-check",
+            "use-go-jsonnet",
+            "yaml-multiline-string-style",
+            "yaml-dump-null-as-empty",
+            "yaml-use-rapidyaml",
+            "targets",
+            "labels",
+        ],
+    ),
+    ("validate", &["schemas-path"]),
+    (
+        "inventory",
+        &[
+            "target-name",
+            "inventory-path",
+            "flat",
+            "pattern",
+            "verbose",
+            "indent",
+            "multiline-string-style",
+        ],
+    ),
+    ("searchvar", &["inventory-path", "verbose", "pretty-print"]),
+    (
+        "refs",
+        &[
+            "update-targets",
+            "validate-targets",
+            "base64",
+            "binary",
+            "reveal",
+            "inventory-path",
+            "recipients",
+            "key",
+            "vault-auth",
+            "vault-mount",
+            "vault-path",
+            "vault-key",
+            "refs-path",
+            "verbose",
+        ],
+    ),
+    (
+        "lint",
+        &[
+            "fail-on-warning",
+            "skip-class-checks",
+            "skip-yamllint",
+            "search-secrets",
+            "refs-path",
+            "compiled-path",
+            "inventory-path",
+        ],
+    ),
+];
+
+/// The keys krab applies, by section (`load` and the section helpers below).
+const KRAB_KEYS: &[(&str, &[&str])] = &[
+    (
+        "global",
+        &[
+            "inventory-path",
+            "compose-node-name",
+            "compose-target-name",
+            "inventory-backend",
+            // Read from `global` when the `compile`, `inventory` or `refs`
+            // section lacks them (kapitan's `from_dot_kapitan`).
+            "search-paths",
+            "output-path",
+            "indent",
+            "fetch",
+            "force-fetch",
+            "refs-path",
+            "embed-refs",
+            "reveal",
+            "ignore-version-check",
+            "python-requirements",
+            "yaml-multiline-string-style",
+            "yaml-use-rapidyaml",
+            "yaml-dump-null-as-empty",
+        ],
+    ),
+    ("inventory_backend", &["inventory-backend"]),
+    (
+        "compile",
+        &[
+            "inventory-path",
+            "compose-node-name",
+            "compose-target-name",
+            "search-paths",
+            "output-path",
+            "indent",
+            "fetch",
+            "force-fetch",
+            "refs-path",
+            "embed-refs",
+            "reveal",
+            "python-requirements",
+            "yaml-multiline-string-style",
+            "yaml-use-rapidyaml",
+            "yaml-dump-null-as-empty",
+            "ignore-version-check",
+        ],
+    ),
+    (
+        "inventory",
+        &[
+            "inventory-path",
+            "compose-node-name",
+            "compose-target-name",
+            "indent",
+            "python-resolvers",
+        ],
+    ),
+    ("refs", &["refs-path"]),
+];
+
+/// A warning for `key` of `section` unless krab applies it; `version` is
+/// left to the version check.
+fn key_warning(section: &str, key: Option<&str>) -> Option<String> {
+    let has = |table: &[(&str, &[&str])], k: &str, any_section: bool| {
+        table
+            .iter()
+            .any(|(s, keys)| (any_section || *s == section) && keys.contains(&k))
+    };
+    let (known, name) = match key {
+        None if section == "version" => return None,
+        None => (false, section.to_string()),
+        Some(k) if has(KRAB_KEYS, k, false) => return None,
+        Some(k) => (
+            has(KAPITAN_KEYS, k, section == "global"),
+            format!("{section}.{k}"),
+        ),
+    };
+    Some(if known {
+        format!("`.kapitan`: krab does not apply `{name}`, a kapitan setting")
+    } else {
+        format!("`.kapitan`: unknown key `{name}`, kapitan does not read it either")
+    })
+}
+
 /// The `inventory.python-resolvers` section: a user `resolvers.py` run in a
 /// Python worker (see `resolvers::python`). Either a path, `false`, or a map:
 ///
@@ -91,6 +263,8 @@ pub struct DotKapitan {
     pub refs: Map,
     /// The raw `global:` section, the fallback for every other section.
     pub global: Map,
+    /// One warning per key krab does not apply, typos and kapitan keys alike.
+    pub key_warnings: Vec<String>,
 }
 
 impl DotKapitan {
@@ -134,6 +308,14 @@ impl DotKapitan {
                 .unwrap_or_default(),
             ..Default::default()
         };
+        for (name, value) in node.as_map().into_iter().flatten() {
+            if !KAPITAN_KEYS.iter().any(|(s, _)| s == name) {
+                cfg.key_warnings.extend(key_warning(name, None));
+            } else if let Some(keys) = value.as_map() {
+                let warnings = keys.keys().filter_map(|k| key_warning(name, Some(k)));
+                cfg.key_warnings.extend(warnings);
+            }
+        }
         let section = |name: &str| node.get(name).and_then(Node::as_map);
         let get = |sections: &[&str], key: &str| -> Option<Value> {
             sections
@@ -330,6 +512,31 @@ mod tests {
             "{msg}"
         );
         assert!(!mismatch("'0.30'").unwrap().contains("number"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reports_keys_it_does_not_apply() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-keys-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".kapitan"),
+            "version: 0.36\nglobal:\n  inventory-backend: omegaconf\n  mp-method: fork\n  prune: true\n  bogus: 1\ncompile:\n  output-path: out\n  prune: true\n  prnue: true\ninventory:\n  python-resolvers: false\nlint:\n  skip-yamllint: true\ncompiel:\n  prune: true\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        assert_eq!(
+            dot.key_warnings,
+            [
+                "`.kapitan`: krab does not apply `global.mp-method`, a kapitan setting",
+                "`.kapitan`: krab does not apply `global.prune`, a kapitan setting",
+                "`.kapitan`: unknown key `global.bogus`, kapitan does not read it either",
+                "`.kapitan`: krab does not apply `compile.prune`, a kapitan setting",
+                "`.kapitan`: unknown key `compile.prnue`, kapitan does not read it either",
+                "`.kapitan`: krab does not apply `lint.skip-yamllint`, a kapitan setting",
+                "`.kapitan`: unknown key `compiel`, kapitan does not read it either",
+            ]
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

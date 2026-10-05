@@ -290,7 +290,8 @@ changing variables your inventory reads.
 
 Read from the working directory. Recognised keys, in the sections kapitan
 itself uses. A key missing from its `compile`, `inventory` or `refs` section
-is taken from `global`, as kapitan does:
+is taken from `global`, as kapitan does. Any other key prints a warning that
+says whether kapitan reads it:
 
 | key | section(s) | use |
 |---|---|---|
