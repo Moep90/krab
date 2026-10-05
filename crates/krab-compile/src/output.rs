@@ -98,8 +98,8 @@ impl Writer<'_> {
     }
 
     /// `to_file`: `file_path` has no extension yet; the output type decides
-    /// it. Returns the path written (or `None` when kapitan would skip an
-    /// empty document).
+    /// it. Returns the path written. Empty JSON or YAML content leaves an
+    /// empty file, as kapitan opens the file before it checks the content.
     pub fn to_file(
         &self,
         output_type: OutputType,
@@ -108,7 +108,7 @@ impl Writer<'_> {
         file_path: &Path,
         mut content: Value,
         reads: &mut Reads,
-    ) -> Result<Option<PathBuf>, String> {
+    ) -> Result<PathBuf, String> {
         if prune {
             content = prune_empty(content).unwrap_or(Value::Null);
         }
@@ -141,17 +141,19 @@ impl Writer<'_> {
             }
             OutputType::Json => {
                 self.refs_value(&mut content, reads)?;
-                if !content.truthy() {
-                    return Ok(None);
+                if content.truthy() {
+                    dumps_pretty(&content, self.opts.indent, true)
+                } else {
+                    String::new()
                 }
-                dumps_pretty(&content, self.opts.indent, true)
             }
             OutputType::Yaml | OutputType::Yml => {
                 self.refs_value(&mut content, reads)?;
-                if !content.truthy() {
-                    return Ok(None);
+                if content.truthy() {
+                    self.yaml(&content)
+                } else {
+                    String::new()
                 }
-                self.yaml(&content)
             }
             OutputType::Toml => {
                 return Err("toml output is not supported by the native compiler yet".into());
@@ -162,7 +164,7 @@ impl Writer<'_> {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-        Ok(Some(path))
+        Ok(path)
     }
 
     /// `write_yaml`: a list at the top becomes a multi-document stream.
@@ -232,6 +234,35 @@ mod tests {
     use super::*;
     use krab_inventory::source::SourceId;
     use krab_inventory::yaml::parse_document;
+
+    #[test]
+    fn empty_content_leaves_an_empty_file() {
+        // kapitan's CompiledFile opens the file before write_yaml and
+        // write_json return early on empty content.
+        let dir = std::env::temp_dir().join(format!("krab-empty-output-{}", std::process::id()));
+        let refs = RefController::new(dir.join("refs"), false);
+        let writer = Writer {
+            opts: WriterOptions::default(),
+            refs: &refs,
+            target: TargetSecrets::default(),
+        };
+        let mut reads = Reads::default();
+        for (output_type, name) in [(OutputType::Yaml, "a.yaml"), (OutputType::Json, "b.json")] {
+            let written = writer
+                .to_file(
+                    output_type,
+                    OutputType::Yaml,
+                    false,
+                    &dir.join(name).with_extension(""),
+                    Value::List(Vec::new()),
+                    &mut reads,
+                )
+                .unwrap();
+            assert_eq!(written, dir.join(name));
+            assert_eq!(std::fs::read_to_string(dir.join(name)).unwrap(), "");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn prunes_like_kapitan() {

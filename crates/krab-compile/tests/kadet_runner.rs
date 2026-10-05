@@ -1,6 +1,9 @@
 //! Evaluates the fixture kadet component through the evaluator and its
 //! bundled `kapitan` package: needs a `python3` with `kadet` and `jinja2`
 //! importable, and skips otherwise.
+// A skipped test that says nothing looks like a passing one, so these report
+// why they did not run.
+#![allow(clippy::print_stderr)]
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,6 +54,7 @@ fn evaluates_a_component_without_the_python_kapitan() {
     let mut reads = Reads::default();
     let output = pool
         .eval(
+            &mut None,
             "app.web",
             &root.join("components/greeter"),
             &json!({ "flavour": "plain" }),
@@ -156,6 +160,7 @@ fn undeclared_topic_is_a_compile_error() {
     // app.api produces the topic but does not declare `consume: true`.
     let err = pool
         .eval(
+            &mut None,
             "app.api",
             &root.join("components/greeter"),
             &json!({}),

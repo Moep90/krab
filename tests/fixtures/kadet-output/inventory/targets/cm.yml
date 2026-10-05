@@ -1,0 +1,12 @@
+parameters:
+  payload: |
+    setting1: enabled
+    setting2: 100
+  kapitan:
+    vars:
+      target: cm
+    compile:
+      - input_type: kadet
+        input_paths:
+          - components/configmap
+        output_path: manifests
