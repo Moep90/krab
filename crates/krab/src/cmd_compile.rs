@@ -128,13 +128,17 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
     // The environment krab builds for kadet components: the baseline plus
     // what `.kapitan` declares under `compile.python-requirements`.
     let managed = PythonEnv::from_dot(app.dot.compile_strings("python-requirements"), &repo_root);
+    // The native backend reports a missing Python only when a target it
+    // compiles has a kadet item.
     let python = PythonCmd::detect(
         args.python.as_deref(),
         backend.python_needs(),
         Some(&managed),
         &|line| eprintln!("{line}"),
-    )
-    .map_err(Failure::Message)?;
+    );
+    if let (Backend::Python, Err(e)) = (backend, &python) {
+        return Err(Failure::Message(e.clone()));
+    }
 
     let mut flags = args.flags.clone();
     let reveal = args.reveal || app.dot.compile_bool("reveal").unwrap_or(false);
@@ -232,11 +236,13 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
                 } else if opts.dry_run {
                     let _ = writeln!(err, "{stale}/{total} targets would compile");
                 } else {
+                    let described = opts
+                        .python
+                        .as_ref()
+                        .map_or("no Python", |p| p.description.as_str());
                     let python = match opts.backend {
-                        Backend::Native => format!("kadet in {}", opts.python.description),
-                        Backend::Python => {
-                            format!("python backend, {}", opts.python.description)
-                        }
+                        Backend::Native => format!("kadet in {described}"),
+                        Backend::Python => format!("python backend, {described}"),
                     };
                     let _ = writeln!(
                         err,

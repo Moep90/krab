@@ -6,7 +6,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-pub const MANIFEST_VERSION: u32 = 2;
+pub const MANIFEST_VERSION: u32 = 3;
 pub const MANIFEST_FILE: &str = ".krab-manifest.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -16,9 +16,6 @@ pub struct Manifest {
     /// Python side versions. Each target record carries the one it was built with.
     #[serde(default)]
     pub engine: String,
-    /// Fingerprint of every path any target read, relative to the repository root.
-    #[serde(default)]
-    pub files: BTreeMap<String, String>,
     #[serde(default)]
     pub targets: BTreeMap<String, TargetRecord>,
 }
@@ -34,8 +31,10 @@ pub struct TargetRecord {
     /// Compiler identity that produced this record (see `Manifest::engine`).
     #[serde(default)]
     pub engine: String,
-    /// Every path the compile read (keys into `Manifest::files`).
-    pub deps: Vec<String>,
+    /// Every path the compile read, relative to the repository root, with
+    /// its fingerprint at the time: another target's later compile must not
+    /// make this one look current.
+    pub deps: BTreeMap<String, String>,
     /// Other targets whose inventory was read (`*` = all), with their document digests.
     #[serde(default)]
     pub globals: BTreeMap<String, String>,
@@ -58,12 +57,20 @@ pub struct ItemRecord {
     /// Parts of the target document the component read (`parameters.<key>`,
     /// another top-level key, or `*` for the whole document), with digests.
     pub doc_reads: BTreeMap<String, String>,
-    /// Paths it read, relative to the repository root (keys into `Manifest::files`).
-    pub deps: Vec<String>,
+    /// Paths it read, relative to the repository root, with their fingerprints.
+    pub deps: BTreeMap<String, String>,
     /// Other targets it read (`*` = all), with their document digests.
     pub globals: BTreeMap<String, String>,
     /// Files it wrote, relative to `compiled/`, with their fingerprints.
     pub outputs: BTreeMap<String, String>,
+}
+
+/// Whether `text` is a manifest of another version (its shape may differ).
+fn other_version(text: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .and_then(|v| v.get("version")?.as_u64())
+        .is_some_and(|v| v != u64::from(MANIFEST_VERSION))
 }
 
 impl Manifest {
@@ -72,6 +79,8 @@ impl Manifest {
             Ok(text) => match serde_json::from_str::<Manifest>(&text) {
                 Ok(m) if m.version == MANIFEST_VERSION => m,
                 Ok(_) => Manifest::default(),
+                // Another version need not parse as this one: start over quietly.
+                Err(_) if other_version(&text) => Manifest::default(),
                 Err(e) => {
                     tracing::warn!("ignoring unreadable manifest {}: {e}", path.display());
                     Manifest::default()
@@ -79,13 +88,6 @@ impl Manifest {
             },
             Err(_) => Manifest::default(),
         }
-    }
-
-    /// Drop file entries no target refers to any more.
-    pub fn prune_files(&mut self) {
-        let used: std::collections::BTreeSet<&String> =
-            self.targets.values().flat_map(|t| t.deps.iter()).collect();
-        self.files.retain(|k, _| used.contains(k));
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
