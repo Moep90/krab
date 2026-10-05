@@ -65,10 +65,10 @@ fn registration_names(invoked: &Path, cwd: Option<&Path>) -> (String, String) {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "krab".into());
     let mut completer = invoked.to_path_buf();
-    if completer.components().count() > 1 {
-        if let Some(cwd) = cwd {
-            completer = cwd.join(completer);
-        }
+    if completer.components().count() > 1
+        && let Some(cwd) = cwd
+    {
+        completer = cwd.join(completer);
     }
     (name, completer.to_string_lossy().into_owned())
 }
@@ -86,7 +86,7 @@ pub fn complete_target(current: &OsStr) -> Vec<CompletionCandidate> {
         .clone()
         .unwrap_or_else(|| PathBuf::from("./inventory"));
     let mut cfg = InventoryConfig::new(root);
-    cfg.compose_target_name = dot.compose_target_name.unwrap_or(true);
+    cfg.compose_target_name = dot.compose_target_name.unwrap_or(false);
     let inv = Inventory::new(cfg, std::sync::Arc::new(Registry::new()));
     inv.discover_targets()
         .unwrap_or_default()

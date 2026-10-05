@@ -23,8 +23,8 @@ inventory (including a repository's Python `resolvers.py`), the daemon, the
 language server, the native compile path for `jinja2`, `kadet`, `copy`,
 `remove` and `external` inputs, references (`?{gkms:...}` and friends:
 compile, create, reveal, `krab refs`), and dependency fetching (`git`,
-`http(s)`, `helm`, `oci`). Not native yet: `jsonnet`, `helm` (as a direct
-input type), `kustomize`, `cuelang` and `toml` output; see
+`http(s)`, `helm`, `oci`). Not native yet: `jsonnet`, `kustomize`,
+`cuelang` and `toml` output; see
 [Compatibility](#compatibility).
 
 ## Install
@@ -43,7 +43,7 @@ install -m 755 krab-$version-$target/krab ~/.local/bin/krab
 
 Releases before 2.0.0-alpha.4 named the archive and the binary `kapitan`.
 
-Or build from source with Rust 1.85 or newer (edition 2024):
+Or build from source:
 
 ```sh
 git clone https://github.com/kapicorp/krab.git
@@ -80,8 +80,11 @@ krab compile --fetch                      # first fetch the dependencies that ar
 krab refs --reveal -f compiled/my/target/manifests/secret.yml
 ```
 
-Target names are the dotted path of the target file:
-`inventory/targets/platform/apps/grafana.yml` is `platform.apps.grafana`.
+A target is named after its file, whatever directory it sits in:
+`inventory/targets/platform/apps/grafana.yml` is `grafana`. Set
+`compose-target-name` to name it after the path instead
+(`platform.apps.grafana`), as the reference does. Either way the dotted path
+selects it, so `-t platform.apps.grafana` works in both.
 
 The first `krab inventory ...` starts a daemon for that inventory in the
 background. It renders every target once, watches the files, and re-renders
@@ -103,6 +106,8 @@ target names.
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | installing, the daemon, inspecting an inventory, compiling, editor setup |
 | [docs/CLI.md](docs/CLI.md) | every command and flag, environment variables, `.kapitan` keys |
 | [docs/DESIGN.md](docs/DESIGN.md) | the data model, the exact merge and interpolation semantics, provenance, the server protocol, how compile decides what is stale |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | where things live: crate layering, a code map per crate, the invariants that cut across them |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | every deliberate difference from the reference implementation, and why |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | current status and a pointer to the project board where planned work is tracked |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | building, testing, checking parity against the reference implementation |
 | [editors/vscode/README.md](editors/vscode/README.md) | the VS Code extension |
@@ -197,10 +202,8 @@ Rendering and compiled output are verified byte for byte against kapitan
 0.36.3 with the `omegaconf` inventory backend on the fixture inventory in
 `tests/fixtures` and on a 160-target production inventory.
 
-Deliberate differences: class cycles are reported instead of recursing
-forever; unknown YAML tags are errors; timestamps stay strings; a dependency
-whose output path already exists is not fetched at all, so a repository
-with everything in place compiles offline. Not implemented yet: `jsonnet`,
+Where krab behaves differently on purpose, the difference and its reason are
+in [docs/DECISIONS.md](docs/DECISIONS.md). Not implemented yet: `jsonnet`,
 `helm` (as a direct input type; charts rendered by kgenlib inside kadet
 work), `kustomize` and `cuelang` inputs, `toml` output, Python-defined
 jinja2 filters other than the common ones, and the `write` resolver.
@@ -256,7 +259,7 @@ inventory:
 
 What the file defines is cached by content digest, so no Python process
 starts until one of its resolvers is called. The daemon restarts when the
-file, or a project module it imports, changes. A missing interpreter is
+file, a project module it imports, or `.kapitan` changes. A missing interpreter is
 diagnosed up front, and `krab server status` shows where the known resolvers
 came from and which interpreter runs them. Every call is a JSON round trip
 to a worker; port a resolver to Rust when that shows in a profile.

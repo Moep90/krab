@@ -19,6 +19,10 @@ pub struct DumpOptions {
     pub multiline: Option<super::ryml::MultilineStyle>,
     /// Emit `null` as an empty scalar (`--yaml-dump-null-as-empty`).
     pub null_as_empty: bool,
+    /// kapitan's `_helm_str_representer` for helm values files: quote
+    /// digit-only strings that start with `0` or are longer than 6
+    /// characters, so helm's YAML parser keeps them strings.
+    pub quote_digit_strings: bool,
 }
 
 impl Default for DumpOptions {
@@ -31,6 +35,7 @@ impl Default for DumpOptions {
             allow_unicode: false,
             multiline: None,
             null_as_empty: false,
+            quote_digit_strings: false,
         }
     }
 }
@@ -53,13 +58,16 @@ pub fn dump_yaml(node: &Node, opts: &DumpOptions) -> String {
 
 /// PyYAML `yaml.dump_all`: one document per item, each introduced by `---`.
 pub fn dump_yaml_all(items: &[Node], opts: &DumpOptions) -> String {
-    let mut out = String::new();
+    let mut e = Emitter::new(opts.clone());
     for (i, item) in items.iter().enumerate() {
-        let mut e = Emitter::new(opts.clone());
         e.document_in_stream(&item.value, i == 0);
-        out.push_str(&e.out);
     }
-    out
+    // expect_stream_end
+    if e.open_ended {
+        e.write_indicator("...", true, false, false);
+        e.write_indent();
+    }
+    e.out
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -279,14 +287,9 @@ impl Emitter {
     fn document_in_stream(&mut self, v: &Value, first: bool) {
         if !first {
             self.write_indicator("---", true, false, false);
-            self.write_indent();
         }
         self.node(v, true, false, false, false);
         self.write_indent();
-        if self.open_ended {
-            self.write_indicator("...", true, false, false);
-            self.write_indent();
-        }
     }
 
     fn node(&mut self, v: &Value, root: bool, sequence: bool, mapping: bool, simple_key: bool) {
@@ -310,7 +313,15 @@ impl Emitter {
                 }
             }
             scalar => {
-                let s = represent(scalar, self.opts.null_as_empty);
+                let mut s = represent(scalar, self.opts.null_as_empty);
+                if self.opts.quote_digit_strings
+                    && let Value::Str(t) = scalar
+                    && t.chars().count() > 1
+                    && t.chars().all(|c| c.is_ascii_digit())
+                    && (t.starts_with('0') || t.chars().count() > 6)
+                {
+                    s.implicit = false;
+                }
                 let forced = match scalar {
                     Value::Str(t) if t.contains('\n') => self.opts.multiline,
                     _ => None,
@@ -471,15 +482,17 @@ impl Emitter {
                 Style::Folded
             };
         }
-        if a.allow_single_quoted && !(self.simple_key_context && a.multiline) {
+        if forced.is_none() && a.allow_single_quoted && !(self.simple_key_context && a.multiline) {
             return Style::Single;
         }
         Style::Double
     }
 
-    /// PyYAML `write_literal` / `write_folded` (folded here keeps every line
-    /// break, which is what PyYAML does for text without long lines).
+    /// PyYAML `write_literal` / `write_folded`. Folded writes an extra break
+    /// between two lines that do not start with a space, and folds at a single
+    /// space past the width.
     fn write_block(&mut self, text: &[char], indicator: char) {
+        let folded = indicator == '>';
         let mut hints = String::new();
         if let Some(&first) = text.first()
             && (first == ' ' || is_break(first))
@@ -498,6 +511,8 @@ impl Emitter {
             self.open_ended = true;
         }
         self.write_line_break();
+        let mut leading_space = true;
+        let mut spaces = false;
         let mut breaks = true;
         let mut start = 0;
         let mut end = 0;
@@ -505,6 +520,14 @@ impl Emitter {
             let ch = text.get(end).copied();
             if breaks {
                 if !ch.is_some_and(is_break) {
+                    if folded
+                        && !leading_space
+                        && ch.is_some_and(|c| c != ' ')
+                        && text[start] == '\n'
+                    {
+                        self.write_line_break();
+                    }
+                    leading_space = ch == Some(' ');
                     for &br in &text[start..end] {
                         if br == '\n' {
                             self.write_line_break();
@@ -520,7 +543,16 @@ impl Emitter {
                     }
                     start = end;
                 }
-            } else if ch.is_none() || ch.is_some_and(is_break) {
+            } else if spaces {
+                if ch != Some(' ') {
+                    if start + 1 == end && self.column > self.opts.width {
+                        self.write_indent();
+                    } else {
+                        self.write_chars(&text[start..end]);
+                    }
+                    start = end;
+                }
+            } else if ch.is_none() || ch.is_some_and(|c| (folded && c == ' ') || is_break(c)) {
                 self.write_chars(&text[start..end]);
                 if ch.is_none() {
                     self.write_line_break();
@@ -529,6 +561,7 @@ impl Emitter {
             }
             if let Some(c) = ch {
                 breaks = is_break(c);
+                spaces = folded && c == ' ';
             }
             end += 1;
         }
@@ -970,6 +1003,61 @@ mod tests {
     }
 
     #[test]
+    fn helm_values_quote_digit_strings() {
+        let mut m = crate::value::Map::new();
+        for (k, v) in [
+            ("a", "03190301"),
+            ("b", "1234567"),
+            ("c", "123"),
+            ("d", "0"),
+            ("e", "1e3"),
+            ("f", "007"),
+            ("g", "12"),
+        ] {
+            m.insert(k.into(), Node::synthetic(Value::Str(v.into())));
+        }
+        let opts = DumpOptions {
+            quote_digit_strings: true,
+            ..DumpOptions::pyyaml_default()
+        };
+        // PyYAML SafeDumper with kapitan's `_helm_str_representer`.
+        assert_eq!(
+            dump_yaml(&Node::synthetic(Value::Map(m)), &opts),
+            "a: '03190301'\nb: '1234567'\nc: '123'\nd: '0'\ne: 1e3\nf: '007'\ng: '12'\n"
+        );
+    }
+
+    #[test]
+    fn a_block_style_that_does_not_fit_falls_back_to_double_quotes() {
+        let node = parse_document("a: \"x\\ny \"\nb: \"p\\nq\\n\"\n", SourceId(0)).unwrap();
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Literal),
+            ..DumpOptions::default()
+        };
+        // PyYAML with kapitan's literal representer.
+        assert_eq!(dump_yaml(&node, &opts), "a: \"x\\ny \"\nb: |\n  p\n  q\n");
+    }
+
+    #[test]
+    fn dump_all_writes_document_markers_like_pyyaml() {
+        let docs = crate::yaml::parse_documents(
+            "z: \"a\\n\\n\"\n---\n{}\n---\nb: 1\n---\nz: \"c\\n\\n\"\n",
+            SourceId(0),
+        )
+        .unwrap();
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Literal),
+            ..DumpOptions::default()
+        };
+        // PyYAML `dump_all`: a flow collection shares the `---` line, and
+        // `...` closes an open-ended stream only at its end.
+        assert_eq!(
+            dump_yaml_all(&docs, &opts),
+            "z: |+\n  a\n\n--- {}\n---\nb: 1\n---\nz: |+\n  c\n\n...\n"
+        );
+    }
+
+    #[test]
     fn empty_collections_and_root_scalar() {
         assert_eq!(dump("a: []\nb: {}\n", true), "a: []\nb: {}\n");
         assert_eq!(dump("hello", true), "hello\n...\n");
@@ -996,5 +1084,91 @@ mod tests {
         assert_eq!(lines.len(), 2, "{out}");
         assert!(lines[1].starts_with("  word"), "{out}");
         assert!(lines.iter().all(|l| l.len() <= 86), "{out}");
+    }
+
+    /// Dump `{k: text}` in the folded style, read it back, and compare with
+    /// PyYAML's output (kapitan's folded representer).
+    fn assert_folded(text: &str, expected: &str) {
+        let mut m = crate::value::Map::new();
+        m.insert("k".into(), Node::synthetic(Value::Str(text.into())));
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Folded),
+            ..DumpOptions::default()
+        };
+        let out = dump_yaml(&Node::synthetic(Value::Map(m)), &opts);
+        let back = parse_document(&out, SourceId(0)).unwrap();
+        match &back.as_map().unwrap()["k"].value {
+            Value::Str(s) => assert_eq!(s, text, "read back from {out:?}"),
+            v => panic!("read back {v:?} from {out:?}"),
+        }
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn folded_lines_are_separated_by_a_blank_line() {
+        assert_folded("line one\nline two\n", "k: >\n  line one\n\n  line two\n");
+    }
+
+    #[test]
+    fn folded_blank_lines_gain_one_more() {
+        assert_folded("a\n\nb\n", "k: >\n  a\n\n\n  b\n");
+    }
+
+    #[test]
+    fn folded_lines_starting_with_a_space_are_not_separated() {
+        assert_folded("a\nb\n  c\nd\n", "k: >\n  a\n\n  b\n    c\n  d\n");
+    }
+
+    #[test]
+    fn folded_long_lines_break_at_the_width() {
+        assert_folded(
+            &format!("{}\nshort\n", ["word"; 20].join(" ")),
+            "k: >\n  word word word word word word word word word word word word word word word word\n  word word word word\n\n  short\n",
+        );
+    }
+
+    #[test]
+    fn folded_without_a_final_break_strips() {
+        assert_folded("a\nb", "k: >-\n  a\n\n  b\n");
+    }
+
+    #[test]
+    fn folded_trailing_blank_lines_keep() {
+        assert_folded("a\nb\n\n", "k: >+\n  a\n\n  b\n\n...\n");
+    }
+
+    #[test]
+    fn folded_breaks_only_at_a_single_space_past_column_80() {
+        let x = |n| "x".repeat(n);
+        assert_folded(&format!("{} y\n", x(78)), &format!("k: >\n  {} y\n", x(78)));
+        assert_folded(
+            &format!("{} y\n", x(79)),
+            &format!("k: >\n  {}\n  y\n", x(79)),
+        );
+        assert_folded(
+            &format!("{}  y\n", x(79)),
+            &format!("k: >\n  {}  y\n", x(79)),
+        );
+    }
+
+    /// PyYAML folds a long line that starts with a space too, so the value
+    /// reads back changed. krab writes the same bytes as the reference.
+    #[test]
+    fn folded_long_line_starting_with_a_space_matches_pyyaml() {
+        let mut m = crate::value::Map::new();
+        let text = format!(" {}w\nz\n", "w ".repeat(49));
+        m.insert("k".into(), Node::synthetic(Value::Str(text)));
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Folded),
+            ..DumpOptions::default()
+        };
+        assert_eq!(
+            dump_yaml(&Node::synthetic(Value::Map(m)), &opts),
+            format!(
+                "k: >2\n   {}w\n  {}w\n  z\n",
+                "w ".repeat(39),
+                "w ".repeat(9)
+            )
+        );
     }
 }

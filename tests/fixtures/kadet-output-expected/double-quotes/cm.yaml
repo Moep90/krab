@@ -1,0 +1,6 @@
+apiVersion: v1
+data:
+  settings.yaml: "setting1: enabled\nsetting2: 100\n"
+kind: ConfigMap
+metadata:
+  name: demo

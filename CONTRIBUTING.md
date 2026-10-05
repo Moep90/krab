@@ -1,14 +1,37 @@
 # Contributing
 
+## The cycle
+
+One issue, one branch, one PR.
+
+1. The issue carries the specification. For parity work that means what the
+   reference does, where that behaviour lives in its source, and a reproduction
+   both implementations can be run against. For a krab extension it means what
+   the behaviour should be, since no reference decides it. Open work lives on
+   the board (`docs/ROADMAP.md`).
+2. The fixture case comes first. Add it to `tests/fixtures/inventory` and
+   regenerate the expected output with the reference, so the test fails for the
+   reason the issue describes before anything is implemented.
+3. Implement, then run `cargo test --release`, plus the parity check below for
+   anything that touches the engine.
+4. A deliberate difference from the reference gets a row in
+   `docs/DECISIONS.md` in the same PR. Otherwise it is a bug.
+
 ## Build
 
-Rust 1.85 or newer. The workspace builds with no system dependencies.
+`rust-toolchain.toml` pins the compiler; rustup installs it, `rustfmt` and
+`clippy` on the first `cargo` command you run in the tree. The workspace
+builds with no system dependencies.
+
+`rust-version` in `Cargo.toml` is a different number: the oldest toolchain
+krab still compiles on. It is not repeated in prose anywhere, so there is
+nothing to keep in sync; cargo names the version it needs if yours is older.
 
 ```sh
 cargo build --release            # target/release/krab
-cargo fmt --all
-cargo clippy --all-targets --release
-cargo test --release
+cargo fmt --all --check
+cargo clippy --all-targets --locked
+cargo test --locked
 ```
 
 Put `target/release/krab` on your `PATH` (a symlink is fine). The name
@@ -19,7 +42,7 @@ stops every build's daemon for the inventory).
 
 ## Tests
 
-* `cargo test --release` runs the unit tests and the fixture test.
+* `cargo test --locked` runs the unit tests and the fixture test.
   `tests/fixtures/inventory` is a small inventory exercising class
   resolution, list merging, merge-time dereferencing, every shipped
   resolver, YAML 1.1 scalars and PyYAML emitter quirks;
@@ -27,13 +50,19 @@ stops every build's daemon for the inventory).
   `crates/krab-inventory/tests/fixture.rs` compares byte for byte. Add a
   case there for every engine behaviour you change or fix, then regenerate
   the expected output with the reference implementation
-  (`tests/fixtures/README.md`).
+  (`tests/fixtures/README.md`). CI regenerates it too, with
+  `kapitan[omegaconf]==0.36.3` and `omegaconf==2.4.0.dev3`, and fails if the
+  committed files differ, so a hand-written expectation cannot pass.
 * `crates/krab-compile/tests/kadet_runner.rs` evaluates the component in
   `tests/fixtures/kadet` through the kadet evaluator and its bundled
   `kapitan` package (`crates/krab-compile/runner/kapitan`), checking the
   output and the recorded dependencies. It needs a `python3` with `kadet`
   and `jinja2` importable and skips otherwise. Extend the fixture when you
   add to the package's API.
+* `crates/krab/tests/readme_version.rs` checks that the install snippet in
+  `README.md` names the version in the manifest, so the `curl` in it cannot
+  go stale. It is the only version string in the documentation that has to
+  be kept in step by hand.
 * The corpus test (`crates/krab-inventory/tests/corpus.rs`) checks the
   emitters against a directory of compiled files written by the reference
   implementation. It runs only when `KRAB_CORPUS` and `KRAB_COMPILED`
@@ -78,28 +107,46 @@ package and install it.
 
 `.github/workflows/ci.yml` runs on every pull request and push to `main`:
 `cargo fmt --check`, `cargo clippy --all-targets` and `cargo test` with
-warnings denied, and `npm run package` in `editors/vscode` (the `.vsix` is
-kept as a workflow artifact). The corpus test does not run there; it needs
+warnings denied, the reference-parity job described under Tests, and
+`npm run package` in `editors/vscode` (the `.vsix` is kept as a workflow
+artifact). The corpus test does not run there; it needs
 a real inventory and the reference implementation.
 
 To release, bump `version` in the workspace `Cargo.toml` (and the extension's
-`package.json` when it changed), merge, then tag `main`:
+`package.json` when it changed) and the install snippet in `README.md` with
+it, merge, then tag `main`:
 
 ```sh
-git tag v2.0.0-alpha.4
-git push origin v2.0.0-alpha.4
+version=$(cargo metadata --no-deps --format-version 1 \
+  | jq -r '.packages[] | select(.name == "krab") | .version')
+git tag "v$version"
+git push origin "v$version"
 ```
 
 `.github/workflows/release.yml` refuses a tag that does not match the
-workspace version, builds `krab` for Linux x86_64 and aarch64 (on
-Ubuntu 22.04, so glibc 2.35 or newer) and for macOS Intel and Apple silicon,
-packages the extension, and creates the GitHub release with generated notes,
+workspace version, builds `krab` for Linux x86_64 and aarch64 (each on its
+own Ubuntu 22.04 runner, so glibc 2.35 or newer) and for macOS Intel and
+Apple silicon, packages the extension, and creates the GitHub release with
 the four `krab-<version>-<target>.tar.gz` archives, the `.vsix` and a
 `SHA256SUMS` file. A tag with a pre-release suffix (`-alpha.1`) becomes a
 pre-release. If the release already exists (created from the GitHub UI, for
 example) the assets are uploaded to it instead. Running the workflow by hand
 from the Actions tab builds the same artifacts from any branch without
 publishing anything.
+
+The release notes come from `git-cliff`, grouped by the `area:` prefix of
+each commit (`cliff.toml`). To see what the next tag would say:
+
+```sh
+git cliff --unreleased
+```
+
+Each archive carries a build provenance attestation, so anyone can check
+which workflow and which commit produced the binary they downloaded:
+
+```sh
+gh attestation verify <the archive you downloaded> --repo kapicorp/krab
+```
 
 ## Layout and conventions
 
@@ -121,3 +168,13 @@ publishing anything.
 `docs/DESIGN.md` the semantics. Open work is tracked as issues on the
 krab roadmap project board (https://github.com/orgs/kapicorp/projects/5);
 `docs/ROADMAP.md` points there.
+
+## Publishing
+
+The crates are `publish = false` and cannot go to crates.io as they stand.
+`[patch.crates-io]` replaces `saphyr-parser` with the patched copy in
+`vendor/`, and cargo strips patch sections when it packages a crate: a
+published `krab-inventory` would resolve against the unpatched crate on
+crates.io and silently lose the PyYAML compatibility fixes. `cargo install
+krab` needs the fork published under a name of its own, or the patches
+upstream, first. Releases ship prebuilt binaries, which are unaffected.
