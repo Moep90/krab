@@ -49,8 +49,6 @@ pub struct CompileOutcome {
 pub struct ItemContext<'a> {
     /// The target's items from the last compile with the same compiler and settings.
     pub previous: &'a [ItemRecord],
-    /// Fingerprints of every path the last compile recorded.
-    pub files: &'a BTreeMap<String, String>,
     pub all_digests: &'a BTreeMap<String, String>,
     pub everything_digest: &'a str,
     pub compiled_dir: &'a Path,
@@ -145,20 +143,28 @@ impl NativeCompiler {
         let mut evaluator = None;
         for raw in &plan.compile {
             let item = Item::from_json(raw)?;
-            let target_compile_path = compile_root.join(&plan.target_path).join(&item.output_path);
-            std::fs::create_dir_all(&target_compile_path).map_err(|e| e.to_string())?;
-            let result = self.compile_item(
-                &item,
-                plan,
-                &compile_root,
-                &target_compile_path,
-                temp_dir,
-                &writer,
-                &mut reads,
-                items,
-                &mut records,
-                &mut evaluator,
-            );
+            // Collecting the components drops `.`: create_dir_all("t/.") never creates `t`.
+            let target_compile_path: PathBuf = compile_root
+                .join(&plan.target_path)
+                .join(&item.output_path)
+                .components()
+                .collect();
+            let result = std::fs::create_dir_all(&target_compile_path)
+                .map_err(|e| format!("cannot create {}: {e}", target_compile_path.display()))
+                .and_then(|()| {
+                    self.compile_item(
+                        &item,
+                        plan,
+                        &compile_root,
+                        &target_compile_path,
+                        temp_dir,
+                        &writer,
+                        &mut reads,
+                        items,
+                        &mut records,
+                        &mut evaluator,
+                    )
+                });
             if let Err(e) = result {
                 if item.continue_on_error {
                     warnings.push(format!("{} {:?}: {e}", item.input_type, item.input_paths));
@@ -202,7 +208,7 @@ impl NativeCompiler {
                     let record = match reusable(ctx, &item_digest, plan, &mut records.matched) {
                         Some(previous) => {
                             restore_outputs(previous, ctx.compiled_dir, compile_root)?;
-                            for rel in &previous.deps {
+                            for rel in previous.deps.keys() {
                                 item_reads.file(&self.opts.repo_root.join(rel));
                             }
                             item_reads.globals.extend(previous.globals.keys().cloned());
@@ -378,11 +384,10 @@ fn reusable<'a>(
         .doc_reads
         .iter()
         .all(|(key, d)| doc_read_digest(plan, key) == *d)
-        && previous.deps.iter().all(|rel| {
-            ctx.files
-                .get(rel)
-                .is_some_and(|fp| ctx.digests.fingerprint(&ctx.repo_root.join(rel)) == *fp)
-        })
+        && previous
+            .deps
+            .iter()
+            .all(|(rel, fp)| ctx.digests.fingerprint(&ctx.repo_root.join(rel)) == *fp)
         && previous
             .globals
             .iter()
@@ -428,15 +433,17 @@ fn item_record(
             doc_reads.insert(key.clone(), doc_read_digest(plan, key));
         }
     }
-    let mut deps: Vec<String> = reads
+    // A fresh fingerprint: the item may have just written what it read (refs).
+    let fresh = Digests::new();
+    let deps: BTreeMap<String, String> = reads
         .files
         .iter()
         .chain(&reads.dirs)
-        .filter_map(|p| p.strip_prefix(ctx.repo_root).ok())
-        .map(|rel| relative(rel, Path::new("")))
+        .filter_map(|p| {
+            let rel = p.strip_prefix(ctx.repo_root).ok()?;
+            Some((relative(rel, Path::new("")), fresh.fingerprint(p)))
+        })
         .collect();
-    deps.sort();
-    deps.dedup();
     let mut globals = BTreeMap::new();
     if reads.globals.iter().any(|g| g == "*") {
         globals.insert("*".to_string(), ctx.everything_digest.to_string());
@@ -490,14 +497,12 @@ mod tests {
 
     fn ctx<'a>(
         previous: &'a [ItemRecord],
-        files: &'a BTreeMap<String, String>,
         all: &'a BTreeMap<String, String>,
         digests: &'a Digests,
         root: &'a Path,
     ) -> ItemContext<'a> {
         ItemContext {
             previous,
-            files,
             all_digests: all,
             everything_digest: "every",
             compiled_dir: root,
@@ -519,13 +524,48 @@ mod tests {
     }
 
     #[test]
+    fn reuse_compares_the_item_s_own_fingerprints() {
+        let p = plan();
+        let dir = std::env::temp_dir().join(format!("krab-reuse-deps-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("in.txt"), "v1").unwrap();
+        let all = BTreeMap::new();
+        let digests = Digests::new();
+        let record = [ItemRecord {
+            item_digest: "item".into(),
+            doc_reads: BTreeMap::new(),
+            deps: BTreeMap::from([(
+                "in.txt".to_string(),
+                digests.fingerprint(&dir.join("in.txt")),
+            )]),
+            globals: BTreeMap::new(),
+            outputs: BTreeMap::new(),
+        }];
+        assert!(
+            reusable(
+                &ctx(&record, &all, &digests, &dir),
+                "item",
+                &p,
+                &mut [false]
+            )
+            .is_some()
+        );
+        std::fs::write(dir.join("in.txt"), "v2").unwrap();
+        let fresh = Digests::new();
+        assert!(
+            reusable(&ctx(&record, &all, &fresh, &dir), "item", &p, &mut [false]).is_none(),
+            "a changed input invalidates the item, whatever other targets recorded"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn reuse_needs_every_input_unchanged() {
         let p = plan();
         let dir = std::env::temp_dir().join(format!("krab-reuse-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("out.yaml"), "a: 1\n").unwrap();
         let digests = Digests::new();
-        let files = BTreeMap::new();
         let all = BTreeMap::from([("other".to_string(), "d1".to_string())]);
         let record = |doc_reads: &[(&str, &str)], globals: &[(&str, &str)]| ItemRecord {
             item_digest: "item".into(),
@@ -533,7 +573,7 @@ mod tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
-            deps: vec![],
+            deps: BTreeMap::new(),
             globals: globals
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -545,7 +585,7 @@ mod tests {
         };
         let x = doc_read_digest(&p, "parameters.x");
         let good = [record(&[("parameters.x", &x)], &[("other", "d1")])];
-        let c = ctx(&good, &files, &all, &digests, &dir);
+        let c = ctx(&good, &all, &digests, &dir);
         assert!(reusable(&c, "item", &p, &mut [false]).is_some());
         assert!(reusable(&c, "different-item", &p, &mut [false]).is_none());
         // An item already matched is not offered twice.
@@ -554,7 +594,7 @@ mod tests {
         let stale_doc = [record(&[("parameters.x", "old")], &[])];
         assert!(
             reusable(
-                &ctx(&stale_doc, &files, &all, &digests, &dir),
+                &ctx(&stale_doc, &all, &digests, &dir),
                 "item",
                 &p,
                 &mut [false]
@@ -564,7 +604,7 @@ mod tests {
         let stale_global = [record(&[], &[("other", "d0")])];
         assert!(
             reusable(
-                &ctx(&stale_global, &files, &all, &digests, &dir),
+                &ctx(&stale_global, &all, &digests, &dir),
                 "item",
                 &p,
                 &mut [false]
@@ -574,7 +614,7 @@ mod tests {
         let everything = [record(&[], &[("*", "every")])];
         assert!(
             reusable(
-                &ctx(&everything, &files, &all, &digests, &dir),
+                &ctx(&everything, &all, &digests, &dir),
                 "item",
                 &p,
                 &mut [false]
@@ -584,7 +624,7 @@ mod tests {
 
         std::fs::write(dir.join("out.yaml"), "edited\n").unwrap();
         let fresh = Digests::new();
-        let c = ctx(&good, &files, &all, &fresh, &dir);
+        let c = ctx(&good, &all, &fresh, &dir);
         assert!(
             reusable(&c, "item", &p, &mut [false]).is_none(),
             "modified output is not reused"
