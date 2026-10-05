@@ -270,7 +270,7 @@ itself uses:
 |---|---|---|
 | `inventory-path` | `compile`, `inventory`, `global` | inventory directory |
 | `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout (default: off) |
-| `inventory-backend` | `global` | informational; only `omegaconf` semantics are implemented |
+| `inventory-backend` | `inventory_backend`, `global` | only `omegaconf` is implemented; any other value, or none, prints a warning because kapitan would render with reclass |
 | `indent` | `inventory` | YAML indentation for `krab inventory` |
 | `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for krab compile |
 | `refs-path`, `embed-refs`, `reveal` | `compile` | where ref files live, embed them, reveal them |
