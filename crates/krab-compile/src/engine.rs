@@ -49,7 +49,9 @@ pub struct CompileOptions {
     pub search_paths: Vec<PathBuf>,
     /// Extra flags for kapitan's `compile` argument parser (e.g. `--reveal`).
     pub flags: Vec<String>,
-    pub python: PythonCmd,
+    /// The interpreter, or why none was found: the native backend needs one
+    /// only for the kadet items of the targets it compiles.
+    pub python: Result<PythonCmd, String>,
     pub parallelism: usize,
     /// Recompile everything regardless of the manifest.
     pub force: bool,
@@ -224,7 +226,9 @@ pub fn compile(
     let mut manifest = Manifest::load(&manifest_path);
     let versions = opts
         .python
-        .versions(opts.backend.python_needs())
+        .as_ref()
+        .map_err(|_| "no Python".to_string())
+        .and_then(|p| p.versions(opts.backend.python_needs()))
         .unwrap_or_else(|e| format!("unknown ({e})"));
     let engine = opts.engine_identity(&versions);
     let config_digest = opts.config_digest();
@@ -362,6 +366,15 @@ pub fn compile(
                 })
             })
             .collect();
+        if let Err(e) = &opts.python
+            && stale.iter().any(|(plan, _)| {
+                plan.compile
+                    .iter()
+                    .any(|i| i.get("input_type").and_then(Value::as_str) == Some("kadet"))
+            })
+        {
+            return Err(e.clone());
+        }
 
         // 3. Workers.
         let temp_root = std::env::temp_dir().join(format!(
@@ -623,13 +636,17 @@ fn run_one(
     loop {
         attempts += 1;
         if worker.is_none() {
-            match Worker::spawn(&ctx.opts.python, script, init.clone()) {
+            let spawned = ctx.opts.python.clone().and_then(|p| {
+                Worker::spawn(&p, script, init.clone())
+                    .map_err(|e| format!("cannot start compile worker: {e}"))
+            });
+            match spawned {
                 Ok(w) => *worker = Some(w),
-                Err(e) => {
+                Err(error) => {
                     return Outcome {
                         target: plan.name.clone(),
                         status: Status::Failed {
-                            error: format!("cannot start compile worker: {e}"),
+                            error,
                             traceback: None,
                         },
                         reason,
