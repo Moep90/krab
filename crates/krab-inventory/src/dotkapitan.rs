@@ -60,6 +60,9 @@ pub struct DotKapitan {
     pub inventory_path: Option<PathBuf>,
     pub compose_target_name: Option<bool>,
     pub inventory_backend: Option<String>,
+    /// An `inventory_backend:` section without the `inventory-backend` key,
+    /// the only key kapitan reads from it.
+    pub legacy_backend_key: bool,
     pub indent: Option<usize>,
     pub python_resolvers: PythonResolverSettings,
     pub file: Option<PathBuf>,
@@ -113,9 +116,13 @@ impl DotKapitan {
         {
             cfg.compose_target_name = Some(b);
         }
-        if let Some(Value::Str(s)) = get(&["global"], "inventory-backend") {
-            cfg.inventory_backend = Some(s);
+        // kapitan: `from_dot_kapitan("inventory_backend", "inventory-backend", ...)`,
+        // the `inventory_backend` section first, then `global`.
+        if let Some(Value::Str(b)) = get(&["inventory_backend", "global"], "inventory-backend") {
+            cfg.inventory_backend = Some(b);
         }
+        cfg.legacy_backend_key =
+            section("inventory_backend").is_some_and(|m| m.get("inventory-backend").is_none());
         if let Some(Value::Int(i)) = get(&["inventory"], "indent") {
             cfg.indent = Some(i.max(1) as usize);
         }
@@ -123,6 +130,25 @@ impl DotKapitan {
             cfg.python_resolvers = PythonResolverSettings::from_node(n);
         }
         Ok(cfg)
+    }
+
+    /// Why kapitan would not render this inventory with omegaconf, the only
+    /// backend krab implements.
+    pub fn backend_warning(&self) -> Option<String> {
+        let what = match self.inventory_backend.as_deref() {
+            Some("omegaconf") => return None,
+            Some(other) => format!("`.kapitan` selects the `{other}` inventory backend"),
+            None if self.file.is_none() => "there is no `.kapitan`".to_string(),
+            None => "`.kapitan` sets no `inventory-backend`".to_string(),
+        };
+        let legacy = if self.legacy_backend_key {
+            " (the `inventory_backend` section has no `inventory-backend` key, the only one kapitan reads there)"
+        } else {
+            ""
+        };
+        Some(format!(
+            "{what}{legacy}, so kapitan renders this inventory with reclass; krab implements omegaconf only and its output can differ. Set `global.inventory-backend: omegaconf`"
+        ))
     }
 
     /// A string list from the compile section (`search-paths`).
@@ -239,6 +265,44 @@ mod tests {
         assert_eq!(
             dot.python_resolvers.file,
             Some(PathBuf::from("lib/resolvers.py"))
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn warns_unless_omegaconf_is_selected() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-backend-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let warning = |text: Option<&str>| {
+            let _ = std::fs::remove_file(dir.join(".kapitan"));
+            if let Some(t) = text {
+                std::fs::write(dir.join(".kapitan"), t).unwrap();
+            }
+            DotKapitan::load(&dir).unwrap().backend_warning()
+        };
+        let none = warning(None).unwrap();
+        assert!(none.contains("inventory-backend: omegaconf"), "{none}");
+        assert_eq!(
+            warning(Some("global:\n  inventory-backend: omegaconf\n")),
+            None
+        );
+        // kapitan reads `inventory_backend.inventory-backend`, then `global`.
+        assert_eq!(
+            warning(Some("inventory_backend:\n  inventory-backend: omegaconf\n")),
+            None
+        );
+        assert!(warning(Some("compile:\n  inventory-backend: omegaconf\n")).is_some());
+        let overridden = warning(Some(
+            "inventory_backend:\n  inventory-backend: reclass\nglobal:\n  inventory-backend: omegaconf\n",
+        ))
+        .unwrap();
+        assert!(overridden.contains("`reclass`"), "{overridden}");
+        let reclass = warning(Some("global:\n  inventory-backend: reclass\n")).unwrap();
+        assert!(reclass.contains("`reclass`"), "{reclass}");
+        let legacy = warning(Some("inventory_backend:\n  omegaconf: true\n")).unwrap();
+        assert!(
+            legacy.contains("`inventory_backend` section has no `inventory-backend` key"),
+            "{legacy}"
         );
         let _ = std::fs::remove_dir_all(dir);
     }
