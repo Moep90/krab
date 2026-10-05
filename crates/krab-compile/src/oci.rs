@@ -95,15 +95,33 @@ pub fn pull(source: &str, outdir: &Path, opts: &PullOptions) -> Result<Vec<Pulle
         reference.repository, reference.reference
     );
     let (bytes, _) = registry.get(&manifest_path, MANIFEST_ACCEPT)?;
+    // A tag cannot contain `:`, so this is a digest pin.
+    if reference.reference.contains(':') {
+        verify(&reference.reference, &bytes).map_err(|e| format!("manifest of {source}: {e}"))?;
+    }
     let mut manifest: Json = serde_json::from_slice(&bytes)
         .map_err(|e| format!("manifest of {source} is not JSON: {e}"))?;
-    if let Some(first) = manifest
-        .get("manifests")
-        .and_then(Json::as_array)
-        .and_then(|m| m.first())
-    {
-        // An index: oras artifacts have one manifest; take it.
-        let digest = first
+    if let Some(entries) = manifest.get("manifests").and_then(Json::as_array) {
+        // An index: oras artifacts have one manifest; any other count would
+        // need a platform guess.
+        let [entry] = entries.as_slice() else {
+            let listed: Vec<String> = entries
+                .iter()
+                .map(|e| {
+                    let digest = e.get("digest").and_then(Json::as_str).unwrap_or("?");
+                    match e.get("platform") {
+                        Some(p) => format!("{digest} {p}"),
+                        None => digest.to_string(),
+                    }
+                })
+                .collect();
+            return Err(format!(
+                "index of {source} lists {} manifests, pin one with @<digest>: {}",
+                entries.len(),
+                listed.join(", ")
+            ));
+        };
+        let digest = entry
             .get("digest")
             .and_then(Json::as_str)
             .ok_or_else(|| format!("index of {source} has a manifest without digest"))?;
@@ -111,6 +129,7 @@ pub fn pull(source: &str, outdir: &Path, opts: &PullOptions) -> Result<Vec<Pulle
             &format!("/v2/{}/manifests/{digest}", reference.repository),
             MANIFEST_ACCEPT,
         )?;
+        verify(digest, &bytes).map_err(|e| format!("manifest of {source}: {e}"))?;
         manifest = serde_json::from_slice(&bytes)
             .map_err(|e| format!("manifest {digest} of {source} is not JSON: {e}"))?;
     }
@@ -149,14 +168,7 @@ pub fn pull(source: &str, outdir: &Path, opts: &PullOptions) -> Result<Vec<Pulle
             &format!("/v2/{}/blobs/{digest}", reference.repository),
             "application/octet-stream, */*",
         )?;
-        if let Some(expected) = digest.strip_prefix("sha256:") {
-            let actual = hex::encode(Sha256::digest(&bytes));
-            if actual != expected {
-                return Err(format!(
-                    "layer {digest} of {source} downloaded with digest sha256:{actual}"
-                ));
-            }
-        }
+        verify(digest, &bytes).map_err(|e| format!("layer of {source}: {e}"))?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
@@ -166,6 +178,18 @@ pub fn pull(source: &str, outdir: &Path, opts: &PullOptions) -> Result<Vec<Pulle
         pulled.push(Pulled { path, media_type });
     }
     Ok(pulled)
+}
+
+/// Check `bytes` against a `sha256:` digest; other algorithms are refused.
+fn verify(digest: &str, bytes: &[u8]) -> Result<(), String> {
+    let expected = digest
+        .strip_prefix("sha256:")
+        .ok_or_else(|| format!("unsupported digest {digest}, only sha256 is verified"))?;
+    let actual = hex::encode(Sha256::digest(bytes));
+    if actual != expected {
+        return Err(format!("expected {digest}, downloaded sha256:{actual}"));
+    }
+    Ok(())
 }
 
 /// `root/rel` when `rel` is relative and stays inside `root`.

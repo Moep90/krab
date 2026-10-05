@@ -23,8 +23,8 @@ inventory (including a repository's Python `resolvers.py`), the daemon, the
 language server, the native compile path for `jinja2`, `kadet`, `copy`,
 `remove` and `external` inputs, references (`?{gkms:...}` and friends:
 compile, create, reveal, `krab refs`), and dependency fetching (`git`,
-`http(s)`, `helm`, `oci`). Not native yet: `jsonnet`, `helm` (as a direct
-input type), `kustomize`, `cuelang` and `toml` output; see
+`http(s)`, `helm`, `oci`). Not native yet: `jsonnet`, `kustomize`,
+`cuelang` and `toml` output; see
 [Compatibility](#compatibility).
 
 ## Install
@@ -80,8 +80,11 @@ krab compile --fetch                      # first fetch the dependencies that ar
 krab refs --reveal -f compiled/my/target/manifests/secret.yml
 ```
 
-Target names are the dotted path of the target file:
-`inventory/targets/platform/apps/grafana.yml` is `platform.apps.grafana`.
+A target is named after its file, whatever directory it sits in:
+`inventory/targets/platform/apps/grafana.yml` is `grafana`. Set
+`compose-target-name` to name it after the path instead
+(`platform.apps.grafana`), as the reference does. Either way the dotted path
+selects it, so `-t platform.apps.grafana` works in both.
 
 The first `krab inventory ...` starts a daemon for that inventory in the
 background. It renders every target once, watches the files, and re-renders
@@ -256,7 +259,7 @@ inventory:
 
 What the file defines is cached by content digest, so no Python process
 starts until one of its resolvers is called. The daemon restarts when the
-file, or a project module it imports, changes. A missing interpreter is
+file, a project module it imports, or `.kapitan` changes. A missing interpreter is
 diagnosed up front, and `krab server status` shows where the known resolvers
 came from and which interpreter runs them. Every call is a JSON round trip
 to a worker; port a resolver to Rust when that shows in a profile.

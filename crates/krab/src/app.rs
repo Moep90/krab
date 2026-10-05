@@ -86,7 +86,7 @@ impl App {
         }
         let inventory_path = inventory_path.canonicalize().unwrap_or(inventory_path);
         let mut cfg = InventoryConfig::new(inventory_path.clone());
-        cfg.compose_target_name = dot.compose_target_name.unwrap_or(true);
+        cfg.compose_target_name = dot.compose_target_name.unwrap_or(false);
         cfg.normalize = !raw;
         let mut registry = Registry::with_builtins();
         match PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {
@@ -112,6 +112,11 @@ impl App {
                 registry.set_description("Python resolvers disabled in .kapitan");
             }
             None => registry.set_description("no resolvers.py found, native resolvers only"),
+        }
+        // The server is configured from `.kapitan` (inventory settings, the
+        // Python resolver setup): an edit restarts it like a resolvers.py edit.
+        if let Some(file) = &dot.file {
+            registry.add_source(file.canonicalize().unwrap_or_else(|_| file.clone()));
         }
         let inv = Inventory::new(cfg, Arc::new(registry));
         let connector = (!no_daemon && !raw).then(|| Connector {
