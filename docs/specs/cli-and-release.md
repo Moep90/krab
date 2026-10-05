@@ -456,10 +456,12 @@ CLI-59 Each hand-maintained registration list MUST be checked against the
        Since: not met yet (#228)
 
 CLI-61 Each log line on stderr MUST be logfmt by default (`ts`, `level`,
-       `target`, `msg`, then the event's fields as key=value pairs, values
-       quoted where logfmt requires it). KRAB_LOG_FORMAT=json MUST write
-       one JSON object per line instead, and KRAB_LOG_FORMAT=logfmt the
-       default. Any other value MUST fall back to logfmt with a warning.
+       `target`, `message`, then the event's fields as key=value pairs,
+       values quoted where logfmt requires it). KRAB_LOG_FORMAT=json MUST
+       write one flat JSON object per line instead (`timestamp`, `level`,
+       `target`, `message` and the fields), and KRAB_LOG_FORMAT=logfmt or
+       an empty value the default. Any other value MUST fall back to logfmt
+       with a warning.
        A daemon started by the CLI MUST use the format of the environment
        it inherits.
        Test: none
