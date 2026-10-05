@@ -4,6 +4,7 @@
 # builds the `krab` binary for Linux (x86_64, aarch64; glibc 2.17+) and
 # macOS (Intel, Apple silicon), packages the VS Code extension, and creates
 # the release with notes from the commit log, or uploads to it if it exists.
+# The same targets are built as `krab` wheels and published to PyPI.
 # Tags with a pre-release suffix (`v2.0.0-alpha.1`) are marked pre-release.
 #
 # Run it by hand (workflow_dispatch) to build the artifacts from any branch
@@ -119,6 +120,20 @@ jobs:
           name: krab-${{ matrix.target }}
           path: krab-*.tar.gz
           if-no-files-found: error
+      # The binary as a PyPI wheel (pyproject.toml). On Linux maturin links
+      # with zig against glibc 2.17 too, using the ziglang installed above.
+      - name: Wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.15.0
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.glibc && '2_17' || '' }}
+          args: --release --locked --out wheels ${{ matrix.glibc && '--zig' || '' }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheel-${{ matrix.target }}
+          path: wheels/*.whl
+          if-no-files-found: error
 
   vscode:
     name: VS Code extension
@@ -165,6 +180,7 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
+          pattern: krab-*
           path: dist
           merge-multiple: true
       - name: Checksums
@@ -194,3 +210,24 @@ jobs:
           else
             gh release create "$tag" dist/* --title "$tag" --notes-file NOTES.md "${flags[@]}"
           fi
+
+  pypi:
+    name: PyPI
+    if: startsWith(github.ref, 'refs/tags/')
+    # Only after the GitHub release exists: a PyPI upload cannot be undone.
+    needs: release
+    runs-on: ubuntu-latest
+    # The trusted publisher registered on PyPI names this environment
+    # (CONTRIBUTING.md, Publishing).
+    environment: pypi
+    permissions:
+      # Trusted publishing: PyPI trades this job's OIDC token for a
+      # short-lived upload token. No API token is stored anywhere.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
