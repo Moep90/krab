@@ -2,6 +2,7 @@
 //! fixture chart (`tests/fixtures/helm`, expected output in
 //! `tests/fixtures/helm-expected/compiled`). Needs a `helm` v3 binary; skips
 //! without one.
+#![allow(clippy::print_stderr)]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
