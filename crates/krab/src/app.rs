@@ -72,6 +72,9 @@ impl App {
     ) -> Result<App, Failure> {
         let cwd = std::env::current_dir()?;
         let dot = DotKapitan::load(&cwd).map_err(|e| Failure::Message(e.to_string()))?;
+        if let Some(w) = dot.backend_warning() {
+            eprintln!("warning: {w}");
+        }
         let inventory_path = inventory_path
             .or(dot.inventory_path.clone())
             .unwrap_or_else(|| PathBuf::from("./inventory"));
