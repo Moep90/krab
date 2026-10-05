@@ -254,8 +254,35 @@ fn default(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     Ok(Value::Str(out))
 }
 
-fn write(_ctx: &mut Ctx, _args: &[Value]) -> ResolverResult {
-    Err("the `write` resolver mutates the inventory while it is being rendered and is not supported; restructure the inventory so the value lives where it is needed".into())
+/// `${write:destination,origin}`: kapitan's `write_to_key`. Merges the
+/// resolved value at `origin` into `destination`, creating it if needed.
+fn write(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
+    arity("write", args, 2, 2)?;
+    let destination = as_str("write", args, 0)?;
+    let origin = as_str("write", args, 1)?;
+    // Like the reference's resolve() on a copy: read the origin afresh, not
+    // through values memoised earlier in the pass.
+    ctx.ev.invalidate();
+    let content = match ctx.select(origin) {
+        Ok(Some(v)) if !v.truthy() => return Ok(Value::Str("NOT FOUND".into())),
+        Ok(Some(v @ (Value::Map(_) | Value::List(_)))) => v,
+        // The reference resolves a copy of the origin, which only a container allows.
+        Ok(Some(_)) => {
+            ctx.warn(format!("`{origin}` is not a mapping or a list"));
+            return Ok(Value::Str("ERROR WHILE RESOLVING".into()));
+        }
+        Ok(None) => return Ok(Value::Str("NOT FOUND".into())),
+        Err(e) => {
+            let message = match e {
+                ResolverError::Message(m) => m,
+                ResolverError::Inner(e) => e.to_string(),
+            };
+            ctx.warn(message);
+            return Ok(Value::Str("ERROR WHILE RESOLVING".into()));
+        }
+    };
+    ctx.write(destination, content)?;
+    Ok(Value::Str("DONE".into()))
 }
 
 fn from_file(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {

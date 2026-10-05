@@ -20,7 +20,7 @@ use crate::interp::eval::Evaluator;
 use crate::interp::parse::parse_element;
 use crate::path::{Key, KeyPath};
 use crate::source::{Origin, Sources};
-use crate::value::{Node, Value};
+use crate::value::{Map, Node, Value};
 
 #[derive(Debug)]
 pub enum ResolverError {
@@ -242,6 +242,38 @@ impl Ctx<'_, '_> {
         }
     }
 
+    /// `OmegaConf.update(_root_, key, value, merge=True, force_add=True)`:
+    /// merge `value` into the node at the absolute `key`, creating missing
+    /// mappings on the way.
+    pub fn write(&mut self, key: &str, value: Value) -> Result<(), ResolverError> {
+        let origin = self.origin;
+        let fail = |why: &str| ResolverError::Message(format!("cannot write to `{key}`: {why}"));
+        let mut node = &mut *self.ev.root;
+        for k in KeyPath::parse(key).0 {
+            // OmegaConf.update replaces anything that is not a container.
+            if !matches!(node.value, Value::Map(_) | Value::List(_)) {
+                node.value = Value::Map(Map::new());
+            }
+            node = match (&mut node.value, k) {
+                (Value::Map(m), Key::Str(s)) => m.entry(s).or_insert_with(|| Node::map(origin)),
+                (Value::Map(m), Key::Index(i)) => {
+                    m.entry(i.to_string()).or_insert_with(|| Node::map(origin))
+                }
+                (Value::List(l), Key::Index(i)) => {
+                    let len = l.len();
+                    l.get_mut(i).ok_or_else(|| {
+                        fail(&format!("list index {i} out of range (length {len})"))
+                    })?
+                }
+                (_, Key::Str(s)) => return Err(fail(&format!("a list has no key `{s}`"))),
+                (_, Key::Index(_)) => unreachable!("only containers remain"),
+            };
+        }
+        merge_into(node, Node::new(value, origin)).map_err(|why| fail(&why))?;
+        self.ev.invalidate();
+        Ok(())
+    }
+
     /// Attach a non-fatal warning to the render.
     pub fn warn(&mut self, message: impl Into<String>) {
         let d = Diagnostic::warning(
@@ -276,6 +308,27 @@ pub fn arity(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), R
             args.len()
         )
         .into());
+    }
+    Ok(())
+}
+
+/// `OmegaConf.merge` of one node into another: mappings merge key by key,
+/// anything else replaces.
+fn merge_into(dst: &mut Node, src: Node) -> Result<(), String> {
+    match (&mut dst.value, src.value) {
+        (Value::Map(d), Value::Map(s)) => {
+            for (k, v) in s {
+                match d.get_mut(&k) {
+                    Some(existing) => merge_into(existing, v)?,
+                    None => {
+                        d.insert(k, v);
+                    }
+                }
+            }
+        }
+        (Value::Map(_), Value::List(_)) => return Err("cannot merge a list into a mapping".into()),
+        (Value::List(_), Value::Map(_)) => return Err("cannot merge a mapping into a list".into()),
+        (_, value) => *dst = Node::new(value, src.origin),
     }
     Ok(())
 }

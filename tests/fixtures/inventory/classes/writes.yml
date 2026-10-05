@@ -1,0 +1,65 @@
+# The `write` idiom: a list of throwaway entries whose deferred `write` calls
+# copy a block to a path computed after merging.
+parameters:
+  gateway:
+    services:
+      existing:
+        hostname: existing.example.com
+  svc:
+    instance: svc
+    port: 8080
+    gateway_path: gateway.services.svc
+    gateway_service:
+      hostname: svc.example.com
+      port: ${svc.port}
+    dump:
+      - >-
+        \${write:
+        ${relpath:svc.gateway_path},
+        ${relpath:svc.instance}.gateway_service
+        }
+  merged:
+    into:
+      keep: 1
+      over: old
+      nested:
+        a: 1
+    src:
+      over: new
+      nested:
+        b: 2
+      list: [1, 2]
+    dump:
+      - \${write:merged.into,merged.src}
+      - \${write:merged.into,merged.absent}
+  seen_by: ${gateway.services}
+  # The origin holds a deferred relative interpolation that the second pass
+  # evaluates before the write reads it: the write must copy what it
+  # resolves to at the origin, not the relative text.
+  late:
+    out:
+      keep: 1
+    namespace: ns
+    blocks:
+      a:
+        namespace: \${relpath:late.namespace}
+    dump:
+      - \${write:late.out.x.a,late.blocks.a}
+  # Writes that land on the calling node or one of its containers, a scalar
+  # origin, and a scalar standing where the destination needs a mapping.
+  edge:
+    src_scalar: 5
+    src_map:
+      dump: 7
+    src_a:
+      a: 1
+    scalar_holder:
+      dump:
+        - \${write:edge.scalar_holder,edge.src_scalar}
+    holder:
+      dump:
+        - \${write:edge.holder,edge.src_map}
+    me: \${write:edge.me,edge.src_a}
+    scalar_parent: 5
+    dump:
+      - \${write:edge.scalar_parent.b,edge.src_a}
