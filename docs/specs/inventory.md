@@ -354,7 +354,7 @@ INV-46 A class resolved through one of the two reclass compatibility
        fallbacks of INV-16 MUST produce a warning naming the file used and
        the paths expected. When that file is `classes/init.yml` or
        `<inventory>/classes.yml` (the dropped parts leave nothing), the
-       class MUST fail with `inventory::class_not_found` instead.
+       warning MUST also say that a later release makes it an error.
        Test: none
        Since: not met yet (#214)
 
