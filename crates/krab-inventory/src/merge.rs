@@ -153,6 +153,8 @@ fn merge_at(
                 _ => replace(root, path, src, log),
             }
         }
+        // OmegaConf.merge: a MISSING (`???`) source leaves an existing value.
+        (_, Value::Str(s)) if s == "???" => {}
         (_, src_value) => replace(root, path, Node::new(src_value, src.origin), log),
     }
 }

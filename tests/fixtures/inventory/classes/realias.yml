@@ -1,0 +1,6 @@
+# A value a resolver turned into a relative interpolation (relpath), read
+# again later in the same pass through an alias, a merge copy and a leaf.
+parameters:
+  base_component:
+    namespace: ${relpath:base_component.ns}
+    ns: base-ns

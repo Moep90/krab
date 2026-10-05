@@ -260,9 +260,6 @@ fn write(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("write", args, 2, 2)?;
     let destination = as_str("write", args, 0)?;
     let origin = as_str("write", args, 1)?;
-    // Like the reference's resolve() on a copy: read the origin afresh, not
-    // through values memoised earlier in the pass.
-    ctx.ev.invalidate();
     let content = match ctx.select(origin) {
         Ok(Some(v)) if !v.truthy() => return Ok(Value::Str("NOT FOUND".into())),
         Ok(Some(v @ (Value::Map(_) | Value::List(_)))) => v,

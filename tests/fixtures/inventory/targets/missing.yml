@@ -1,0 +1,50 @@
+# MISSING (`???`) values reached through interpolations: the reference makes
+# the whole interpolated value MISSING, and oc.select treats it as absent.
+parameters:
+  m: ???
+  h: ???
+  comp:
+    output:
+      host: ???
+  names:
+    x: X
+  holder:
+    inner: ${m}
+    other: fine
+  values:
+    b_in_string: "host ${comp.output.host}"
+  r_plain: ${comp.output.host}
+  r_string: "host ${comp.output.host}"
+  r_two: "${h}/${h}:latest"
+  r_absent: "host ${comp.output.host} tls ${comp.output.tls}"
+  r_key: ${names.${m}}
+  r_child: ${m.y}
+  r_default: ${default:${m},fallback}
+  r_select: ${oc.select:comp.output.host,dflt}
+  r_select_str: "x ${oc.select:comp.output.host,dflt}"
+  r_select_null: ${oc.select:m}
+  r_list:
+    - ${m}
+    - ok
+  r_holder: ${holder}
+  r_escaped: \${m}
+  r_alias: ${values.b_in_string}
+  r_literal: "a???"
+  r_write: ${write:w_dst,m}
+  # oc.select through an interpolation that resolves to ???: MISSING, not
+  # the default (only a node that already holds ??? counts as absent).
+  s_nested: ${oc.select:via.x,d1}
+  s_alias: ${oc.select:via_alias,d2}
+  via:
+    x: ${hm}
+  via_alias: ${hm}
+  hm: ???
+  # write merges like OmegaConf.update: ??? leaves existing values.
+  wdst:
+    k: existing
+    l: [1]
+  wsrc:
+    k: ???
+    j: ???
+    l: ???
+  r_write_keep: ${write:wdst,wsrc}
