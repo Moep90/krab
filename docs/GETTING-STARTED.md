@@ -28,7 +28,7 @@ Run every command from the directory holding `.kapitan` (the same place you
 run the Python `kapitan` from). krab reads the same keys of `.kapitan`:
 `inventory-path`, `compose-target-name`, `compile.search-paths`,
 `compile.output-path`, `compile.indent` and
-`inventory.multiline-string-style`. Without a `.kapitan` the inventory is
+`compile.yaml-multiline-string-style`. Without a `.kapitan` the inventory is
 `./inventory` and the output goes to `./compiled`.
 
 ```sh

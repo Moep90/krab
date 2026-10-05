@@ -58,13 +58,16 @@ pub fn dump_yaml(node: &Node, opts: &DumpOptions) -> String {
 
 /// PyYAML `yaml.dump_all`: one document per item, each introduced by `---`.
 pub fn dump_yaml_all(items: &[Node], opts: &DumpOptions) -> String {
-    let mut out = String::new();
+    let mut e = Emitter::new(opts.clone());
     for (i, item) in items.iter().enumerate() {
-        let mut e = Emitter::new(opts.clone());
         e.document_in_stream(&item.value, i == 0);
-        out.push_str(&e.out);
     }
-    out
+    // expect_stream_end
+    if e.open_ended {
+        e.write_indicator("...", true, false, false);
+        e.write_indent();
+    }
+    e.out
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -284,14 +287,9 @@ impl Emitter {
     fn document_in_stream(&mut self, v: &Value, first: bool) {
         if !first {
             self.write_indicator("---", true, false, false);
-            self.write_indent();
         }
         self.node(v, true, false, false, false);
         self.write_indent();
-        if self.open_ended {
-            self.write_indicator("...", true, false, false);
-            self.write_indent();
-        }
     }
 
     fn node(&mut self, v: &Value, root: bool, sequence: bool, mapping: bool, simple_key: bool) {
@@ -484,7 +482,7 @@ impl Emitter {
                 Style::Folded
             };
         }
-        if a.allow_single_quoted && !(self.simple_key_context && a.multiline) {
+        if forced.is_none() && a.allow_single_quoted && !(self.simple_key_context && a.multiline) {
             return Style::Single;
         }
         Style::Double
@@ -1004,6 +1002,36 @@ mod tests {
         assert_eq!(
             dump_yaml(&Node::synthetic(Value::Map(m)), &opts),
             "a: '03190301'\nb: '1234567'\nc: '123'\nd: '0'\ne: 1e3\nf: '007'\ng: '12'\n"
+        );
+    }
+
+    #[test]
+    fn a_block_style_that_does_not_fit_falls_back_to_double_quotes() {
+        let node = parse_document("a: \"x\\ny \"\nb: \"p\\nq\\n\"\n", SourceId(0)).unwrap();
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Literal),
+            ..DumpOptions::default()
+        };
+        // PyYAML with kapitan's literal representer.
+        assert_eq!(dump_yaml(&node, &opts), "a: \"x\\ny \"\nb: |\n  p\n  q\n");
+    }
+
+    #[test]
+    fn dump_all_writes_document_markers_like_pyyaml() {
+        let docs = crate::yaml::parse_documents(
+            "z: \"a\\n\\n\"\n---\n{}\n---\nb: 1\n---\nz: \"c\\n\\n\"\n",
+            SourceId(0),
+        )
+        .unwrap();
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Literal),
+            ..DumpOptions::default()
+        };
+        // PyYAML `dump_all`: a flow collection shares the `---` line, and
+        // `...` closes an open-ended stream only at its end.
+        assert_eq!(
+            dump_yaml_all(&docs, &opts),
+            "z: |+\n  a\n\n--- {}\n---\nb: 1\n---\nz: |+\n  c\n\n...\n"
         );
     }
 
