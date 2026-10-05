@@ -250,6 +250,15 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
                     );
                 }
             }
+            Event::Unrendered(names) => {
+                let _ = writeln!(
+                    err,
+                    "warning: {} unselected target(s) fail to render and were skipped: {}{} (`krab inventory check`)",
+                    names.len(),
+                    names[..names.len().min(3)].join(", "),
+                    if names.len() > 3 { ", …" } else { "" }
+                );
+            }
             Event::Started(_) => {}
             Event::Finished(o) => match &o.status {
                 Status::Compiled { ms } => {
@@ -462,7 +471,7 @@ impl DocProvider for AppProvider {
 }
 
 impl DocSource for AppDocs<'_> {
-    fn digests(&self) -> Result<BTreeMap<String, String>, String> {
+    fn digests(&self) -> Result<(BTreeMap<String, String>, Vec<(String, String)>), String> {
         if let Some(mut c) = self.app.client() {
             let r: TargetsResult = c
                 .call("inventory.targets", serde_json::Value::Null)
@@ -474,28 +483,29 @@ impl DocSource for AppDocs<'_> {
                     Some(d) if t.ok => {
                         out.insert(t.name, d);
                     }
-                    _ => failed.push(t.name),
+                    _ => {
+                        let error = t
+                            .error
+                            .map(|e| e.to_string())
+                            .unwrap_or_else(|| format!("[{}] does not render", t.name));
+                        failed.push((t.name, error));
+                    }
                 }
             }
-            if !failed.is_empty() {
-                return Err(format!(
-                    "{} target(s) fail to render ({}…); fix the inventory first (`krab inventory check`)",
-                    failed.len(),
-                    failed[..failed.len().min(3)].join(", ")
-                ));
-            }
-            if out.is_empty() {
+            if out.is_empty() && failed.is_empty() {
                 return Err("the inventory server returned no targets".into());
             }
-            return Ok(out);
+            return Ok((out, failed));
         }
         let report = self.app.inv.render_all().map_err(|e| e.to_string())?;
-        if let Some(e) = report.errors.first() {
-            return Err(format!(
-                "{} target(s) fail to render; first error: {e}",
-                report.errors.len()
-            ));
-        }
+        let failed = report
+            .errors
+            .iter()
+            .map(|e| {
+                let name = e.diagnostic().target.clone().unwrap_or_default();
+                (name, e.to_string())
+            })
+            .collect();
         *self.rendered.lock() = Some(
             report
                 .targets
@@ -503,11 +513,14 @@ impl DocSource for AppDocs<'_> {
                 .map(|(n, t)| (n.clone(), t.to_document().value.to_json()))
                 .collect(),
         );
-        Ok(report
-            .targets
-            .iter()
-            .map(|(n, t)| (n.clone(), t.doc_digest.clone()))
-            .collect())
+        Ok((
+            report
+                .targets
+                .iter()
+                .map(|(n, t)| (n.clone(), t.doc_digest.clone()))
+                .collect(),
+            failed,
+        ))
     }
 
     fn dependencies(&self, names: &[String]) -> Result<BTreeMap<String, Value>, String> {
