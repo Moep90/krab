@@ -143,20 +143,28 @@ impl NativeCompiler {
         let mut evaluator = None;
         for raw in &plan.compile {
             let item = Item::from_json(raw)?;
-            let target_compile_path = compile_root.join(&plan.target_path).join(&item.output_path);
-            std::fs::create_dir_all(&target_compile_path).map_err(|e| e.to_string())?;
-            let result = self.compile_item(
-                &item,
-                plan,
-                &compile_root,
-                &target_compile_path,
-                temp_dir,
-                &writer,
-                &mut reads,
-                items,
-                &mut records,
-                &mut evaluator,
-            );
+            // Collecting the components drops `.`: create_dir_all("t/.") never creates `t`.
+            let target_compile_path: PathBuf = compile_root
+                .join(&plan.target_path)
+                .join(&item.output_path)
+                .components()
+                .collect();
+            let result = std::fs::create_dir_all(&target_compile_path)
+                .map_err(|e| format!("cannot create {}: {e}", target_compile_path.display()))
+                .and_then(|()| {
+                    self.compile_item(
+                        &item,
+                        plan,
+                        &compile_root,
+                        &target_compile_path,
+                        temp_dir,
+                        &writer,
+                        &mut reads,
+                        items,
+                        &mut records,
+                        &mut evaluator,
+                    )
+                });
             if let Err(e) = result {
                 if item.continue_on_error {
                     warnings.push(format!("{} {:?}: {e}", item.input_type, item.input_paths));
