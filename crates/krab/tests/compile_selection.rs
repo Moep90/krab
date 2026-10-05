@@ -72,6 +72,23 @@ fn a_selected_target_reading_the_whole_global_inventory_fails() {
 }
 
 #[test]
+fn a_target_reading_the_whole_global_inventory_compiles_when_every_target_renders() {
+    let dir = repo(
+        "complete",
+        "{% for t in inventory_global %}{{ t }}\n{% endfor %}",
+    );
+    std::fs::remove_file(dir.join("inventory/targets/bad.yml")).unwrap();
+    let out = compile(&dir, &[]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(dir.join("compiled/ok/out/x.yml").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_selected_target_reading_a_rendered_target_compiles() {
     let dir = repo(
         "named",
