@@ -307,8 +307,12 @@ These requirements describe the behaviour krab is meant to have. `main` does
 not meet them yet; the open deviations below say what it does instead.
 
 ```
-INV-39 A `classes` entry with a glob pattern (`comp.*`) MUST expand to
-       the matching class names, in sorted order, as kapitan does.
+INV-39 When `enable-class-wildcards` is set (`--enable-class-wildcards`,
+       or `.kapitan` `inventory_backend`, then `global`), a `classes` entry
+       with a glob pattern (`comp.*`) MUST expand to the matching class
+       names, in sorted order, as kapitan does. Without it, the entry MUST
+       stay a literal class name. A pattern that matches nothing MUST fail
+       only the targets that use it (D16).
        Test: none
        Since: not met yet (#69)
 
@@ -424,7 +428,7 @@ The library entry points other crates use are `Inventory::new`,
 
 | Requirement | Issue | What `main` does |
 |---|---|---|
-| INV-39 | #69 | The pattern is taken literally and fails with `inventory::class_not_found` |
+| INV-39 | #69 | No `enable-class-wildcards` setting; a pattern is always taken literally and fails with `inventory::class_not_found` |
 | INV-40 | #119 | `version` is not read |
 | INV-41 | #142 | Unknown keys are accepted and have no effect, without a word |
 | INV-42 | #164 | `DotKapitan::compile_*` read the `compile` section only |
