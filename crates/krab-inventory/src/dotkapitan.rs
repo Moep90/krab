@@ -178,6 +178,14 @@ fn key_warning(section: &str, key: Option<&str>) -> Option<String> {
     };
     let (known, name) = match key {
         None if section == "version" => return None,
+        // kapitan reads `init` keys with a trailing space, so none of these
+        // reach it either; they are meant for `kapitan init` all the same.
+        _ if section == "init" => {
+            let name = key.map_or("init".to_string(), |k| format!("init.{k}"));
+            return Some(format!(
+                "`.kapitan`: `{name}` is a setting for `kapitan init`, which krab does not have"
+            ));
+        }
         None => (false, section.to_string()),
         Some(k) if has(KRAB_KEYS, k, false) => return None,
         Some(k) => (
@@ -309,11 +317,16 @@ impl DotKapitan {
             ..Default::default()
         };
         for (name, value) in node.as_map().into_iter().flatten() {
-            if !KAPITAN_KEYS.iter().any(|(s, _)| s == name) {
-                cfg.key_warnings.extend(key_warning(name, None));
-            } else if let Some(keys) = value.as_map() {
-                let warnings = keys.keys().filter_map(|k| key_warning(name, Some(k)));
-                cfg.key_warnings.extend(warnings);
+            let section = name == "init" || KAPITAN_KEYS.iter().any(|(s, _)| s == name);
+            match value.as_map().filter(|_| section) {
+                Some(keys) => {
+                    let warnings = keys.keys().filter_map(|k| key_warning(name, Some(k)));
+                    cfg.key_warnings.extend(warnings);
+                }
+                None if !KAPITAN_KEYS.iter().any(|(s, _)| s == name) => {
+                    cfg.key_warnings.extend(key_warning(name, None));
+                }
+                None => {}
             }
         }
         let section = |name: &str| node.get(name).and_then(Node::as_map);
@@ -521,7 +534,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join(".kapitan"),
-            "version: 0.36\nglobal:\n  inventory-backend: omegaconf\n  mp-method: fork\n  prune: true\n  bogus: 1\ncompile:\n  output-path: out\n  prune: true\n  prnue: true\ninventory:\n  python-resolvers: false\nlint:\n  skip-yamllint: true\ncompiel:\n  prune: true\n",
+            "version: 0.36\nglobal:\n  inventory-backend: omegaconf\n  mp-method: fork\n  prune: true\n  bogus: 1\ncompile:\n  output-path: out\n  prune: true\n  prnue: true\ninventory:\n  python-resolvers: false\nlint:\n  skip-yamllint: true\ncompiel:\n  prune: true\ninit:\n  template_git_url: x\n",
         )
         .unwrap();
         let dot = DotKapitan::load(&dir).unwrap();
@@ -535,6 +548,7 @@ mod tests {
                 "`.kapitan`: unknown key `compile.prnue`, kapitan does not read it either",
                 "`.kapitan`: krab does not apply `lint.skip-yamllint`, a kapitan setting",
                 "`.kapitan`: unknown key `compiel`, kapitan does not read it either",
+                "`.kapitan`: `init.template_git_url` is a setting for `kapitan init`, which krab does not have",
             ]
         );
         let _ = std::fs::remove_dir_all(dir);
