@@ -344,7 +344,7 @@ deviations in [specs/inputs-and-output.md](specs/inputs-and-output.md#open-devia
 ## Testing
 
 `tests/fixtures/inventory` is a small inventory exercising class resolution,
-list merging, merge-time dereferencing, every shipped resolver, YAML 1.1
+list merging, merge-time dereferencing, most shipped resolvers, YAML 1.1
 scalars and emitter quirks; `tests/fixtures/expected/*.yaml` is the reference
 implementation's output for it (regenerate with `generate_expected.py`).
 `crates/krab-inventory/tests/fixture.rs` renders it and compares byte for
