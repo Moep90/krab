@@ -386,8 +386,9 @@ CMP-50 Every request to a Python worker, kadet evaluator or resolver
 
 CMP-51 When no interpreter is set explicitly, krab MUST try
        `$VIRTUAL_ENV`, `$CONDA_PREFIX`, `.venv` in the project directory or
-       its nearest parent, a kapitan PEX on PATH, then `python3`, and `-v`
-       MUST print the interpreter chosen.
+       its nearest parent, a kapitan PEX on PATH, then `python3`. The
+       interpreter chosen MUST be visible in the compile progress line,
+       in `krab server status` and in the info log.
        Test: none
        Since: not met yet (#223)
 
