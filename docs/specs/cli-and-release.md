@@ -280,11 +280,7 @@ CLI-33 The job "CI passed" MUST depend on lint, test, parity, msrv, deny,
        Since: #107
 
 CLI-34 Every action in every workflow MUST be referenced by a full commit SHA
-       with the version as a trailing comment. dtolnay/rust-toolchain MUST be
-       pinned to a commit on its master branch with the toolchain named in
-       the toolchain input, because its per-toolchain branches are rebuilt
-       and a commit pinned from one drops out of the history (zizmor
-       impostor-commit).
+       with the version as a trailing comment.
        Test: ci.yml: zizmor
        Since: #103, #107, #198
 
@@ -381,10 +377,11 @@ CLI-47 The release version MUST have one source, version in
 ```text
 CLI-48 rust-toolchain.toml MUST pin the toolchain (channel 1.98.1) with the
        rustfmt and clippy components. Every cargo invocation in CI and in
-       the release build runs that toolchain; the stable toolchain the
-       dtolnay action installs is overridden by the file.
+       the release build runs that toolchain. CI jobs MUST get it from the
+       runner's rustup reading this file, with no toolchain action, so no
+       action pin has to follow a moving branch.
        Test: none
-       Since: #101
+       Since: #101, #258
 
 CLI-49 rust-version in [workspace.package] MUST name the oldest toolchain the
        workspace builds on (1.90) and MUST NOT be repeated in prose.
