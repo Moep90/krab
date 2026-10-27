@@ -39,7 +39,9 @@ Raised while reading a class, target or `.kapitan` file.
 | `inventory::bad_parameters` | `parameters` is not a mapping. | Write `parameters` as a mapping. |
 | `inventory::bad_applications` | `applications` is not a list. | Write `applications` as a list. |
 | `inventory::bad_exports` | `exports` is not a mapping. | Write `exports` as a mapping. |
+| `inventory::unknown_section` | Warning. A class or target file has a top-level key other than `classes`, `parameters`, `applications` and `exports`. kapitan ignores it, and so does krab. The help suggests the closest known key for a typo such as `paramters`. | Fix the spelling, or move the content under `parameters`. |
 | `inventory::class_not_found` | A class name resolves to no file. The help lists every path that was tried. | Fix the class name or create the file at one of the listed paths. |
+| `inventory::class_fallback` | Warning. A class name was resolved through one of reclass's compatibility fallbacks, not as `<name>.yml` or `<name>/init.yml`. The help lists the paths that were tried first. When the fallback lands on `classes/init.yml` or `classes.yml`, which share nothing with the name, the message says this becomes `inventory::class_not_found` in a later release. | Create the class at one of the listed paths, or fix the class name. |
 | `inventory::class_cycle` | A class includes itself, directly or through its parents. | Remove the include that closes the cycle; the label points at it. |
 | `inventory::invalid_kapitan_config` | `parameters.kapitan` does not fit kapitan's model: a field with the wrong type, an unknown field, an unknown `input_type` or an unknown dependency `type`. | Fix the field the message names; the label points at its declaration. |
 | `inventory::path_not_found` | `krab inventory explain` was given a path with no value in the target. | Give the path relative to `parameters`, for example `cluster.name`. |
@@ -73,6 +75,7 @@ names the target and the parameter path.
 | Code | Trigger | Typical fix |
 |---|---|---|
 | `resolver::warning` | Warning. A resolver kept the render going and reported a problem: `oc.deprecated` was used, `write` found an origin that is not a mapping or a list, `from_file` found no file, `relpath` points at itself. | Act on the message; the value written is the reference's placeholder, such as `FILE NOT EXISTS`. |
+| `resolver::krab_extension` | Warning. A value calls a resolver that krab provides but kapitan 0.36.3 does not, so kapitan fails on it with `Unsupported interpolation type`. A resolver of the same name defined in the inventory's `resolvers.py` does not warn. | Set `inventory.contrib-resolvers: true` in `.kapitan` if the inventory is meant for krab only, or replace the call. |
 
 ## server
 
