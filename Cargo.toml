@@ -63,7 +63,8 @@ url = "2"
 crossbeam-channel = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-logfmt = "0.3"
+# 0.3.6+ requires glibc 2.30 via gettid (EmbarkStudios/tracing-logfmt#22).
+tracing-logfmt = "=0.3.5"
 parking_lot = "0.12"
 libc = "0.2"
 
