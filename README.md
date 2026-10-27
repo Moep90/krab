@@ -29,7 +29,7 @@ friends: compile, create, reveal, `krab refs`), and dependency fetching
 ## Install
 
 Every [release](https://github.com/kapicorp/krab/releases) ships the `krab`
-binary for Linux (x86_64 and aarch64, glibc 2.35 or newer) and macOS (Intel
+binary for Linux (x86_64 and aarch64, glibc 2.17 or newer) and macOS (Intel
 and Apple silicon), a `SHA256SUMS` file, and the VS Code extension as a
 `.vsix`:
 
