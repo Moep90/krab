@@ -24,8 +24,59 @@ env:
   CARGO_BUILD_WARNINGS: deny
 
 jobs:
+  changes:
+    # On a pull request each job below runs only when the change touches a
+    # path it reads (CLI-62 lists them). A push to main, or a change to this
+    # file, runs every job.
+    name: Changed paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      rust: ${{ steps.paths.outputs.rust }}
+      test: ${{ steps.paths.outputs.test }}
+      parity: ${{ steps.paths.outputs.parity }}
+      deny: ${{ steps.paths.outputs.deny }}
+      zizmor: ${{ steps.paths.outputs.zizmor }}
+      vscode: ${{ steps.paths.outputs.vscode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: paths
+        # Through the environment, not interpolated into the script: a ref name
+        # is data, and `run:` would take it as shell source.
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          all=true
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --depth=1 origin "$BASE"
+            git diff --name-only "origin/$BASE" HEAD > "$RUNNER_TEMP/changed"
+            grep -qx '\.github/workflows/ci\.yml' "$RUNNER_TEMP/changed" || all=false
+          fi
+          match() {
+            if [ "$all" = true ] || grep -qE "$2" "$RUNNER_TEMP/changed"; then
+              echo "$1=true"
+            else
+              echo "$1=false"
+            fi >> "$GITHUB_OUTPUT"
+          }
+          rust='^(crates|vendor|\.cargo)/|^Cargo\.(toml|lock)$|^rust-toolchain\.toml$'
+          match rust "$rust"
+          # The tests read tests/fixtures, and docs_consistency.rs reads every
+          # markdown file in the tree.
+          match test "$rust|^tests/|\.md$"
+          match parity '^tests/fixtures/'
+          match deny '^(Cargo\.(toml|lock)|deny\.toml|crates/[^/]+/Cargo\.toml)$'
+          match zizmor '^\.github/'
+          match vscode '^editors/vscode/'
+
   lint:
     name: Format and clippy
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,6 +96,8 @@ jobs:
     # The runners execute in the user's Python, so the oldest and the newest
     # supported version (README.md) are both tested.
     name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
+    needs: changes
+    if: needs.changes.outputs.test == 'true'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -75,6 +128,8 @@ jobs:
     # tests/fixtures/expected is what kapitan 0.36.3 prints. Regenerating it
     # here means a hand-written expectation cannot pass review.
     name: Reference parity
+    needs: changes
+    if: needs.changes.outputs.parity == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -101,6 +156,8 @@ jobs:
     # rust-version in Cargo.toml is a promise to anyone building from source.
     # The number is read from the manifest so it lives in exactly one place.
     name: Minimum supported Rust version
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -122,8 +179,10 @@ jobs:
 
   deny:
     # Licences, duplicate and wildcard dependencies, and the registries they
-    # come from. Only runs when the dependency set or the policy changed.
+    # come from.
     name: Dependency policy
+    needs: changes
+    if: needs.changes.outputs.deny == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -131,32 +190,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - id: changed
-        # Through the environment, not interpolated into the script: a ref name
-        # is data, and `run:` would take it as shell source.
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.base_ref }}
-        run: |
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          git fetch --depth=1 origin "$BASE"
-          if git diff --name-only "origin/$BASE" HEAD \
-            | grep -qE '^(Cargo\.(toml|lock)|deny\.toml|crates/[^/]+/Cargo\.toml)$'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Licences, bans and sources
-        if: steps.changed.outputs.run == 'true'
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check licenses bans sources
       # An advisory published overnight is news, not a reason to block an
       # unrelated pull request.
       - name: Advisories
-        if: steps.changed.outputs.run == 'true'
         continue-on-error: true
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
@@ -166,6 +206,8 @@ jobs:
     # Lints these workflow files: template injection into `run:`, permissions
     # wider than a job needs, unpinned actions.
     name: Workflow lint
+    needs: changes
+    if: needs.changes.outputs.zizmor == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -179,6 +221,8 @@ jobs:
 
   vscode:
     name: VS Code extension
+    needs: changes
+    if: needs.changes.outputs.vscode == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -202,12 +246,12 @@ jobs:
           path: editors/vscode/*.vsix
 
   # Branch protection cannot require a job that is conditionally skipped, and
-  # `deny` is one. Requiring this single check instead means a skipped job
+  # on a pull request every job but this one can be. Requiring this single check instead means a skipped job
   # passes and a failed or cancelled one does not.
   required:
     name: CI passed
     if: always()
-    needs: [lint, test, parity, msrv, deny, zizmor, vscode]
+    needs: [changes, lint, test, parity, msrv, deny, zizmor, vscode]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
