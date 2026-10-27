@@ -12,6 +12,7 @@ Accepted before or after the subcommand.
 | `--inventory-path <DIR>` | inventory directory. Default: `inventory-path` from `.kapitan`, else `./inventory`. Env: `KRAB_INVENTORY_PATH` |
 | `--json` | results and diagnostics as JSON (see [JSON output](#json-output)) |
 | `--raw` | skip kapitan's typed normalisation of `parameters.kapitan` (pydantic model defaults and ordering). Implies local rendering |
+| `--enable-class-wildcards` | expand glob patterns (`comp.*`, `dev-?`, `[ab]*`) in `classes` lists to the matching class names, as kapitan does with the same flag. Default: `enable-class-wildcards` from `.kapitan` (`inventory_backend`, then `global`). Implies local rendering unless `.kapitan` sets it |
 | `--no-daemon` | render in-process instead of talking to (or starting) the daemon. Env: `KRAB_NO_DAEMON=1` |
 | `-V, --version` | version |
 
