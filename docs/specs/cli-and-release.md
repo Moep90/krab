@@ -225,6 +225,12 @@ CLI-24 .github/workflows/ci.yml MUST run on every pull request and on every
        Test: none
        Since: #72, #107 (concurrency)
 
+CLI-62 On a pull request each job in ci.yml MUST run only when the pull
+       request changes a path listed for it under Job paths, or changes
+       ci.yml itself. On a push to main every job MUST run.
+       Test: ci.yml: changes
+       Since: #260
+
 CLI-25 The lint job MUST run cargo fmt --all --check and cargo clippy
        --all-targets --locked with CARGO_BUILD_WARNINGS=deny, so that any
        compiler or clippy warning fails it.
@@ -253,8 +259,6 @@ CLI-28 The msrv job MUST read rust-version of package krab from cargo
 
 CLI-29 The deny job MUST run cargo deny check licenses bans sources as a
        blocking step and cargo deny check advisories as a non-blocking step.
-       On pull requests both steps MUST run only when Cargo.toml, Cargo.lock,
-       deny.toml or a crates/*/Cargo.toml changed; on push they always run.
        Test: ci.yml: deny
        Since: #107
 
@@ -273,8 +277,8 @@ CLI-32 The vscode job MUST run npm ci and npm run package in editors/vscode
        Test: ci.yml: vscode
        Since: #72
 
-CLI-33 The job "CI passed" MUST depend on lint, test, parity, msrv, deny,
-       zizmor and vscode, run even when one of them failed, and fail unless
+CLI-33 The job "CI passed" MUST depend on changes, lint, test, parity, msrv,
+       deny, zizmor and vscode, run even when one of them failed, and fail unless
        every result is success or skipped.
        Test: ci.yml: required
        Since: #107
@@ -624,6 +628,22 @@ before parsing arguments.
 
 The provenance of an archive is checked with
 `gh attestation verify <archive> --repo kapicorp/krab`.
+
+### Job paths
+
+The paths each ci.yml job depends on, for CLI-62. A pattern is an extended
+regular expression matched against each changed path. The test job also
+covers markdown because crates/krab/tests/docs_consistency.rs reads every
+markdown file in the tree.
+
+| Job | Changed paths |
+|---|---|
+| lint, msrv | `^(crates\|vendor\|\.cargo)/`, `^Cargo\.(toml\|lock)$`, `^rust-toolchain\.toml$` |
+| test | the lint paths, `^tests/`, `\.md$` |
+| parity | `^tests/fixtures/` |
+| deny | `^(Cargo\.(toml\|lock)\|deny\.toml\|crates/[^/]+/Cargo\.toml)$` |
+| zizmor | `^\.github/` |
+| vscode | `^editors/vscode/` |
 
 ### Required check
 

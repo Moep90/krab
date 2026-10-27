@@ -143,7 +143,10 @@ Tests, a `cargo check` on the oldest toolchain `rust-version` claims,
 `cargo deny`, a `zizmor` pass over the workflow files themselves, and
 `npm run package` in `editors/vscode` (the `.vsix` is kept as a workflow
 artifact). `CI passed` aggregates them, so branch protection can require one
-check rather than a list that changes. The corpus test does not run there; it
+check rather than a list that changes. On a pull request a job runs only
+when the change touches a path it depends on;
+[docs/specs/cli-and-release.md](docs/specs/cli-and-release.md#job-paths) lists
+them. The corpus test does not run there; it
 needs a real inventory and the reference implementation.
 
 To release, bump `version` in the workspace `Cargo.toml` (and the extension's
