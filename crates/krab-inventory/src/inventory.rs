@@ -118,8 +118,9 @@ pub struct ClassClosure {
     /// Every path that was checked while resolving class names (hits and
     /// misses). Creating a file at one of these can change the render.
     pub probes: Vec<PathBuf>,
-    /// Class names resolved through a reclass compatibility fallback, here
-    /// and in the included classes, one per class reference.
+    /// Warnings about this file and the included classes, one per location:
+    /// unknown top-level keys, and class names resolved through a reclass
+    /// compatibility fallback.
     pub warnings: Vec<Diagnostic>,
     pub log: Arc<Vec<MergeEvent>>,
 }
@@ -540,7 +541,7 @@ impl Inventory {
         let mut exports = Node::map(Origin::SYNTHETIC);
         let mut files = vec![file.to_path_buf()];
         let mut probes: Vec<PathBuf> = Vec::new();
-        let mut warnings: Vec<Diagnostic> = Vec::new();
+        let mut warnings: Vec<Diagnostic> = doc.warnings.clone();
         let mut own_log: Vec<MergeEvent> = Vec::new();
         let mut log = if self.cfg.track_provenance {
             Some(&mut own_log)
