@@ -262,10 +262,14 @@ fn basicauth(ctx: &mut FunctionContext, username: &str, password: &str) -> Resul
 
 fn ed25519_private_key(ctx: &mut FunctionContext) -> Result<(), RefError> {
     use ed25519_dalek::pkcs8::{EncodePrivateKey, KeypairBytes, spki::der::pem::LineEnding};
-    let key = ed25519_dalek::SigningKey::generate(&mut OsRng);
+    use rand::RngCore;
+    // 32 bytes from the OS CSPRNG, which is all `SigningKey::generate` does.
+    // Calling it would need a second `rand_core` next to the one `rsa` uses.
+    let mut secret_key = ed25519_dalek::SecretKey::default();
+    OsRng.fill_bytes(&mut secret_key);
     // PKCS#8 v1 (no public key), like `cryptography` writes it.
     let bytes = KeypairBytes {
-        secret_key: key.to_bytes(),
+        secret_key,
         public_key: None,
     };
     let pem = bytes
@@ -306,6 +310,7 @@ fn public_key(ctx: &mut FunctionContext) -> Result<(), RefError> {
 }
 
 pub fn public_key_pem(private_pem: &str) -> Result<String, RefError> {
+    use ed25519_dalek::pkcs8::DecodePrivateKey as _;
     use rsa::pkcs1::DecodeRsaPrivateKey;
     use rsa::pkcs8::{DecodePrivateKey, EncodePublicKey, LineEnding};
     if let Ok(key) = rsa::RsaPrivateKey::from_pkcs8_pem(private_pem)
@@ -316,7 +321,7 @@ pub fn public_key_pem(private_pem: &str) -> Result<String, RefError> {
             .map_err(|e| RefError(format!("publickey: cannot encode RSA public key: {e}")));
     }
     if let Ok(key) = ed25519_dalek::SigningKey::from_pkcs8_pem(private_pem) {
-        use ed25519_dalek::pkcs8::spki::EncodePublicKey as _;
+        use ed25519_dalek::pkcs8::spki::{EncodePublicKey as _, der::pem::LineEnding};
         return key
             .verifying_key()
             .to_public_key_pem(LineEnding::LF)
@@ -439,6 +444,14 @@ mod tests {
         assert_eq!(ed_pem.lines().count(), 3, "{ed_pem}");
         let public = public_key_pem(&ed_pem).unwrap();
         assert!(public.starts_with("-----BEGIN PUBLIC KEY-----\n"));
+        // The private key of RFC 8410 section 10.3 and its public key from 10.1.
+        assert_eq!(
+            public_key_pem(
+                "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEINTuctv5E1hK1bbY8fdp+K06/nwoy/HU++CXqI9EdVhC\n-----END PRIVATE KEY-----\n"
+            )
+            .unwrap(),
+            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=\n-----END PUBLIC KEY-----\n"
+        );
         assert!(
             run("||publickey")
                 .unwrap_err()
