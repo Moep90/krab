@@ -84,6 +84,9 @@ impl Server {
     }
 
     fn handle(&self, stream: UnixStream) -> std::io::Result<()> {
+        // On macOS and the BSDs an accepted socket inherits O_NONBLOCK from the
+        // listener, and the first read would fail with WouldBlock.
+        stream.set_nonblocking(false)?;
         let mut reader = BufReader::new(stream.try_clone()?);
         let mut writer = stream;
         let mut line = String::new();
