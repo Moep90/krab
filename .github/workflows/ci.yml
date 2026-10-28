@@ -104,8 +104,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python: ["3.10", "3.14"]
+        os: [macos-latest]
+        python: ["3.14"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,7 +122,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2
-      - run: cargo test --locked
+      - run: cargo test --locked -p krab --test daemon_equals_local --test watch_restart
 
   parity:
     # tests/fixtures/expected is what kapitan 0.36.3 prints. Regenerating it

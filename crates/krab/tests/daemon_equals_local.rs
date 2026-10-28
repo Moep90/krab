@@ -35,6 +35,13 @@ impl Repo {
             cmd.env("KRAB_NO_DAEMON", "1");
         }
         let out = cmd.output().unwrap();
+        if daemon && !out.status.success() {
+            eprintln!("DBG daemon stderr: {}", String::from_utf8_lossy(&out.stderr));
+            for e in std::fs::read_dir(self.env.join("state/krab")).into_iter().flatten().flatten() {
+                eprintln!("DBG log {}:\n{}", e.path().display(), std::fs::read_to_string(e.path()).unwrap_or_default());
+            }
+            let _ = Command::new("ls").args(["-laR"]).arg(&self.env).status();
+        }
         (
             out.status.code(),
             String::from_utf8_lossy(&out.stdout).into_owned(),

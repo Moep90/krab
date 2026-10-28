@@ -75,6 +75,11 @@ fn watch_survives_a_daemon_restart() {
     let mut stderr = String::new();
     let _ = watch.stderr.take().unwrap().read_to_string(&mut stderr);
     let _ = watch.wait();
+    for e in std::fs::read_dir(dir.join("state/krab")).into_iter().flatten().flatten() {
+        eprintln!("DBG log {}:\n{}", e.path().display(), std::fs::read_to_string(e.path()).unwrap_or_default());
+    }
+    eprintln!("DBG tmp {}", dir.display());
+    let _ = Command::new("ls").args(["-laR"]).arg(dir.join("run")).status();
     let _ = krab(&dir).args(["server", "stop"]).output();
     let _ = std::fs::remove_dir_all(&dir);
     assert!(
