@@ -1,0 +1,5 @@
+global:
+  inventory-backend: omegaconf
+  compose-target-name: true
+inventory_backend:
+  enable-class-wildcards: true

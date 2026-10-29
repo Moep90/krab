@@ -872,13 +872,10 @@ estimated:
   LSP. Two tracked issues presuppose an enumerable set that does not exist:
   [#36](https://github.com/kapicorp/krab/issues/36) (`--explain-code <code>`) and
   [#41](https://github.com/kapicorp/krab/issues/41) (`--help-json`).
-* **43 resolvers are registered, 14 of them appear in no document**:
+* **Some registered resolvers appear in no document**, including
   `from_file`, `fullkey`, `oc.create`, `oc.decode`, `oc.deprecated`,
-  `oc.dict.keys`, `oc.select`, `to_csv`, `join_quoted`,
-  `nested_dict_to_list_of_dicts`, `cluster_resource_configs`,
-  `registry_region_group`,
-  `storage_region_group`,
-  `filter_entries_by_location`. This sits beside
+  `oc.dict.keys`, `oc.select`, `to_csv`, `join_quoted`, and
+  `nested_dict_to_list_of_dicts`. This sits beside
   [#122](https://github.com/kapicorp/krab/issues/122), thirteen resolvers the
   reference does not have accepted silently: different sets, one root cause, the
   registry is the only thing that knows what exists and nothing derives from it.
@@ -1817,7 +1814,7 @@ should own it, and the milestone it affects.
 | Is byte-parity with 0.36.3 OmegaConf still the sole target? | Whether [#118](https://github.com/kapicorp/krab/issues/118) and [#119](https://github.com/kapicorp/krab/issues/119) are bugs or out of scope; adds a column to Section 5 | Maintainer decision (D4) | Maintainer | all |
 | Is a compile-level golden fixture wanted? | Whether M2 happens at all | Maintainer decision (D5), given #128's real-inventory method | Maintainer plus the author of PR #97 | M2, and M3 and M4 which depend on it |
 | Does an inotify overflow actually cause [#59](https://github.com/kapicorp/krab/issues/59)? | Whether F6 is the root cause or a second bug | Cheap experiment: run the daemon with `RUST_LOG=debug`, create enough events to overflow the queue, then change one class file and check whether the render updates | A `krab-server` contributor | not on the critical path; would inform M5 |
-| Do the README's reference parity and speed claims hold? | Whether the synthetic evidence here generalises | Run `krab inventory check` and `krab compile --force` against a real inventory with the pinned reference | Whoever has access | none directly; limits every conclusion here |
+| Do the README's reference-inventory parity and speed claims hold? | Whether the synthetic evidence here generalises | Run `krab inventory check` and `krab compile --force` against a real inventory with the pinned reference | Whoever has access | none directly; limits every conclusion here |
 | Does `emit/ryml.rs` still match the reference? | It is covered by no test that runs anywhere, including CI | Populate `KRAB_CORPUS` and `KRAB_COMPILED` and run `corpus_parity` | Whoever has access to a compiled corpus | would strengthen M2 |
 | Do the two vendored `saphyr-parser` patches still hold? | A silent regression changes rendered values | Add two parser unit tests asserting the patched behaviour | `krab-inventory` | not planned above; worth an issue |
 

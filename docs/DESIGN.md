@@ -7,7 +7,7 @@ specified in [specs/](specs/README.md); each section links to its spec.
 
 1. **Compatibility first.** An existing inventory renders byte-identically to
    kapitan 0.36 (omegaconf backend). This is verified against a reference
-   production inventory: identical JSON for every target and identical
+   inventory: identical JSON for every target and identical
    `kapitan inventory -t` YAML text.
 2. **Fast.** Render one target without touching the others; render everything
    in parallel with class closures shared across targets.
@@ -266,9 +266,9 @@ parts it read, its file and target dependencies and the files it wrote.
 Reads of earlier items of the same target count too, since a module they
 imported is not imported again. When
 all of those still match, the previous output files are copied into the new
-compile tree; `compiled ... (0.14s, 2 kadet items reused)` says so. On
-example-inventory, a change to a parameter no generator reads recompiles a chart-heavy
-cluster target in 0.14 s instead of 10 s. `--force` disables reuse.
+compile tree; `compiled ... (0.14s, 2 kadet items reused)` says so. A change
+to a parameter no generator reads can reuse the previous kadet output.
+`--force` disables reuse.
 
 Execution: stale targets are compiled on a thread pool (one per CPU), each
 into a private temporary tree that then replaces `compiled/<target path>`
@@ -378,4 +378,4 @@ scalars and emitter quirks; `tests/fixtures/expected/*.yaml` is the reference
 implementation's output for it (regenerate with `generate_expected.py`).
 `crates/krab-inventory/tests/fixture.rs` renders it and compares byte for
 byte. The production inventory this was developed against renders identically
-for all targets.
+for every target.

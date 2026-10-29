@@ -1,9 +1,9 @@
 # Roadmap
 
 Status as of 2026-09-18. Inventory, daemon, incremental compile, native
-compile for the input types example-inventory uses, references, dependency fetching,
-Python resolvers and the language server are in place; example-inventory renders and
-compiles byte-identical to kapitan 0.36.3 (all targets targets). The binary is
+compile for the supported input types, references, dependency fetching,
+Python resolvers and the language server are in place; the reference inventory
+renders and compiles byte-identical to kapitan 0.36.3. The binary is
 `krab` (releases before 2.0.0-alpha.4 shipped it as `kapitan`).
 
 ## Where the roadmap lives
@@ -28,7 +28,12 @@ cargo build --release                                     # krab on PATH is a sy
 cd path/to/an/inventory/repo                              # the directory holding .kapitan
 krab inventory check && krab compile --dry-run    # daemon + manifest sanity
 python3 path/to/krab/scripts/lsp-smoke.py . inventory/targets/some/target.yml 1:10 20:24
-python3 path/to/krab/scripts/lsp-smoke-live.py .          # completion + live diagnostics (edits and restores a class)
+```
+
+The live smoke test uses the checked-in fixtures, not the current inventory:
+
+```sh
+python3 path/to/krab/scripts/lsp-smoke-live.py    # edits and restores a fixture class
 ```
 
 Parity check after engine changes: `krab compile --force` in the

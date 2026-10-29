@@ -10,7 +10,7 @@ let clients = new Map();
 function kapitanRoot(folder) {
   const root = folder.uri.fsPath;
   if (fs.existsSync(path.join(root, ".kapitan"))) return root;
-  // Common layout: the kapitan project is a subdirectory (e.g. example-inventory/).
+  // Common layout: the kapitan project is a subdirectory (e.g. kapitan/).
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (entry.isDirectory() && fs.existsSync(path.join(root, entry.name, ".kapitan"))) {
       return path.join(root, entry.name);

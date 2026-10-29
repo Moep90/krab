@@ -123,12 +123,12 @@ purpose, say so in `docs/DESIGN.md`.
 `scripts/lsp-smoke.py` drives `krab lsp` over stdio without an editor and
 prints hover and definition results for the positions you give it;
 `scripts/lsp-smoke-live.py` additionally exercises completion and live
-diagnostics by editing a class on disk and restoring it. Both expect a
-`krab` binary on `PATH`:
+diagnostics against the checked-in fixture inventory by editing a class on
+disk and restoring it. Both expect a `krab` binary on `PATH`:
 
 ```sh
 python3 scripts/lsp-smoke.py path/to/inventory/repo inventory/targets/some/target.yml 1:10 20:24
-python3 scripts/lsp-smoke-live.py path/to/inventory/repo
+python3 scripts/lsp-smoke-live.py tests/fixtures
 ```
 
 The VS Code extension lives in `editors/vscode`; its README explains how to

@@ -202,7 +202,7 @@ VS Code: install the `kapitan-vscode-*.vsix` attached to the release with
 `code --install-extension`, or build it in `editors/vscode` (its README has
 the three commands), then set `kapitan.path` if `krab` is not on the
 editor's `PATH`. It activates in any workspace containing a `.kapitan`
-file, including one level down (a `example-inventory/` or `kapitan/` subdirectory).
+file, including one level down (for example, a `kapitan/` subdirectory).
 
 Any other LSP client: run `krab lsp` with the repository root as the
 working directory and attach it to YAML files under `inventory/`.

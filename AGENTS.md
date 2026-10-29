@@ -42,7 +42,7 @@ Tests that need more than cargo:
   krab (`tests/fixtures/README.md`). Every engine behaviour change gets a
   fixture case plus regenerated expected output.
 * LSP without an editor: `python3 scripts/lsp-smoke.py <repo> <file> 1:10` and
-  `scripts/lsp-smoke-live.py <repo>` (both need `krab` on `PATH`).
+  `python3 scripts/lsp-smoke-live.py tests/fixtures` (both need `krab` on `PATH`).
 * VS Code extension: `cd editors/vscode && npm ci && npm run package`.
 
 After touching loading, merging, interpolation, resolvers, emitters or

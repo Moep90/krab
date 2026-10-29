@@ -7,7 +7,7 @@ was written or overridden, go to definition on class names and references,
 and completion of class names and parameter paths.
 
 The extension launches `krab lsp` (the Rust kapitan) in the workspace
-folder containing `.kapitan` (or a first-level subdirectory such as `example-inventory/`).
+folder containing `.kapitan` (or a first-level subdirectory such as `kapitan/`).
 The language server talks to the krab inventory daemon, which it starts if
 needed, so results are always the daemon's current render.
 

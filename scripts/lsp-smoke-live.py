@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-# LSP smoke test over stdio: python3 scripts/lsp-smoke.py <repo> <file> <line:col>...
-# (0-based positions). Prints hover and definition results; the live variant
-# exercises completion and diagnostics by editing a class on disk and restoring it.
-# completion + live diagnostics
+# LSP smoke test over stdio: python3 scripts/lsp-smoke-live.py tests/fixtures
+# Exercises completion and diagnostics against the checked-in fixture inventory
+# by editing a class on disk and restoring it.
 import json, subprocess, sys, os, time, tempfile
-root = sys.argv.pop(1) if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]) else os.getcwd()
+root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "tests", "fixtures"))
 proc = subprocess.Popen(["krab", "lsp"], cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=(err := tempfile.TemporaryFile("w+")))
 nid = 0
 def send(method, params, notify=False):
@@ -45,13 +44,14 @@ f = "inventory/targets/env/dev.yml"
 uri = "file://" + os.path.join(root, f)
 text = open(os.path.join(root, f)).read()
 send("textDocument/didOpen", {"textDocument": {"uri": uri, "languageId": "yaml", "version": 1, "text": text}}, notify=True)
-# completion of a parameter path: edit buffer to add "${cluster." at line 21
+# completion of a parameter path: append a probe under parameters
 lines = text.splitlines()
-lines.insert(21, "      probe: ${cluster.")
+probe_line = len(lines)
+lines.append("  probe: ${app.")
 send("textDocument/didChange", {"textDocument": {"uri": uri, "version": 2}, "contentChanges": [{"text": "\n".join(lines) + "\n"}]}, notify=True)
-t=time.time(); r = pump(send("textDocument/completion", {"textDocument": {"uri": uri}, "position": {"line": 21, "character": len("      probe: ${cluster.")}}))
-print(f"--- completion ${{cluster. ({(time.time()-t)*1000:.0f} ms):", [(i["label"], i["detail"]) for i in r["result"]][:12])
-r = pump(send("textDocument/completion", {"textDocument": {"uri": uri}, "position": {"line": 21, "character": len("      probe: ${")}}))
+t=time.time(); r = pump(send("textDocument/completion", {"textDocument": {"uri": uri}, "position": {"line": probe_line, "character": len("  probe: ${app.")}}))
+print(f"--- completion ${{app. ({(time.time()-t)*1000:.0f} ms):", [(i["label"], i["detail"]) for i in r["result"]][:12])
+r = pump(send("textDocument/completion", {"textDocument": {"uri": uri}, "position": {"line": probe_line, "character": len("  probe: ${")}}))
 print("--- completion ${ :", len(r["result"]), "items, e.g.", [i["label"] for i in r["result"]][:8])
 # completion of a class name in a new item
 lines = text.splitlines(); lines.insert(2, "  - components.ap")

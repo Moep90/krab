@@ -56,40 +56,6 @@ def truncate(value: str, length: int) -> str:
     return f"{truncated}-{hash_hex}"
 
 
-def registry_region_group(region: str) -> str:
-    """resolver function that derives the artifact registry multi-region location from a GCP region.
-
-    See https://cloud.google.com/about/locations#multi-region
-
-    Note that unfortunately different services use different naming conventions.
-    """
-    if region.startswith("us-"):
-        return "us"
-    elif region.startswith("europe-"):
-        return "europe"
-    elif region.startswith("asia-"):
-        return "asia"
-    else:
-        raise ValueError(f"Cannot derive multi-region location from region: {region}")
-
-
-def storage_region_group(region: str) -> str:
-    """resolver function that derives the GCS multi-region location from a GCP region.
-
-    See https://cloud.google.com/about/locations#multi-region
-
-    Note that unfortunately different services use different naming conventions.
-    """
-    if region.startswith("us-"):
-        return "US"
-    elif region.startswith("europe-"):
-        return "EU"
-    elif region.startswith("asia-"):
-        return "ASIA"
-    else:
-        raise ValueError(f"Cannot derive GCS multi-region location from region: {region}")
-
-
 def pluck(key: str, field: str, _root_: Container) -> list:
     """resolver function that extracts a specific field from a list of dicts.
 
@@ -254,67 +220,6 @@ def select_fields(key: str, *fields: str, _root_: Container) -> list:
     return result
 
 
-RESOURCE_TYPES = frozenset(
-    {
-        "nvidia-l4",
-        "nvidia-rtx-pro-6000",
-        "nvidia-tesla-a100",
-        "nvidia-a100-80gb",
-        "nvidia-h100-80gb",
-        "nvidia-tesla-t4",
-        "nvidia-h200-141gb",
-        "nvidia-b200",
-    }
-)
-
-
-def cluster_resource_configs(key: str, _root_: Container) -> list:
-    """Build router config entries from the worker clusters dict.
-
-    For each worker cluster, produces a dict with its name and the GPU types
-    derived from its resource_limits. Non-GPU resource types (cpu, memory) are
-    filtered out using GPU_RESOURCE_TYPES.
-
-    Example input (value at key)::
-
-        us-central1:
-          name: worker-us-central1
-          resource_limits:
-            - {resource_type: cpu, minimum: 1, maximum: 2000}
-            - {resource_type: nvidia-l4, minimum: 0, maximum: 256}
-            - {resource_type: nvidia-h100-80gb, minimum: 0, maximum: 128}
-
-    Example output::
-
-        [{"name": "worker-us-central1", "gpu_types": ["nvidia-l4", "nvidia-h100-80gb"]}]
-
-    Args:
-        key: The OmegaConf key path to the worker clusters dict-of-dicts
-        _root_: The root OmegaConf container
-
-    Returns:
-        List of dicts with 'name' and 'gpu_types' keys.
-    """
-    data = OmegaConf.select(_root_, key)
-    data = OmegaConf.to_container(data, resolve=True)
-
-    if not isinstance(data, dict):
-        raise ValueError(
-            f"cluster_resource_configs resolver expects a dict, got {type(data).__name__}"
-        )
-
-    result = []
-    for cluster in data.values():
-        gpu_types = [
-            entry["resource_type"]
-            for entry in cluster.get("resource_limits", [])
-            if entry["resource_type"] in RESOURCE_TYPES
-        ]
-        result.append({"name": cluster["name"], "gpu_types": gpu_types})
-
-    return result
-
-
 def filter_keys(key: str, field: str, _root_: Container) -> list:
     """Return keys of a dict-of-dicts where a boolean field is true.
 
@@ -328,45 +233,6 @@ def filter_keys(key: str, field: str, _root_: Container) -> list:
         raise ValueError(f"filter_keys resolver expects a dict, got {type(data).__name__}")
 
     return [k for k, v in data.items() if isinstance(v, dict) and v.get(field)]
-
-
-def filter_entries_by_location(
-    key: str, provider: str, location: str, _root_: Container
-) -> list:
-    """Return the tenant names whose ``execution_locations`` include (provider, location).
-
-    Given a tenants map like::
-
-        acme:
-          execution_locations:
-            - { provider: gcp, location: eu }
-            - { provider: example-provider, location: fr-par }
-        globex:
-          execution_locations:
-            - { provider: gcp, location: eu }
-
-    ``${filter_entries_by_location:tenants,example-provider,fr-par}`` returns
-    ``["acme"]`` — only the tenants that declare that provider+location.
-    """
-    data = OmegaConf.select(_root_, key)
-    data = OmegaConf.to_container(data, resolve=True)
-
-    if not isinstance(data, dict):
-        raise ValueError(
-            f"filter_entries_by_location resolver expects a dict, got {type(data).__name__}"
-        )
-
-    return [
-        name
-        for name, cfg in data.items()
-        if isinstance(cfg, dict)
-        and any(
-            isinstance(loc, dict)
-            and loc.get("provider") == provider
-            and loc.get("location") == location
-            for loc in (cfg.get("execution_locations") or [])
-        )
-    ]
 
 
 def join_quoted(key: str, _root_: Container) -> str:
@@ -408,15 +274,11 @@ def pass_resolvers():
         "to_yaml": to_yaml,
         "sha256": sha256,
         "truncate": truncate,
-        "registry_region_group": registry_region_group,
-        "storage_region_group": storage_region_group,
         "to_csv": to_csv,
         "pluck": pluck,
         "nested_dict_to_list_of_dicts": nested_dict_to_list_of_dicts,
         "select_fields": select_fields,
-        "cluster_resource_configs": cluster_resource_configs,
         "filter_keys": filter_keys,
-        "filter_entries_by_location": filter_entries_by_location,
         "join_quoted": join_quoted,
         "join": join,
     }

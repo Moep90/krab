@@ -278,8 +278,8 @@ starts, and diagnostics are published again. Test: none (verified by hand in
 LSP-AC-3. Live diagnostics (LSP-10, LSP-21, LSP-22, LSP-23). Given an open
 target file, when a class it includes is saved with a missing class name,
 then an error is published, and when the class is restored the error is
-cleared. Test: scripts/lsp-smoke-live.py, run by
-hand against an inventory that has the paths it hard-codes.
+cleared. Test: `python3 scripts/lsp-smoke-live.py tests/fixtures`, run by
+hand against the checked-in fixture inventory.
 
 LSP-AC-4. Hover across targets (LSP-13, LSP-14, LSP-15). Given a class file
 included by several targets that resolve one parameter differently, when

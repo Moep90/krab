@@ -202,7 +202,7 @@ editor (the scripts run `krab` from `PATH`):
 
 ```bash
 python3 scripts/lsp-smoke.py path/to/inventory/repo inventory/targets/team/app/prod.yml 1:10 20:24
-python3 scripts/lsp-smoke-live.py path/to/inventory/repo    # completion + diagnostics (edits and restores a class)
+python3 scripts/lsp-smoke-live.py tests/fixtures    # completion + diagnostics (edits and restores a class)
 ```
 
 Server-side problems show in the "Kapitan (<repository directory>)" output channel, whose log

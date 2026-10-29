@@ -12,7 +12,7 @@ output, byte for byte:
   about 60× faster for a full inventory and 1000× faster for a single target.
 * `krab compile` writes the same files as the reference implementation, and
   only for the targets whose inputs actually changed. A no-op compile of a
-  reference production inventory takes a quarter of a second instead of the
+  reference inventory takes a quarter of a second instead of the
   better part of a minute.
 * Every value knows where it came from: the file, line and column that wrote
   it, what it overrode, and which `${...}` interpolation produced it. The
@@ -200,7 +200,7 @@ binary), `vaultkv` and `vaulttransit` (Vault's HTTP API); `awskms` and
 
 Rendering and compiled output are verified byte for byte against kapitan
 0.36.3 with the `omegaconf` inventory backend on the fixture inventory in
-`tests/fixtures` and on a reference production inventory.
+`tests/fixtures` and on a reference inventory.
 
 Where krab behaves differently on purpose, the difference and its reason are
 in [docs/DECISIONS.md](docs/DECISIONS.md). The input and output types that
